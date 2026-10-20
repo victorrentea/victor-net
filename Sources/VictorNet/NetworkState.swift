@@ -99,11 +99,64 @@ final class NetworkState {
 
     /// For `TrafficMonitor` and the book: the wire wins, as it does for routing.
     var network: NetworkID? {
-        if case .connected = wired { return NetworkID(key: "wired", name: "🔌 Ethernet", kind: "wired") }
+        if case .connected = wired { return NetworkID(key: "wired", name: "Ethernet", kind: "wired") }
         guard rssi != nil else { return nil }
         guard let name = ssid else { return NetworkID(key: Self.unnamedKey, name: "🛜 Wi-Fi", kind: "wifi") }
         if onHotspot { return NetworkID(key: "wifi:\(name)", name: "📱 \(name)", kind: "hotspot") }
         return NetworkID(key: "wifi:\(name)", name: "🛜 \(name)", kind: "wifi")
+    }
+
+    /// SSIDs in range, from the **last** scan (`cachedScanResults`, instant). A
+    /// fresh scan is asked for in the background when the menu opens, so the next
+    /// opening is current; scanning on the spot would block the menu for seconds
+    /// and briefly stall the link.
+    func reachableSSIDs() -> Set<String> {
+        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
+        return Set((iface?.cachedScanResults() ?? []).compactMap { $0.ssid })
+    }
+
+    /// The networks this Mac remembers (System Settings › Wi-Fi › Known networks).
+    func knownSSIDs() -> Set<String> {
+        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
+        return Set((iface?.configuration()?.networkProfiles.array as? [CWNetworkProfile] ?? []).compactMap { $0.ssid })
+    }
+
+    private let scanQueue = DispatchQueue(label: "ro.victorrentea.victor-net.scan", qos: .utility)
+    private var scanning = false
+
+    func scanInBackground() {
+        guard !scanning else { return }
+        scanning = true
+        scanQueue.async { [weak self] in
+            _ = try? CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.scanForNetworks(withName: nil)
+            DispatchQueue.main.async { self?.scanning = false }
+        }
+    }
+
+    /// Joins a known network with the password the keychain already holds —
+    /// `networksetup`, as the hotspot fallback does (`HotspotFallback.joinHotspot`).
+    func join(_ ssid: String, done: @escaping (String?) -> Void) {
+        scanQueue.async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
+            p.arguments = ["-setairportnetwork", Config.wifiInterface, ssid]
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = out
+            var failure: String?
+            do {
+                try p.run()
+                p.waitUntilExit()
+                let text = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                // networksetup exits 0 even when it fails; it says so in words.
+                if p.terminationStatus != 0 || text.localizedCaseInsensitiveContains("error")
+                    || text.localizedCaseInsensitiveContains("could not") { failure = text.isEmpty ? "exit \(p.terminationStatus)" : text }
+            } catch {
+                failure = "\(error)"
+            }
+            DispatchQueue.main.async { done(failure) }
+        }
     }
 
     /// Cheap: CoreWLAN's cached values and one dynamic-store read.

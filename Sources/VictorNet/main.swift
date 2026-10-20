@@ -116,7 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "/test/icon":
             // The current icon, 8× on a light and a dark bar, to look at.
             var path = ""
-            onMain { path = self.menu?.renderIconForTest() ?? "" }
+            onMain { path = self.menu?.renderIconForTest(wired: query["wired"] == "1") ?? "" }
             return (200, HttpServer.json(["png": path]))
         case "/test/menu/open":
             let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 10)
@@ -135,7 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        traffic.apps.stop()
         traffic.book.save()
         if (try? String(contentsOfFile: pidFilePath, encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) == "\(myPid)" {

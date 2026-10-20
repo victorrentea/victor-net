@@ -18,7 +18,6 @@ import Network
 ///   both, whatever was open at the time.
 /// - **⚡ Speed test** — what a link *can* do, which "max seen" only says if
 ///   something happened to use it: one download of a fixed size, on demand.
-/// - **Busiest apps** — `nettop` delta mode, only while the menu is open.
 ///
 /// Every network's figures are kept in `NetworkBook` (`~/.victor-net/networks.json`)
 /// for the *Other networks* submenu.
@@ -170,137 +169,6 @@ final class LatencyProbe {
     }
 }
 
-/// The busiest apps, from `nettop -d` — only while somebody is looking.
-final class AppSampler {
-    private var nettop: Process?
-    private var pendingLines: [String] = []
-    private var blocksSeen = 0
-    private var flushScheduled = false
-    private var appNames: [pid_t: String] = [:]
-    /// Per app, one sample per nettop block (≈ 1 s), last `RateHistory.window`.
-    private(set) var down: [String: [Double]] = [:]
-    private(set) var up: [String: [Double]] = [:]
-    var onBlock: (() -> Void)?
-
-    var isRunning: Bool { nettop != nil }
-
-    func start() {
-        stop()
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-        // No `-P`, although only the process rows are used: nettop's stdout is
-        // block-buffered into a pipe, and the per-process summary alone is too
-        // small to fill the 4 KB buffer — the first block arrived only after
-        // the menu had closed. The connection rows push each second out.
-        // rtt_avg too: `TrafficPolicy.parse` reads the last three columns.
-        p.arguments = ["-d", "-s", "1", "-L", "0", "-x", "-n", "-t", "external",
-                       "-J", "bytes_in,bytes_out,rtt_avg"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = FileHandle.nullDevice
-        var partial = ""
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty, let chunk = String(data: data, encoding: .utf8) else { return }
-            partial += chunk
-            var lines = partial.components(separatedBy: "\n")
-            partial = lines.removeLast()
-            // The main queue is not drained while a menu tracks; the run loop's
-            // common modes are.
-            RunLoop.main.perform(inModes: [.common]) { self?.receive(lines) }
-            CFRunLoopWakeUp(CFRunLoopGetMain())
-        }
-        do {
-            try p.run()
-            nettop = p
-        } catch {
-            netError("📈 nettop failed: \(error)")
-        }
-    }
-
-    func stop() {
-        if let p = nettop {
-            (p.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
-            if p.isRunning { p.terminate() }
-        }
-        nettop = nil
-        pendingLines = []
-        blocksSeen = 0
-        down = [:]
-        up = [:]
-    }
-
-    /// Top `count` by 5 s average down + up: (name, ↓ avg, ↑ avg).
-    func top(_ count: Int = 3) -> [(String, Double, Double)] {
-        func avg(_ v: [Double]?) -> Double {
-            guard let v, !v.isEmpty else { return 0 }
-            return v.reduce(0, +) / Double(v.count)
-        }
-        var rows: [(String, Double, Double)] = []
-        for name in Set(down.keys).union(up.keys) {
-            let d = avg(down[name]), u = avg(up[name])
-            if d + u > 0 { rows.append((name, d, u)) }
-        }
-        rows.sort { a, b in a.1 + a.2 != b.1 + b.2 ? a.1 + a.2 > b.1 + b.2 : a.0 < b.0 }
-        return Array(rows.prefix(count))
-    }
-
-    private func receive(_ lines: [String]) {
-        for line in lines {
-            if line.hasPrefix(",") {
-                flush()
-                blocksSeen += 1
-            } else if !line.isEmpty {
-                pendingLines.append(line)
-            }
-        }
-        guard !flushScheduled else { return }
-        flushScheduled = true
-        // A block arrives in one burst; take it as complete 0.2 s after its
-        // last line rather than at the next header a second later.
-        let t = Timer(timeInterval: 0.2, repeats: false) { [weak self] _ in
-            self?.flushScheduled = false
-            self?.flush()
-        }
-        RunLoop.main.add(t, forMode: .common)
-    }
-
-    private func flush() {
-        let lines = pendingLines
-        pendingLines = []
-        // Delta mode's first block is the totals since each socket opened.
-        guard blocksSeen >= 2, !lines.isEmpty, nettop != nil else { return }
-        let rows = lines.compactMap(TrafficPolicy.parse(line:)).filter { $0.process != nil }
-        var d: [String: Double] = [:], u: [String: Double] = [:]
-        for row in rows {
-            let name = appName(for: row)
-            d[name, default: 0] += Double(row.bytesIn)
-            u[name, default: 0] += Double(row.bytesOut)
-        }
-        for name in Set(down.keys).union(d.keys) {
-            down[name] = (down[name, default: []] + [d[name] ?? 0]).suffix(RateHistory.window)
-            up[name] = (up[name, default: []] + [u[name] ?? 0]).suffix(RateHistory.window)
-            if down[name]!.allSatisfy({ $0 == 0 }) && up[name]!.allSatisfy({ $0 == 0 }) {
-                down[name] = nil
-                up[name] = nil
-            }
-        }
-        onBlock?()
-    }
-
-    private func appName(for row: TrafficPolicy.Row) -> String {
-        let fallback = row.process ?? "?"
-        guard let pid = row.pid else { return fallback }
-        if let cached = appNames[pid] { return cached }
-        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
-        let name = proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0
-            ? TrafficPolicy.appName(executablePath: String(cString: buffer)) ?? fallback
-            : fallback
-        appNames[pid] = name
-        return name
-    }
-}
-
 /// The network the Mac is on now, as the book files it.
 struct NetworkID: Equatable {
     let key: String
@@ -316,7 +184,6 @@ final class TrafficMonitor {
     private(set) var latency: [(at: Date, ms: Double)] = []
     private(set) var network: NetworkID?
     let book = NetworkBook()
-    let apps = AppSampler()
     private let probe = LatencyProbe()
     private var timer: Timer?
     private var lastCounters: [String: (UInt32, UInt32)] = [:]
@@ -447,10 +314,8 @@ final class TrafficMonitor {
             "down_avg": orNull(down.average), "down_max": orNull(down.maxAverage),
             "up_avg": orNull(up.average), "up_max": orNull(up.maxAverage),
             "latency_recent_ms": orNull(latencyRecent), "latency_best_ms": orNull(latencyBest),
-            "apps_sampling": apps.isRunning,
             "offline_s": orNull(offlineSince.map { Int(Date().timeIntervalSince($0)) }),
         ]
-        o["apps"] = apps.top().map { ["name": $0.0, "down": $0.1, "up": $0.2] }
         return o
     }
 

@@ -4,7 +4,7 @@ import AppKit
 /// native tick — one ticked row makes AppKit reserve a check column for the
 /// whole menu and nudges every row's emoji to the right.
 enum HotspotMenu {
-    static func title(enabled: Bool) -> String { "🛜 Auto Mobile Hotspot" + (enabled ? "  ✓" : "") }
+    static func title(enabled: Bool) -> String { "🛜 Auto-start Mobile Hotspot" + (enabled ? "  ✓" : "") }
 }
 
 enum RoamingSuspendMenu {
@@ -17,9 +17,7 @@ enum RoamingSuspendMenu {
 /// are in the menu.
 ///
 /// **The menu is a snapshot**, taken when it opens: no number moves while it is
-/// read (*"I don't really care about seeing live data. It distracts me."*). The
-/// one exception is the busiest-apps table, which can only exist after `nettop`
-/// has watched for a couple of seconds — it fills in once, then stays.
+/// read (*"I don't really care about seeing live data. It distracts me."*).
 ///
 /// **Every roaming setting is made here**, not on the phone (*"the application
 /// on the mobile shouldn't do anything really"*): plan, reset day, an extra
@@ -35,8 +33,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let roaming: PhoneRoamingMonitor
     private var hotspotCounter = InterfaceByteCounter()
     private var lastAskedAt = Date.distantPast
-    private var appsItem: NSMenuItem?
-    private var appsFilled = false
 
     var onRoamingSuspendToggled: (() -> Void)?
 
@@ -86,14 +82,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
-        appsFilled = false
-        traffic.apps.onBlock = { [weak self] in self?.fillAppsOnce() }
-        traffic.apps.start()
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        traffic.apps.onBlock = nil
-        traffic.apps.stop()
+        net.scanInBackground()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -103,25 +92,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
             menu.addItem(info("📵 Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))"))
         }
-        let wiredItem = info(WiredLinkPolicy.title(net.wired))
-        wiredItem.image = Self.wiredRowIcon(net.wired)
-        menu.addItem(wiredItem)
-        menu.addItem(info(NetworkLookPolicy.wifiRow(ssid: net.ssid, rssi: net.rssi)))
-        if Config.hasPhone {
-            menu.addItem(info(NetworkLookPolicy.phoneRow(phone.signal, onHotspot: net.onHotspot)))
-        }
-        menu.addItem(.separator())
-
-        // Every network in one table, right here (Victor, 2026-10-20: "not a
-        // submenu, right in the main screen"), the current one in bold.
-        menu.addItem(networksTable())
+        // No Wired / Wi-Fi / Phone status rows (Victor, 2026-10-20: the icon and
+        // the ✓ in the list below already say it). The cable is the list's first
+        // row, always.
+        // Every network in reach, one row each, in the main menu; ✓ on the one
+        // in use, a click on another joins it.
+        networkRows().forEach(menu.addItem)
         menu.addItem(action(speedTitle(), #selector(speedTestAction)))
         menu.addItem(.separator())
-
-        menu.addItem(info("Busiest apps — avg over 5s"))
-        let apps = MenuTable.item(header: nil, rows: [["measuring…", "", ""]])
-        appsItem = apps
-        menu.addItem(apps)
 
         if Config.hasPhone {
             menu.addItem(.separator())
@@ -138,16 +116,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// The apps table, once, after nettop's first full block (~2 s).
-    private func fillAppsOnce() {
-        guard !appsFilled, let item = appsItem else { return }
-        let top = traffic.apps.top()
-        appsFilled = true
-        let rows = top.isEmpty ? [["nothing is moving data", "", ""]]
-            : top.map { [$0.0, "↓ " + TrafficPolicy.mbps($0.1), "↑ " + TrafficPolicy.mbps($0.2)] }
-        item.view = MenuTable.view(header: nil, rows: rows)
-    }
-
     private func speedTitle() -> String {
         if traffic.speedTestRunning { return "⚡ Testing speed…" }
         let mb = traffic.network?.kind == "hotspot" ? 10 : 25
@@ -157,29 +125,103 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return "⚡ Test speed (downloads \(mb) MB)"
     }
 
-    /// Every network side by side in the same units, the current one in bold —
-    /// one table to read across. The current network's row is fresh from the
-    /// live window even before the book's next 10-second write.
-    private func networksTable() -> NSMenuItem {
+    /// The networks to compare, as clickable rows (Victor, 2026-10-20): every
+    /// Wi-Fi **in range** that this Mac knows or has measured, plus the cable
+    /// while it carries the traffic. One out of range drops off the list, but
+    /// its numbers stay in the book and come back with it. ✓ marks the one in
+    /// use; a click on another joins it.
+    ///
+    /// Rows, not a grid view, because a grid row cannot be clicked; the columns
+    /// are tab stops in the attributed title.
+    private func networkRows() -> [NSMenuItem] {
         let now = Date()
+        let reachable = net.reachableSSIDs()
+        let known = net.knownSSIDs()
         var records = traffic.book.records
-        if let net = traffic.network, net.key != NetworkState.unnamedKey {
-            var r = records[net.key] ?? NetworkRecord(name: net.name, kind: net.kind, lastSeen: now)
+        if let cur = traffic.network, cur.key != NetworkState.unnamedKey {
+            var r = records[cur.key] ?? NetworkRecord(name: cur.name, kind: cur.kind, lastSeen: now)
             r.maxDown = max(r.maxDown, traffic.down.maxAverage ?? 0)
             r.maxUp = max(r.maxUp, traffic.up.maxAverage ?? 0)
             if let best = traffic.latencyBest { r.latencyMs = r.latencyMs.map { min($0, best) } ?? best }
             r.lastSeen = now
-            records[net.key] = r
+            records[cur.key] = r
         }
-        let sorted = records.sorted { $0.value.lastSeen > $1.value.lastSeen }
-        guard !sorted.isEmpty else { return info("📈 No network measured yet") }
+        for ssid in reachable.intersection(known) where records["wifi:\(ssid)"] == nil {
+            let hotspot = ssid == Config.hotspotSSID
+            records["wifi:\(ssid)"] = NetworkRecord(name: (hotspot ? "📱 " : "🛜 ") + ssid,
+                                                    kind: hotspot ? "hotspot" : "wifi", lastSeen: .distantPast)
+        }
+        let shown = records.filter { key, _ in
+            if key == traffic.network?.key { return true }
+            guard key.hasPrefix("wifi:") else { return false }
+            return reachable.contains(String(key.dropFirst(5)))
+        }.sorted { a, b in
+            a.key == traffic.network?.key ? true : b.key == traffic.network?.key ? false
+                : (a.value.maxDown, b.key) > (b.value.maxDown, a.key)
+        }
+        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        header.attributedTitle = Self.row(["network", "↓ best", "↑ best", "latency", "last seen"], header: true)
+        header.isEnabled = false
         let rate = TrafficPolicy.mbps
-        let rows = sorted.map { _, r -> [String] in
-            [r.name, rate(r.maxDown), rate(r.maxUp),
-             r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "—", NetworkBookPolicy.since(r.lastSeen, now: now)]
+        // The cable, always listed: its numbers while it carries the traffic,
+        // otherwise what state it is in.
+        let wiredRow: NSMenuItem
+        if traffic.network?.key == "wired" {
+            wiredRow = NSMenuItem()   // filled by the loop below, as the current network
+        } else {
+            wiredRow = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            let state = net.wired == .disconnected ? "not connected" : WiredLinkPolicy.title(net.wired)
+                .replacingOccurrences(of: "Wired: ", with: "")
+            wiredRow.attributedTitle = Self.row(["Ethernet", state], header: false, dimmed: true)
+            wiredRow.image = Self.wiredRowIcon(net.wired)
+            wiredRow.isEnabled = false
         }
-        let current = Set(sorted.enumerated().filter { $0.element.key == traffic.network?.key }.map(\.offset))
-        return MenuTable.item(header: ["network", "↓ best", "↑ best", "latency", "last seen"], rows: rows, bold: current)
+        let rows = shown.map { key, r -> NSMenuItem in
+            let seen = r.lastSeen == .distantPast ? "never" : NetworkBookPolicy.since(r.lastSeen, now: now)
+            let item = NSMenuItem(title: r.name, action: nil, keyEquivalent: "")
+            let name = key == "wired" ? "Ethernet" : r.name
+            item.attributedTitle = Self.row([name, r.maxDown > 0 ? rate(r.maxDown) : "—", r.maxUp > 0 ? rate(r.maxUp) : "—",
+                                             r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "—", seen], header: false)
+            if key == "wired" { item.image = Self.wiredRowIcon(net.wired) }
+            let current = key == traffic.network?.key
+            item.state = current ? .on : .off
+            if !current, key.hasPrefix("wifi:") {
+                item.action = #selector(joinNetwork(_:))
+                item.target = self
+                item.representedObject = String(key.dropFirst(5))
+                item.isEnabled = true
+            } else {
+                item.isEnabled = current
+            }
+            return item
+        }
+        return [header] + (traffic.network?.key == "wired" ? [] : [wiredRow]) + rows
+    }
+
+    /// Name, then four right-aligned numeric columns on tab stops.
+    private static func row(_ cols: [String], header: Bool, dimmed: Bool = false) -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [230, 310, 370, 440].map { NSTextTab(textAlignment: .right, location: $0) }
+        let size = NSFont.systemFontSize - (header ? 2 : 0)
+        return NSAttributedString(string: cols.joined(separator: "\t"), attributes: [
+            .font: header ? NSFont.systemFont(ofSize: size, weight: .medium)
+                          : NSFont.monospacedDigitSystemFont(ofSize: size, weight: .regular),
+            .foregroundColor: header ? NSColor.tertiaryLabelColor : dimmed ? NSColor.secondaryLabelColor : NSColor.labelColor,
+            .paragraphStyle: style,
+        ])
+    }
+
+    @objc private func joinNetwork(_ sender: NSMenuItem) {
+        guard let ssid = sender.representedObject as? String else { return }
+        netInfo("🛜 joining \(ssid)")
+        net.join(ssid) { error in
+            if let error {
+                netError("🛜 could not join \(ssid): \(error)")
+                Prompt.show("Could not join \(ssid)", error)
+            } else {
+                netInfo("🛜 joined \(ssid)")
+            }
+        }
     }
 
     private func addRoamingRows() {
@@ -236,16 +278,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// The Ethernet symbol, tinted with the link's state.
+    /// The menu bar's cable glyph (◀ ‐ ‐ ▶), tinted with the link's state:
+    /// green with an address, yellow cable-in-no-IP, grey unplugged.
     static func wiredRowIcon(_ state: WiredLinkState) -> NSImage? {
         let color: NSColor = switch WiredLinkPolicy.tint(state) {
         case .green: .systemGreen
         case .yellow: .systemYellow
         case .gray: .systemGray
         }
-        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-            .applying(.init(paletteColors: [color]))
-        return NSImage(systemSymbolName: "network", accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        return Icons.tinted(Icons.wired(), color)
     }
 
     /// `GET /test/menu/open?close=N` — open as a click would, closing itself:
@@ -258,8 +299,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.
-    func renderIconForTest() -> String? {
-        guard let icon = statusItem.button?.image else { return nil }
+    /// `wired=1` renders the cable glyph and the three tinted row icons instead.
+    func renderIconForTest(wired: Bool = false) -> String? {
+        guard let current = statusItem.button?.image else { return nil }
+        let icon = wired ? Icons.wired() : current
         let scale: CGFloat = 8, pad: CGFloat = 4
         let cell = NSSize(width: (icon.size.width + 2 * pad) * scale, height: (icon.size.height + 2 * pad) * scale)
         let out = NSImage(size: NSSize(width: cell.width * 2, height: cell.height))
@@ -272,6 +315,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let img = icon.isTemplate ? Icons.tinted(icon, .labelColor) : icon
                 img.draw(in: NSRect(x: r.minX + pad * scale, y: pad * scale,
                                     width: icon.size.width * scale, height: icon.size.height * scale))
+                if wired {
+                    for (k, state) in [WiredLinkState.connected(ip: ""), .noAddress, .disconnected].enumerated() {
+                        Self.wiredRowIcon(state)?.draw(in: NSRect(x: r.minX + 6 + CGFloat(k) * 62, y: 6, width: 40, height: 32))
+                    }
+                }
             }
         }
         out.unlockFocus()

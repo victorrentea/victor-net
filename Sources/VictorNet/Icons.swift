@@ -6,24 +6,26 @@ import AppKit
 enum Icons {
     static let barHeight: CGFloat = 16
 
-    /// A cable: a dashed line with an arrowhead at each end (⇠⇢ joined).
+    /// A cable: two arrowheads pointing apart with **two dashes** between them
+    /// (◀ ‐ ‐ ▶, Victor's drawing, 2026-10-20). The same glyph is the menu bar
+    /// icon on a cable and the Wired row's icon in the menu.
     static func wired() -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: barHeight), flipped: false) { rect in
             NSColor.black.set()
             let y = rect.midY
-            let line = NSBezierPath()
-            line.move(to: NSPoint(x: 4.5, y: y))
-            line.line(to: NSPoint(x: 15.5, y: y))
-            line.lineWidth = 1.6
-            line.setLineDash([2.2, 1.6], count: 2, phase: 0)
-            line.stroke()
-            for (tip, dir) in [(CGFloat(1.5), CGFloat(1)), (CGFloat(18.5), CGFloat(-1))] {
+            for (tip, dir) in [(CGFloat(1.4), CGFloat(1)), (CGFloat(18.6), CGFloat(-1))] {
                 let head = NSBezierPath()
                 head.move(to: NSPoint(x: tip, y: y))
-                head.line(to: NSPoint(x: tip + 4.5 * dir, y: y + 3.6))
-                head.line(to: NSPoint(x: tip + 4.5 * dir, y: y - 3.6))
+                head.line(to: NSPoint(x: tip + 4 * dir, y: y + 3.6))
+                head.line(to: NSPoint(x: tip + 4 * dir, y: y - 3.6))
                 head.close()
-                head.fill()
+                // Outlined, not filled (Victor, 2026-10-20).
+                head.lineWidth = 1.2
+                head.lineJoinStyle = .round
+                head.stroke()
+            }
+            for x in [CGFloat(6.9), 10.8] {
+                NSBezierPath(roundedRect: NSRect(x: x, y: y - 0.65, width: 2.3, height: 1.3), xRadius: 0.4, yRadius: 0.4).fill()
             }
             return true
         }

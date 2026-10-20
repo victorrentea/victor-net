@@ -8,7 +8,7 @@ system Wi-Fi item, which Victor takes out of the menu bar.
 
 | the Mac is on…        | icon |
 |-----------------------|------|
-| a cable with an address | dashed ⇄ (drawn: a dashed line with an arrowhead at each end) |
+| a cable with an address | ◁ ‐ ‐ ▷ — two hollow arrowheads, two dashes |
 | the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s; while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
 | any other Wi-Fi       | the system Wi-Fi symbol, arcs filled by RSSI (−50 dBm full, −90 empty) |
 | nothing               | Wi-Fi slashed |
@@ -46,24 +46,29 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```
-🔌 Wired: not connected
-🛜 Wi-Fi: victor · -54 dBm
-📱 Phone: LTE · 4/4 · -64 dBm · Plus
-──────────
-network        ↓ best      ↑ best     latency   last seen
-📱 victor      8.40 MB/s   1.10 MB/s  81 ms     now          ← bold: the current one
-🛜 Hotel-Guest 3.10 MB/s   0.42 MB/s  38 ms     35 min
+network            ↓ best      ↑ best     latency   last seen
+◁‐‐▷ Ethernet      not connected                                ← always listed
+✓ 📱 victor        8.40 MB/s   1.10 MB/s    81 ms   now          ← ✓ = in use
+  🛜 Hotel-Guest   3.10 MB/s   0.42 MB/s    38 ms   35 min       ← click = join
 ⚡ Test speed (10 MB) — last 21.00 MB/s, 2 h ago
-──────────
-Busiest apps — avg over 5s
-Google Chrome   ↓ 1.20 MB/s   ↑ 0.04 MB/s
 ──────────
 ⛔ Roaming: 0.0 GB left of 13.4 GB · resets 2 Nov
     roaming now · used 37.8 GB · read now
 ⚙️ Roaming plan ›          (plan, reset day, + package, "Vodafone says…", *123#, protection)
-🛜 Auto Mobile Hotspot  ✓
+🛜 Auto-start Mobile Hotspot  ✓
 ⏸️ Pause Claude on roaming data
 ```
+
+- **No Wired / Wi-Fi / Phone status rows** (Victor: the icon and the ✓ already say it).
+- **One row per network, clickable** (`networkRows`): every Wi-Fi **in range** (the last
+  scan, `cachedScanResults`; a fresh scan starts in the background each time the menu opens)
+  that this Mac knows (*Known networks*) or has measured, plus **Ethernet, always**, which
+  reads `not connected` when unplugged. ✓ = the one in use; a click on another **joins it**
+  (`networksetup -setairportnetwork`, password from the keychain). Out of range = off the
+  list, but its numbers stay in the book and return with it. Rows, not a grid view, because
+  a grid row cannot be clicked: the columns are right-aligned tab stops.
+- **The cable glyph** is ◁ ‐ ‐ ▷ — two **hollow** arrowheads and two dashes — the same in the
+  menu bar and, tinted green / yellow / grey, on the Ethernet row.
 
 - **One table, every network, in the main menu** (Victor, 2026-10-20: *"not a submenu, right
   in the main screen"*) — the current one in bold, its row fresh from the live window. No
@@ -85,15 +90,9 @@ Google Chrome   ↓ 1.20 MB/s   ↑ 0.04 MB/s
 - **🗂️ Compare networks** — every network's best of the day, last speed test, median latency
   and when it was last seen (`~/.victor-net/networks.json`), current one in bold. Keyed by
   SSID; an unnamed Wi-Fi (no Location grant) is not filed.
-- **Busiest apps** — `nettop -d` **only while the menu is open** (`menuWillOpen` /
-  `menuDidClose`); the table fills in **once**, ~2 s after opening, then stays. Helpers fold
-  into the outermost `.app`; a binary named after its version (`…/claude/versions/2.1.304`)
-  is named after the folder above `versions`.
-  - nettop runs *without* `-P`: its stdout is block-buffered into a pipe, and the
-    per-process summary alone never filled the 4 KB buffer — the first block arrived after
-    the menu had closed. The connection rows push each second out.
-  - Lines reach the main run loop with `RunLoop.main.perform(inModes: [.common])`:
-    `DispatchQueue.main` is not drained while a menu tracks.
+- **No busiest-apps section for now** (Victor, 2026-10-20). `TrafficPolicy` still holds the
+  `nettop -d` parsing (no `-P`: its pipe output is block-buffered and the per-process summary
+  alone never filled the 4 KB buffer), ready for when it comes back.
 - **📵 Offline N min** at the top once two handshakes in a row failed (took over the row
   Victor Insomnia dropped on 2026-10-20).
 
