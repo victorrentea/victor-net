@@ -58,9 +58,34 @@ enum Icons {
         return image
     }
 
-    /// The phone's hotspot in a list: the system's own Personal Hotspot symbol.
+    /// The hotspot glyph Victor picked (2026-10-20): a ring in the middle and two
+    /// arcs around it, open at the bottom. Drawn rather than shipped as his PNG,
+    /// so it is a crisp template in both themes. (SF Symbols' `personalhotspot`
+    /// is two linked rings, which is not this.)
     static func hotspot() -> NSImage? {
-        let image = NSImage(systemSymbolName: "personalhotspot", accessibilityDescription: "Hotspot")?
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in
+            NSColor.black.set()
+            let c = NSPoint(x: r.midX, y: r.midY - 0.5)
+            let dot = NSBezierPath()
+            dot.appendArc(withCenter: c, radius: 1.8, startAngle: 0, endAngle: 360)
+            dot.lineWidth = 1.4
+            dot.stroke()
+            for radius in [CGFloat(4.4), 7.0] {
+                let arc = NSBezierPath()
+                arc.appendArc(withCenter: c, radius: radius, startAngle: -50, endAngle: 230)
+                arc.lineWidth = 1.5
+                arc.lineCapStyle = .butt
+                arc.stroke()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// The phone's own network in the list (Victor: "keep displaying the phone icon").
+    static func phone() -> NSImage? {
+        let image = NSImage(systemSymbolName: "iphone", accessibilityDescription: "Phone")?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         image?.isTemplate = true
         return image

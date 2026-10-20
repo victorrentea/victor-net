@@ -46,23 +46,31 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```
-best of the day      ↓ MB/s  ↑ MB/s  ping   seen
-<‐‐> Ethernet        not connected                       ← always listed
-✓ (·)) victor          8.40    1.10    81    now         ← ✓ = in use; Personal Hotspot symbol
-  wifi Hotel-Guest     3.10    0.42    38    35 min      ← Wi-Fi arcs at its strength; click = join
-Other Networks ›                                         ← everything else in range, 🔒 = password
-✓ Wi-Fi                                                  ← the radio's switch
+Wi-Fi                                    [ON]       ← macOS's first line: a real switch
+best today, MB/s            ↓     ↑   ping  seen
+<‐‐> Ethernet                                       ← always listed, greyed without a cable
+✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
+  wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
+Other Networks                               ›      ← click: all others unfold below, live
 ──────────
-📶 Roaming: 22.9 GB left · per Vodafone 4 h ago
-    used 38.0 GB this cycle · resets 2 Nov
+📶 Roaming: 22.6 GB left of 60.9 GB                 ← roaming only; total = used + left
+    Vodafone, 2 h ago · resets 2 Nov
 Ask Vodafone for what is left
-✓ 🔒 Hotspot protection — keeps 1.0 GB
-✓ ⏸️ Pause Claude on roaming data
-✓ 🛜 Auto-start Mobile Hotspot
+✓ 🔒 Auto-stop hotspot at 1.0 GB left
+  ⏸️ Pause Claude on roaming
+✓ ((o)) Auto-start Mobile Hotspot                   ← Victor's hotspot glyph, drawn
 ──────────
-⚡ Test speed (downloads 25 MB)
+⚡ Test speed (downloads 10 MB)
 Wi-Fi Settings…
+Quit                                                ← no ⌘Q: its column widened the menu
 ```
+
+- **Rows are drawn views** (`MenuRows.swift`): fixed-x columns that line up whatever the
+  names (tab stops in a title could not), a rounded highlight under the pointer, a click that
+  acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
+- **Other Networks unfolds in place** (`toggleOthers`): rows inserted below it while the menu
+  stays open, rescanned every 8 s, gone when the menu closes; 🔒 = password, asked only for
+  a secured network this Mac does not know.
 
 - **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
   known/measured networks in range with their numbers, *Other Networks* (all in range,

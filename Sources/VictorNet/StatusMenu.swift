@@ -86,6 +86,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         net.scanInBackground()
     }
 
+    func menuDidClose(_ menu: NSMenu) {
+        othersExpanded = false
+        rescanTimer?.invalidate()
+        rescanTimer = nil
+        otherRows = []
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         net.refresh()
@@ -96,17 +103,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // Networks, the way macOS lists them: the ones worth comparing as a
         // table (✓ = in use, click = join), then everything else in range, then
         // the Wi-Fi switch. No status rows above: the icon and the ✓ say it.
+        menu.addItem(wifiSwitchRow())
+        menu.addItem(.separator())
         networkRows().forEach(menu.addItem)
-        menu.addItem(otherNetworksItem())
-        let wifi = action("Wi-Fi", #selector(toggleWifi))
-        wifi.state = net.wifiPower ? .on : .off
-        menu.addItem(wifi)
+        menu.addItem(otherNetworksRow())
 
         // Everything about roaming, together.
         if Config.hasPhone {
             menu.addItem(.separator())
             addRoamingRows()
-            let hotspot = action("🛜 Auto-start Mobile Hotspot", #selector(toggleHotspot))
+            let hotspot = action("Auto-start Mobile Hotspot", #selector(toggleHotspot))
+            hotspot.image = Icons.hotspot()
             hotspot.state = HotspotFallbackSettings.isEnabled ? .on : .off
             menu.addItem(hotspot)
         }
@@ -115,9 +122,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(action(speedTitle(), #selector(speedTestAction)))
         menu.addItem(action("Wi-Fi Settings…", #selector(openWifiSettings)))
         menu.addItem(info("Built \(BuildInfo.time)"))
-        let quit = action("Quit", #selector(quitAction))
-        quit.keyEquivalent = "q"
-        menu.addItem(quit)
+        // No ⌘Q shown: its column made the whole menu wider for nothing.
+        menu.addItem(action("Quit", #selector(quitAction)))
     }
 
     private func speedTitle() -> String {
@@ -129,14 +135,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return "⚡ Test speed (downloads \(mb) MB)"
     }
 
-    /// The networks to compare, as clickable rows (Victor, 2026-10-20): every
-    /// Wi-Fi **in range** that this Mac knows or has measured, plus the cable
-    /// while it carries the traffic. One out of range drops off the list, but
-    /// its numbers stay in the book and come back with it. ✓ marks the one in
-    /// use; a click on another joins it.
-    ///
-    /// Rows, not a grid view, because a grid row cannot be clicked; the columns
-    /// are tab stops in the attributed title.
+    // MARK: - Networks, like macOS's Wi-Fi menu
+
+    private var othersExpanded = false
+    private var othersAnchor: NSMenuItem?
+    private var otherRows: [NSMenuItem] = []
+    private var rescanTimer: Timer?
+
+    /// The networks worth comparing — every Wi-Fi in range this Mac knows or has
+    /// measured, plus Ethernet, always — with the day's best numbers. ✓ = in use;
+    /// a click on another joins it. Out of range = off the list, numbers kept.
     private func networkRows() -> [NSMenuItem] {
         let now = Date()
         let reachable = net.reachableSSIDs()
@@ -151,152 +159,145 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             records[cur.key] = r
         }
         for ssid in reachable.intersection(known) where records["wifi:\(ssid)"] == nil {
-            let hotspot = ssid == Config.hotspotSSID
-            records["wifi:\(ssid)"] = NetworkRecord(name: ssid,
-                                                    kind: hotspot ? "hotspot" : "wifi", lastSeen: .distantPast)
+            records["wifi:\(ssid)"] = NetworkRecord(name: ssid, kind: ssid == Config.hotspotSSID ? "hotspot" : "wifi",
+                                                    lastSeen: .distantPast)
         }
         let shown = records.filter { key, _ in
-            if key == traffic.network?.key { return true }
-            guard key.hasPrefix("wifi:") else { return false }
-            return reachable.contains(String(key.dropFirst(5)))
+            key == traffic.network?.key || (key.hasPrefix("wifi:") && reachable.contains(String(key.dropFirst(5))))
         }.sorted { a, b in
             a.key == traffic.network?.key ? true : b.key == traffic.network?.key ? false
                 : (a.value.maxDown, b.key) > (b.value.maxDown, a.key)
         }
-        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        header.attributedTitle = Self.row(["best of the day", "↓ MB/s", "↑ MB/s", "ping", "seen"], header: true)
-        header.isEnabled = false
-        let rate: (Double) -> String = { String(format: "%.2f", $0 / 1_000_000) }
+        let rate: (Double) -> String = { $0 > 0 ? String(format: "%.1f", $0 / 1_000_000) : "—" }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
-        // The cable, always listed: its numbers while it carries the traffic,
-        // otherwise what state it is in.
-        let wiredRow: NSMenuItem
-        if traffic.network?.key == "wired" {
-            wiredRow = NSMenuItem()   // filled by the loop below, as the current network
-        } else {
-            wiredRow = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            let state = net.wired == .disconnected ? "not connected" : WiredLinkPolicy.title(net.wired)
-                .replacingOccurrences(of: "Wired: ", with: "")
-            wiredRow.attributedTitle = Self.row(["Ethernet", state], header: false, dimmed: true)
-            wiredRow.image = Self.wiredRowIcon(net.wired)
-            wiredRow.isEnabled = false
+
+        var items = [NSMenuItem(view: MenuRowView(name: "best today, MB/s", columns: ["↓", "↑", "ping", "seen"], header: true))]
+        // Ethernet: always listed, greyed when there is no cable.
+        if traffic.network?.key != "wired" {
+            items.append(NSMenuItem(view: MenuRowView(name: "Ethernet", icon: Icons.wired(), enabled: false, dimmed: true)))
         }
-        let rows = shown.map { key, r -> NSMenuItem in
-            let seen = r.lastSeen == .distantPast ? "never" : NetworkBookPolicy.since(r.lastSeen, now: now)
-            let item = NSMenuItem(title: r.name, action: nil, keyEquivalent: "")
+        for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
-            let name = ssid ?? "Ethernet"
-            item.attributedTitle = Self.row([name, r.maxDown > 0 ? rate(r.maxDown) : "—", r.maxUp > 0 ? rate(r.maxUp) : "—",
-                                             r.latencyMs.map { String(format: "%.0f", $0) } ?? "—", seen], header: false)
-            if key == "wired" {
-                item.image = Self.wiredRowIcon(net.wired)
-            } else if ssid == Config.hotspotSSID {
-                item.image = Icons.hotspot()
-            } else if let ssid {
-                let level = ssid == net.ssid ? net.rssi : rssi[ssid]
-                item.image = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
-            }
             let current = key == traffic.network?.key
-            item.state = current ? .on : .off
-            if !current, key.hasPrefix("wifi:") {
-                item.action = #selector(joinNetwork(_:))
-                item.target = self
-                item.representedObject = String(key.dropFirst(5))
-                item.isEnabled = true
-            } else {
-                item.isEnabled = current
+            let icon: NSImage?
+            if key == "wired" { icon = Icons.wired() }
+            else if ssid == Config.hotspotSSID { icon = Icons.phone() }
+            else {
+                let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
+                icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
             }
-            return item
+            let seen = r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
+            let row = MenuRowView(name: ssid ?? "Ethernet",
+                                  columns: [rate(r.maxDown), rate(r.maxUp), r.latencyMs.map { String(format: "%.0f", $0) } ?? "—", seen],
+                                  icon: icon, checked: current, enabled: !current && ssid != nil)
+            if !current, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
+            items.append(NSMenuItem(view: row))
         }
-        return [header] + (traffic.network?.key == "wired" ? [] : [wiredRow]) + rows
+        return items
     }
 
-    /// Name, then four right-aligned numeric columns on tab stops.
-    private static func row(_ cols: [String], header: Bool, dimmed: Bool = false) -> NSAttributedString {
-        let style = NSMutableParagraphStyle()
-        // Narrow (Victor, 2026-10-20): numbers only, the unit is in the header.
-        style.tabStops = [175, 220, 260, 305].map { NSTextTab(textAlignment: .right, location: $0) }
-        let size = NSFont.systemFontSize - (header ? 2 : 0)
-        return NSAttributedString(string: cols.joined(separator: "\t"), attributes: [
-            .font: header ? NSFont.systemFont(ofSize: size, weight: .medium)
-                          : NSFont.monospacedDigitSystemFont(ofSize: size, weight: .regular),
-            .foregroundColor: header ? NSColor.tertiaryLabelColor : dimmed ? NSColor.secondaryLabelColor : NSColor.labelColor,
-            .paragraphStyle: style,
-        ])
-    }
-
-    @objc private func joinNetwork(_ sender: NSMenuItem) {
-        guard let ssid = sender.representedObject as? String else { return }
-        netInfo("🛜 joining \(ssid)")
-        net.join(ssid) { error in
-            if let error {
-                netError("🛜 could not join \(ssid): \(error)")
-                Prompt.show("Could not join \(ssid)", error)
-            } else {
-                netInfo("🛜 joined \(ssid)")
-            }
-        }
-    }
-
-    /// Everything else in range, strongest first, as macOS shows it: the Wi-Fi
-    /// arcs at the network's strength, 🔒 when it has a password. A click joins
-    /// — asking for the password only for a secured network this Mac doesn't know.
-    private func otherNetworksItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "Other Networks", action: nil, keyEquivalent: "")
-        let sub = NSMenu()
-        sub.autoenablesItems = false
-        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
-            .union(net.knownSSIDs())
-        let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
-        if others.isEmpty { sub.addItem(info(net.wifiPower ? "Nothing else in range" : "Wi-Fi is off")) }
-        for n in others {
-            let row = action(n.ssid + (n.secure ? "  🔒" : ""), #selector(joinOther(_:)))
-            row.image = Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi))
-            row.representedObject = [n.ssid, n.secure ? "1" : "0"]
-            sub.addItem(row)
-        }
-        item.submenu = sub
+    /// "Other Networks ›" — a click unfolds every other Wi-Fi in range right below
+    /// it, as macOS does, and they stay until the menu closes, refreshed as new
+    /// scans land (every 8 s while open).
+    private func otherNetworksRow() -> NSMenuItem {
+        let row = MenuRowView(name: "Other Networks", trailing: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
+                                                                    accessibilityDescription: nil))
+        row.keepsMenuOpen = true
+        row.onClick = { [weak self] in self?.toggleOthers() }
+        let item = NSMenuItem(view: row)
+        othersAnchor = item
         return item
     }
 
-    @objc private func joinOther(_ sender: NSMenuItem) {
-        guard let pair = sender.representedObject as? [String], pair.count == 2 else { return }
-        let (ssid, secure) = (pair[0], pair[1] == "1")
-        var password: String?
-        if secure {
-            guard let pw = Prompt.password("Join “\(ssid)”", "The Wi-Fi password.") else { return }
-            password = pw
+    private func toggleOthers() {
+        othersExpanded.toggle()
+        if let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) {
+            menu.removeItem(at: i)
+            menu.insertItem(otherNetworksRow(), at: i)
         }
+        refreshOthers()
+        if othersExpanded {
+            net.scanInBackground()
+            let t = Timer(timeInterval: 8, repeats: true) { [weak self] _ in
+                self?.net.scanInBackground()
+                self?.refreshOthers()
+            }
+            RunLoop.main.add(t, forMode: .common)
+            rescanTimer = t
+        } else {
+            rescanTimer?.invalidate()
+            rescanTimer = nil
+        }
+    }
+
+    private func refreshOthers() {
+        otherRows.forEach { menu.removeItem($0) }
+        otherRows = []
+        guard othersExpanded, let anchor = othersAnchor, var at = menu.items.firstIndex(of: anchor) else { return }
+        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
+            .union(net.knownSSIDs())
+        let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
+        let rows: [NSMenuItem] = others.isEmpty
+            ? [NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off", enabled: false, dimmed: true))]
+            : others.map { n in
+                let lock = n.secure ? NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "secured") : nil
+                let row = MenuRowView(name: n.ssid, icon: Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi)),
+                                      trailing: lock)
+                row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
+                return NSMenuItem(view: row)
+            }
+        for r in rows {
+            at += 1
+            menu.insertItem(r, at: at)
+        }
+        otherRows = rows
+    }
+
+    private func join(_ ssid: String, password: String?) {
         netInfo("🛜 joining \(ssid)")
         net.join(ssid, password: password) { error in
             if let error { Prompt.show("Could not join \(ssid)", error) } else { netInfo("🛜 joined \(ssid)") }
         }
     }
 
-    @objc private func toggleWifi() {
-        let on = !net.wifiPower
-        net.setWifiPower(on) { error in
-            netInfo("🛜 Wi-Fi \(on ? "on" : "off")\(error.map { " — \($0)" } ?? "")")
+    private func joinOther(_ ssid: String, secure: Bool) {
+        var password: String?
+        if secure {
+            guard let pw = Prompt.password("Join “\(ssid)”", "The Wi-Fi password.") else { return }
+            password = pw
         }
+        join(ssid, password: password)
+    }
+
+    private func wifiSwitchRow() -> NSMenuItem {
+        let row = MenuSwitchRow(title: "Wi-Fi", on: net.wifiPower)
+        row.onChange = { [weak self] on in
+            self?.net.setWifiPower(on) { error in
+                netInfo("🛜 Wi-Fi \(on ? "on" : "off")\(error.map { " — \($0)" } ?? "")")
+            }
+        }
+        return NSMenuItem(view: row)
     }
 
     @objc private func openWifiSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
     }
 
+    // MARK: - Roaming
+
+    /// Only roaming counts (at home the data is unlimited): what is left, of how
+    /// much in all this cycle — the used part plus what is left.
     private func addRoamingRows() {
         let gb = RoamingWarningPolicy.gb
         if let r = roaming.reading {
             let left = roamingLeft ?? r.remaining
             let alert = RoamingAlertPolicy.alert(r, left: left, now: Date())
             let mark = alert == .capped ? "⛔" : alert == .low ? "⚠️" : "📶"
-            let source = vodafone.map { "Vodafone \(NetworkBookPolicy.ago($0.at, now: Date()))" } ?? "the phone's count"
-            menu.addItem(info("\(mark) Roaming: \(gb(left)) left · per \(source)"))
-            var detail = "    used \(gb(r.cycleTotal)) this cycle · resets " +
-                DateFormatter.localizedString(from: r.nextReset, dateStyle: .medium, timeStyle: .none)
-            if let until = vodafone?.validUntil {
-                detail += " · package until " + DateFormatter.localizedString(from: until, dateStyle: .medium, timeStyle: .none)
-            }
+            menu.addItem(info("\(mark) Roaming: \(gb(left)) left of \(gb(left + r.cycleTotal))"))
+            let day = DateFormatter()
+            day.dateFormat = "d MMM"
+            var detail = "    " + (vodafone.map { "Vodafone, \(NetworkBookPolicy.ago($0.at, now: Date()))" } ?? "phone's count")
+            detail += " · resets " + day.string(from: r.nextReset)
             menu.addItem(info(detail))
         } else {
             menu.addItem(info("📶 Roaming: the phone has not answered yet"))
@@ -306,13 +307,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         ask.isEnabled = !asking
         menu.addItem(ask)
         if let r = roaming.reading {
-            // Unticking turns it off until the reset; it comes back by itself then.
-            let guardItem = action("🔒 Hotspot protection — keeps \(gb(r.reserve))" + (r.guardOff ? " (off until the reset)" : ""),
+            let guardItem = action("🔒 Auto-stop hotspot at \(gb(r.reserve)) left" + (r.guardOff ? " (off until the reset)" : ""),
                                    #selector(toggleGuard))
             guardItem.state = r.guardOff ? .off : .on
             menu.addItem(guardItem)
         }
-        let pause = action("⏸️ Pause Claude on roaming data", #selector(toggleSuspend))
+        let pause = action("⏸️ Pause Claude on roaming", #selector(toggleSuspend))
         pause.state = RoamingDataSettings.suspendClaude ? .on : .off
         menu.addItem(pause)
     }
@@ -374,6 +374,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                     for (k, state) in [WiredLinkState.connected(ip: ""), .noAddress, .disconnected].enumerated() {
                         Self.wiredRowIcon(state)?.draw(in: NSRect(x: r.minX + 6 + CGFloat(k) * 62, y: 6, width: 40, height: 32))
                     }
+                    Icons.hotspot().map { Icons.tinted($0, .labelColor) }?
+                        .draw(in: NSRect(x: r.maxX - 60, y: 4, width: 48, height: 48))
                 }
             }
         }
