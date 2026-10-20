@@ -90,6 +90,12 @@ enum NetworkBookPolicy {
         return "\(s / 3600) h \(s % 3600 / 60) min"
     }
 
+    /// "now", "35 min", "3 h", "2 days" — the **last seen** column.
+    static func since(_ date: Date, now: Date) -> String {
+        let a = ago(date, now: now)
+        return a.hasSuffix(" ago") ? String(a.dropLast(4)) : a
+    }
+
     static func ago(_ date: Date, now: Date) -> String {
         let s = max(0, Int(now.timeIntervalSince(date)))
         if s < 120 { return "now" }

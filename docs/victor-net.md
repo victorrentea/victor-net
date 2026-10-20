@@ -48,18 +48,15 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 ```
 🔌 Wired: not connected
 🛜 Wi-Fi: victor · -54 dBm
-📱 Phone: LTE · 3/4 · -97 dBm · Plus
+📱 Phone: LTE · 4/4 · -64 dBm · Plus
 ──────────
-📈 📱 victor
-📱 victor       avg over 5s   best in 10 min
-↓ Download       1.20 MB/s        8.40 MB/s
-↑ Upload         0.04 MB/s        1.10 MB/s
-Latency             86 ms            81 ms
-⚡ Test speed (10 MB) — last 21.0 MB/s, 2 h ago
-🗂️ Compare networks ›     (one table, every network, current in bold: network · ↓ best · ↑ best · ⚡ · latency · seen)
+network        ↓ best      ↑ best     latency   last seen
+📱 victor      8.40 MB/s   1.10 MB/s  81 ms     now          ← bold: the current one
+🛜 Hotel-Guest 3.10 MB/s   0.42 MB/s  38 ms     35 min
+⚡ Test speed (10 MB) — last 21.00 MB/s, 2 h ago
 ──────────
 Busiest apps — avg over 5s
-Google Chrome   ↓ 1.2 MB/s   ↑ 40 KB/s
+Google Chrome   ↓ 1.20 MB/s   ↑ 0.04 MB/s
 ──────────
 ⛔ Roaming: 0.0 GB left of 13.4 GB · resets 2 Nov
     roaming now · used 37.8 GB · read now
@@ -68,8 +65,12 @@ Google Chrome   ↓ 1.2 MB/s   ↑ 40 KB/s
 ⏸️ Pause Claude on roaming data
 ```
 
-- **↓ / ↑** — the **5 s average** and the **best 5 s average of the last 10 minutes on this
-  network** (a sustained rate, not one spike). Sampled all the time, once a second, from the
+- **One table, every network, in the main menu** (Victor, 2026-10-20: *"not a submenu, right
+  in the main screen"*) — the current one in bold, its row fresh from the live window. No
+  "avg over 5s" column and no ⚡ column any more: a row is a network's **best 5 s average**
+  of the day (a sustained rate, not one spike), its latency and when it was **last seen**
+  (`now`, `35 min`).
+- **↓ / ↑** Sampled all the time, once a second, from the
   `en*` interfaces' kernel counters (`getifaddrs` — what `netstat -ib` prints): it costs
   nothing measurable, and it is why the window is full when the menu opens. `utun*` is
   skipped (a VPN's bytes also cross `en0`); the 32-bit counters' wrap is handled.
