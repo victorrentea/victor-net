@@ -239,9 +239,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let age = NetworkBookPolicy.ago(r.readAt, now: Date())
         menu.addItem(info("    \(r.roamingNow ? "roaming now" : "home network") · used \(gb(r.cycleTotal)) · read \(age)"))
 
-        let settings = NSMenuItem(title: "⚙️ Roaming plan", action: nil, keyEquivalent: "")
-        let sub = NSMenu()
-        sub.autoenablesItems = false
+        // The plan's settings, right in the main menu (Victor, 2026-10-20).
+        let sub = menu
         let plan = r.planMb.map { gb($0 * 1_000_000) } ?? "?"
         sub.addItem(action("Monthly plan: \(plan) …", #selector(setPlan)))
         sub.addItem(action("Resets on day \(r.resetDay.map(String.init) ?? "?") …", #selector(setResetDay)))
@@ -249,17 +248,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         sub.addItem(action("Extra this cycle: \(extra) — add a package …", #selector(addPackage)))
         sub.addItem(action("Vodafone says remaining is …", #selector(setRemaining)))
         sub.addItem(action("Ask Vodafone (*123#)", #selector(askVodafone)))
-        sub.addItem(.separator())
         sub.addItem(action(r.guardOff ? "🔓 Hotspot protection off until the reset — turn back on"
                                       : "🔒 Hotspot protection on (keeps \(gb(r.reserve))) — turn off until reset",
                            #selector(toggleGuard)))
         sub.addItem(action("Ask the phone now", #selector(askNow)))
         if !net.onHotspot {
-            sub.addItem(.separator())
-            sub.addItem(info("Changes reach the phone only over its hotspot"))
+            sub.addItem(info("    changes reach the phone only over its hotspot"))
         }
-        settings.submenu = sub
-        menu.addItem(settings)
     }
 
     // MARK: - Rows

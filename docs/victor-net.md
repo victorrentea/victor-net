@@ -8,7 +8,7 @@ system Wi-Fi item, which Victor takes out of the menu bar.
 
 | the Mac is on…        | icon |
 |-----------------------|------|
-| a cable with an address | ◁ ‐ ‐ ▷ — two hollow arrowheads, two dashes |
+| a cable with an address | `< ‐ ‐ >` — open angle brackets, two dashes |
 | the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s; while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
 | any other Wi-Fi       | the system Wi-Fi symbol, arcs filled by RSSI (−50 dBm full, −90 empty) |
 | nothing               | Wi-Fi slashed |
@@ -54,7 +54,8 @@ network            ↓ best      ↑ best     latency   last seen
 ──────────
 ⛔ Roaming: 0.0 GB left of 13.4 GB · resets 2 Nov
     roaming now · used 37.8 GB · read now
-⚙️ Roaming plan ›          (plan, reset day, + package, "Vodafone says…", *123#, protection)
+Monthly plan: 13.38 GB …  ·  Resets on day 2 …  ·  Extra this cycle …  ·  Vodafone says remaining is …
+Ask Vodafone (*123#)  ·  🔒 Hotspot protection …  ·  Ask the phone now      ← in the main menu, no submenu
 🛜 Auto-start Mobile Hotspot  ✓
 ⏸️ Pause Claude on roaming data
 ```
@@ -67,8 +68,9 @@ network            ↓ best      ↑ best     latency   last seen
   (`networksetup -setairportnetwork`, password from the keychain). Out of range = off the
   list, but its numbers stay in the book and return with it. Rows, not a grid view, because
   a grid row cannot be clicked: the columns are right-aligned tab stops.
-- **The cable glyph** is ◁ ‐ ‐ ▷ — two **hollow** arrowheads and two dashes — the same in the
-  menu bar and, tinted green / yellow / grey, on the Ethernet row.
+- **The cable glyph** is `< ‐ ‐ >` — open angle brackets and two dashes (after filled, then
+  hollow triangles were turned down) — the same in the menu bar and, tinted green / yellow /
+  grey, on the Ethernet row.
 
 - **One table, every network, in the main menu** (Victor, 2026-10-20: *"not a submenu, right
   in the main screen"*) — the current one in bold, its row fresh from the live window. No
@@ -102,7 +104,7 @@ Victor, 2026-10-20: *"the application on the mobile shouldn't do anything really
 still **counts** (only it sees its roaming bytes) and still **refuses the hotspot** under its
 reserve, so it keeps the settings — but they are made from **⚙️ Roaming plan** here and sent
 with `GET http://<gateway>:55126/config?planMb=&resetDay=&adjustMb=&guardOff=`, only while on
-its hotspot:
+its hotspot. **The items sit in the main menu**, not a submenu:
 
 - **Monthly plan** and **Resets on day** — the cycle.
 - **Extra this cycle — add a package** — `adjustMb`, which the phone files under the current
@@ -113,8 +115,11 @@ its hotspot:
   CALL_PHONE) and returns the text; if it holds an "N GB" / "N MB", one click uses it as the
   remaining. **There is no Vodafone RO API** to read the allowance from (searched 2026-10-20:
   no documented API, no open-source client for My Vodafone RO); `*123#` is the one source.
-  Not applied by itself until its wording has been seen: a wrong number would disarm the
-  reserve.
+  **Vodafone answers by SMS, not on screen** (*"Veti primi mesajul … prin SMS"*), so the button
+  gets only that sentence for now. The SMS (seen 2026-10-20) carries the firm figure as
+  `22.86GB din Trafic rmg optiune` — the roaming package left — next to the general
+  "până la 13.38GB … în roaming în SEE" fair-use line. Reading it automatically would take a
+  notification listener on the phone; until then, "Vodafone says remaining is …" by hand.
 - **Hotspot protection off until the reset** — `guardOff`: the phone stores the next reset
   as the moment it turns itself back on.
 

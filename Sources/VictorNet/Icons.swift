@@ -6,26 +6,26 @@ import AppKit
 enum Icons {
     static let barHeight: CGFloat = 16
 
-    /// A cable: two arrowheads pointing apart with **two dashes** between them
-    /// (◀ ‐ ‐ ▶, Victor's drawing, 2026-10-20). The same glyph is the menu bar
-    /// icon on a cable and the Wired row's icon in the menu.
+    /// A cable: **open angle brackets** pointing apart with two dashes between
+    /// them — `< ‐ ‐ >` (Victor, 2026-10-20, after filled and then hollow
+    /// triangles). The same glyph is the menu bar icon on a cable and, tinted, the
+    /// Ethernet row's icon in the menu.
     static func wired() -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: barHeight), flipped: false) { rect in
             NSColor.black.set()
             let y = rect.midY
-            for (tip, dir) in [(CGFloat(1.4), CGFloat(1)), (CGFloat(18.6), CGFloat(-1))] {
-                let head = NSBezierPath()
-                head.move(to: NSPoint(x: tip, y: y))
-                head.line(to: NSPoint(x: tip + 4 * dir, y: y + 3.6))
-                head.line(to: NSPoint(x: tip + 4 * dir, y: y - 3.6))
-                head.close()
-                // Outlined, not filled (Victor, 2026-10-20).
-                head.lineWidth = 1.2
-                head.lineJoinStyle = .round
-                head.stroke()
+            for (tip, dir) in [(CGFloat(1.6), CGFloat(1)), (CGFloat(18.4), CGFloat(-1))] {
+                let chevron = NSBezierPath()
+                chevron.move(to: NSPoint(x: tip + 4 * dir, y: y + 4))
+                chevron.line(to: NSPoint(x: tip, y: y))
+                chevron.line(to: NSPoint(x: tip + 4 * dir, y: y - 4))
+                chevron.lineWidth = 1.5
+                chevron.lineCapStyle = .round
+                chevron.lineJoinStyle = .round
+                chevron.stroke()
             }
-            for x in [CGFloat(6.9), 10.8] {
-                NSBezierPath(roundedRect: NSRect(x: x, y: y - 0.65, width: 2.3, height: 1.3), xRadius: 0.4, yRadius: 0.4).fill()
+            for x in [CGFloat(6.6), 11.1] {
+                NSBezierPath(roundedRect: NSRect(x: x, y: y - 0.7, width: 2.3, height: 1.4), xRadius: 0.5, yRadius: 0.5).fill()
             }
             return true
         }
