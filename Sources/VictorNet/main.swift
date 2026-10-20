@@ -45,7 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let traffic = TrafficMonitor()
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
-    private let warning = RoamingWarning()
     private let hotspot = HotspotFallback()
     private var roamingData: RoamingDataWatch?
     private var menu: StatusMenu?
@@ -74,11 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
         phone.start()
 
-        roaming.onReading = { [weak self] r in
-            self?.warning.update(r)
-            self?.menu?.refreshIcon()
-        }
-        warning.start()
+        // No pill on screen for a low allowance (Victor, 2026-10-20: "I don't
+        // need that"): the ⚠ / ✕ beside the bars is the whole warning.
+        roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
         roaming.start()
         hotspot.start()
 
@@ -116,9 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
             return (200, roaming.diagnosticsJSON)
-        case "/test/roaming/reset-dismissal":
-            onMain { self.warning.resetDismissal() }
-            return (200, "{\"ok\":true}")
         case "/test/menu/open":
             let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 10)
             DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs) }

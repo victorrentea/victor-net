@@ -15,9 +15,30 @@ enum NetworkLook: Equatable {
     case wired
     /// `level` 0…4 from the phone; nil = no fresh word from it. `weakWifi`
     /// carries the Mac↔phone Wi-Fi strength (0…1) when it is worth showing.
-    case hotspot(level: Int?, weakWifi: Double?)
+    case hotspot(level: Int?, weakWifi: Double?, alert: RoamingAlert? = nil)
     case wifi(strength: Double)
     case offline
+}
+
+/// The badge next to the phone's bars (Victor, 2026-10-20): the GB stay in the
+/// menu; the menu bar only says whether to worry.
+enum RoamingAlert: Equatable {
+    /// Under `RoamingAlertPolicy.lowBytes` left, while roaming.
+    case low
+    /// Nothing left, or under the phone's reserve so it refuses the hotspot.
+    case capped
+}
+
+enum RoamingAlertPolicy {
+    static let lowBytes: Int64 = 5_000_000_000
+
+    /// Only while the phone says it roams *now*, on a reading young enough to
+    /// trust: at home the same numbers cost nothing.
+    static func alert(_ r: RoamingWarningPolicy.Reading?, left: Int64, now: Date) -> RoamingAlert? {
+        guard let r, r.roamingNow, now.timeIntervalSince(r.readAt) < RoamingMeterPolicy.freshFor else { return nil }
+        if left <= 0 || r.hotspotBlocked { return .capped }
+        return left < lowBytes ? .low : nil
+    }
 }
 
 enum NetworkLookPolicy {
@@ -30,7 +51,7 @@ enum NetworkLookPolicy {
         if case .connected = wired { return .wired }
         guard let rssi, rssi != 0 else { return .offline }
         if let ssid, !hotspotSSID.isEmpty, ssid == hotspotSSID {
-            return .hotspot(level: phoneLevel, weakWifi: rssi < weakHotspotRSSI ? strength(rssi: rssi) : nil)
+            return .hotspot(level: phoneLevel, weakWifi: rssi < weakHotspotRSSI ? strength(rssi: rssi) : nil, alert: nil)
         }
         return .wifi(strength: strength(rssi: rssi))
     }
@@ -100,7 +121,8 @@ final class NetworkState {
         let lookName: String
         switch look {
         case .wired: lookName = "wired"
-        case .hotspot(let l, let w): lookName = "hotspot(level:\(l.map(String.init) ?? "?"),weakWifi:\(w != nil))"
+        case .hotspot(let l, let w, let a):
+            lookName = "hotspot(level:\(l.map(String.init) ?? "?"),weakWifi:\(w != nil),alert:\(a.map { "\($0)" } ?? "none"))"
         case .wifi(let s): lookName = String(format: "wifi(%.2f)", s)
         case .offline: lookName = "offline"
         }

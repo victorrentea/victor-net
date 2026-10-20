@@ -3,7 +3,7 @@
 Menu bar app: **the network icon** (cable ⇄ / the phone's bars on its hotspot / Wi-Fi), the
 traffic and latency of the current network compared with the others, and everything this Mac
 does with Victor's Android phone (`victor-phone-addons`): asking it for its hotspot over
-Bluetooth, its roaming allowance, the red pill, ⏸ Claude on roaming data. Extracted from
+Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123#), ⏸ Claude on roaming data. Extracted from
 `victor-macos-addons` on 2026-10-20; public repo `victorrentea/victor-net`, branch `main`.
 
 **Read the doc of the zone before touching its code** — the details there are load-bearing:

@@ -11,11 +11,21 @@ enum RoamingSuspendMenu {
     static func title(enabled: Bool) -> String { "⏸️ Pause Claude on roaming data" + (enabled ? "  ✓" : "") }
 }
 
-/// The one status item: the network icon (see `NetworkLook`), followed by the
-/// roaming allowance in GB while the Mac is on the phone's hotspot abroad
-/// (`RoamingMeterPolicy` — orange under 3 GB, red under 1.5 GB, 📵 once the
-/// phone refuses the hotspot). That number was its own status item in Victor
-/// Addons; here it rides next to the bars it is about.
+/// The one status item. **The menu bar shows the route and whether to worry,
+/// nothing else** (Victor, 2026-10-20): the phone's bars on its hotspot, with
+/// ⚠ under 5 GB of roaming left or a red ✕ once it is gone; the GB themselves
+/// are in the menu.
+///
+/// **The menu is a snapshot**, taken when it opens: no number moves while it is
+/// read (*"I don't really care about seeing live data. It distracts me."*). The
+/// one exception is the busiest-apps table, which can only exist after `nettop`
+/// has watched for a couple of seconds — it fills in once, then stays.
+///
+/// **Every roaming setting is made here**, not on the phone (*"the application
+/// on the mobile shouldn't do anything really"*): plan, reset day, an extra
+/// package, "Vodafone says N GB left", protection off until the reset. They are
+/// sent to the phone (`PhoneLink.configure`), which keeps them because it is the
+/// one counting and refusing the hotspot.
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -25,16 +35,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let roaming: PhoneRoamingMonitor
     private var hotspotCounter = InterfaceByteCounter()
     private var lastAskedAt = Date.distantPast
+    private var appsItem: NSMenuItem?
+    private var appsFilled = false
 
     var onRoamingSuspendToggled: (() -> Void)?
-
-    // The live rows, repainted every second while the menu is open.
-    private var downItem: NSMenuItem?
-    private var upItem: NSMenuItem?
-    private var latencyItem: NSMenuItem?
-    private var appItems: [NSMenuItem] = []
-    private var speedItem: NSMenuItem?
-    private var isOpen = false
 
     init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor) {
         self.net = net
@@ -53,49 +57,41 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func tick() {
         let now = Date()
         hotspotCounter.add(sample: InterfaceByteCounter.read(Config.wifiInterface), at: now, counting: net.onHotspot)
-        // Off the hotspot's HTTP channel (an old phone app), fall back to asking
-        // over Bluetooth every 5 minutes while the number matters.
+        // An old phone app has no `/status`: ask over Bluetooth every 5 minutes
+        // while the number matters.
         if net.onHotspot, phone.signal == nil, now.timeIntervalSince(lastAskedAt) > 300 {
             lastAskedAt = now
             roaming.pollNow()
         }
         refreshIcon()
-        if isOpen { refreshLiveRows() }
+    }
+
+    /// What is left now: the phone's number minus what this Mac pulled since.
+    private var roamingLeft: Int64? {
+        guard let r = roaming.reading else { return nil }
+        return RoamingMeterPolicy.estimate(r, macBytesSince: hotspotCounter.since(r.readAt))
     }
 
     func refreshIcon() {
         guard let button = statusItem.button else { return }
-        button.image = Icons.image(for: net.look)
-        button.imagePosition = .imageLeading
-        let r = roaming.reading
-        guard RoamingMeterPolicy.visible(onHotspot: net.onHotspot, reading: r, now: Date()) else {
-            button.attributedTitle = NSAttributedString(string: "")
-            return
+        var look = net.look
+        if case .hotspot(let level, let weak, _) = look {
+            look = .hotspot(level: level, weakWifi: weak,
+                            alert: RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date()))
         }
-        let since = r.map { hotspotCounter.since($0.readAt) } ?? 0
-        let d = RoamingMeterPolicy.display(r, macBytesSince: since, now: Date())
-        // The bars already say "phone"; 📵 stays, it is the one state that changes what to do.
-        let text = " " + d.title.replacingOccurrences(of: "📶 ", with: "")
-        let color: NSColor? = switch d.tint {
-        case .normal: nil
-        case .orange: .systemOrange
-        case .red: .systemRed
-        }
-        var attrs: [NSAttributedString.Key: Any] = [.font: NSFont.menuBarFont(ofSize: 0)]
-        if let color { attrs[.foregroundColor] = color }
-        button.attributedTitle = NSAttributedString(string: text, attributes: attrs)
+        button.image = Icons.image(for: look)
+        button.title = ""
     }
 
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
-        isOpen = true
-        traffic.apps.onBlock = { [weak self] in self?.refreshLiveRows() }
+        appsFilled = false
+        traffic.apps.onBlock = { [weak self] in self?.fillAppsOnce() }
         traffic.apps.start()
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        isOpen = false
         traffic.apps.onBlock = nil
         traffic.apps.stop()
     }
@@ -104,10 +100,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         net.refresh()
 
-        // Where the bytes go.
-        let wired = net.wired
-        let wiredItem = info(WiredLinkPolicy.title(wired))
-        wiredItem.image = Self.wiredRowIcon(wired)
+        if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
+            menu.addItem(info("📵 Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))"))
+        }
+        let wiredItem = info(WiredLinkPolicy.title(net.wired))
+        wiredItem.image = Self.wiredRowIcon(net.wired)
         menu.addItem(wiredItem)
         menu.addItem(info(NetworkLookPolicy.wifiRow(ssid: net.ssid, rssi: net.rssi)))
         if Config.hasPhone {
@@ -115,28 +112,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
-        // A run of failed handshakes, from the second one (≥ 5 s): one lost
-        // probe on a busy link is not "offline".
-        if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
-            menu.addItem(info("📵 Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))"))
-        }
-
-        // How well, on this network.
-        menu.addItem(info("📈 \(traffic.network?.name ?? "No network") — 5 s average · best in 10 min"))
-        downItem = info("")
-        upItem = info("")
-        latencyItem = info("")
-        [downItem, upItem, latencyItem].compactMap { $0 }.forEach(menu.addItem)
-        let speed = action(speedTitle(), #selector(speedTestAction))
-        speedItem = speed
-        menu.addItem(speed)
+        // This network, as a table.
+        menu.addItem(info("📈 \(traffic.network?.name ?? "No network")"))
+        let rate = TrafficPolicy.rate
+        func r(_ v: Double?) -> String { v.map(rate) ?? "—" }
+        func ms(_ v: Double?) -> String { v.map { String(format: "%.0f ms", $0) } ?? "—" }
+        menu.addItem(MenuTable.item(header: ["", "5 s average", "best in 10 min"], rows: [
+            ["↓ Download", r(traffic.down.average), r(traffic.down.maxAverage)],
+            ["↑ Upload", r(traffic.up.average), r(traffic.up.maxAverage)],
+            ["Latency", ms(traffic.latencyRecent), ms(traffic.latencyBest)],
+        ]))
+        menu.addItem(action(speedTitle(), #selector(speedTestAction)))
         menu.addItem(otherNetworksItem())
         menu.addItem(.separator())
 
         menu.addItem(info("Busiest apps — 5 s average"))
-        appItems = (0..<3).map { _ in info("") }
-        appItems.forEach(menu.addItem)
-        refreshLiveRows()
+        let apps = MenuTable.item(header: nil, rows: [["measuring…", "", ""]])
+        appsItem = apps
+        menu.addItem(apps)
 
         if Config.hasPhone {
             menu.addItem(.separator())
@@ -153,28 +146,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    private func refreshLiveRows() {
-        let rate = TrafficPolicy.rate
-        func dash(_ v: Double?) -> String { v.map(rate) ?? "—" }
-        let downMax = traffic.down.maxAverage ?? 0, upMax = traffic.up.maxAverage ?? 0
-        downItem?.attributedTitle = Self.columns(["↓ In", dash(traffic.down.average), "max \(dash(traffic.down.maxAverage))"])
-        downItem?.image = Icons.bars(traffic.down.recent(20), scale: downMax)
-        upItem?.attributedTitle = Self.columns(["↑ Out", dash(traffic.up.average), "max \(dash(traffic.up.maxAverage))"])
-        upItem?.image = Icons.bars(traffic.up.recent(20), scale: upMax)
-        let ms: (Double?) -> String = { $0.map { String(format: "%.0f ms", $0) } ?? "—" }
-        latencyItem?.attributedTitle = Self.columns(["⏱️ Latency", ms(traffic.latencyRecent), "best \(ms(traffic.latencyBest))"])
-
+    /// The apps table, once, after nettop's first full block (~2 s).
+    private func fillAppsOnce() {
+        guard !appsFilled, let item = appsItem else { return }
         let top = traffic.apps.top()
-        for (i, item) in appItems.enumerated() {
-            if i < top.count {
-                item.attributedTitle = Self.columns([top[i].0, "↓ \(rate(top[i].1))", "↑ \(rate(top[i].2))"])
-                item.isHidden = false
-            } else {
-                item.attributedTitle = Self.columns([i == 0 ? (traffic.apps.isRunning ? "measuring…" : "—") : "", "", ""])
-                item.isHidden = i > 0
-            }
-        }
-        speedItem?.title = speedTitle()
+        appsFilled = true
+        let rows = top.isEmpty ? [["nothing is moving data", "", ""]]
+            : top.map { [$0.0, "↓ " + TrafficPolicy.rate($0.1), "↑ " + TrafficPolicy.rate($0.2)] }
+        item.view = MenuTable.view(header: nil, rows: rows)
     }
 
     private func speedTitle() -> String {
@@ -187,42 +166,64 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func otherNetworksItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "🗂️ Other networks", action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: "🗂️ Compare networks", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         sub.autoenablesItems = false
         let now = Date()
-        let rows = traffic.book.records.sorted { $0.value.lastSeen > $1.value.lastSeen }
-        if rows.isEmpty { sub.addItem(info("Nothing measured yet")) }
-        for (key, r) in rows {
-            let row = info(NetworkBookPolicy.line(r, now: now))
-            if key == traffic.network?.key { row.attributedTitle = Self.bold(row.title) }
-            sub.addItem(row)
+        let records = traffic.book.records.sorted { $0.value.lastSeen > $1.value.lastSeen }
+        if records.isEmpty {
+            sub.addItem(info("Nothing measured yet"))
+        } else {
+            let rate = TrafficPolicy.rate
+            let rows = records.map { _, r -> [String] in
+                [r.name, rate(r.maxDown), rate(r.maxUp), r.speedDown.map(rate) ?? "—",
+                 r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "—", NetworkBookPolicy.ago(r.lastSeen, now: now)]
+            }
+            let current = Set(records.enumerated().filter { $0.element.key == traffic.network?.key }.map(\.offset))
+            sub.addItem(MenuTable.item(header: ["network", "↓ best", "↑ best", "⚡ test", "latency", "seen"],
+                                       rows: rows, bold: current))
+            sub.addItem(info("best = highest 5 s average today · ⚡ = last speed test"))
         }
-        sub.addItem(.separator())
-        sub.addItem(info("max = best 5 s average seen today · ⚡ = last speed test"))
         item.submenu = sub
         return item
     }
 
     private func addRoamingRows() {
         let gb = RoamingWarningPolicy.gb
-        if let r = roaming.reading {
-            let since = hotspotCounter.since(r.readAt)
-            let time = DateFormatter.localizedString(from: r.readAt, dateStyle: .none, timeStyle: .short)
-            menu.addItem(info("📶 Roaming left: \(gb(RoamingMeterPolicy.estimate(r, macBytesSince: since))) of \(gb(r.limit))"))
-            menu.addItem(info("Phone said \(gb(r.remaining)) at \(time) · this Mac pulled \(gb(since)) since"))
-            menu.addItem(info("Resets \(DateFormatter.localizedString(from: r.nextReset, dateStyle: .medium, timeStyle: .none))"))
-            if r.guardOff {
-                menu.addItem(info("🔓 Protection off on the phone until the reset"))
-            } else {
-                menu.addItem(info(r.hotspotBlocked
-                    ? "📵 Under the phone's \(gb(r.reserve)) reserve — it refuses the hotspot"
-                    : "The phone refuses the hotspot under \(gb(r.reserve)) left, while roaming"))
-            }
-        } else {
+        guard let r = roaming.reading else {
             menu.addItem(info("📶 Roaming: the phone has not answered yet"))
+            menu.addItem(action("Ask the phone now", #selector(askNow)))
+            return
         }
-        menu.addItem(action("Ask the phone now", #selector(askNow)))
+        let left = roamingLeft ?? r.remaining
+        let alert = RoamingAlertPolicy.alert(r, left: left, now: Date())
+        let mark = alert == .capped ? "⛔" : alert == .low ? "⚠️" : "📶"
+        let reset = DateFormatter.localizedString(from: r.nextReset, dateStyle: .medium, timeStyle: .none)
+        menu.addItem(info("\(mark) Roaming: \(gb(left)) left of \(gb(r.limit)) · resets \(reset)"))
+        let age = NetworkBookPolicy.ago(r.readAt, now: Date())
+        menu.addItem(info("    \(r.roamingNow ? "roaming now" : "home network") · used \(gb(r.cycleTotal)) · read \(age)"))
+
+        let settings = NSMenuItem(title: "⚙️ Roaming plan", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        sub.autoenablesItems = false
+        let plan = r.planMb.map { gb($0 * 1_000_000) } ?? "?"
+        sub.addItem(action("Monthly plan: \(plan) …", #selector(setPlan)))
+        sub.addItem(action("Resets on day \(r.resetDay.map(String.init) ?? "?") …", #selector(setResetDay)))
+        let extra = r.adjust == 0 ? "none" : (r.adjust > 0 ? "+" : "") + gb(r.adjust)
+        sub.addItem(action("Extra this cycle: \(extra) — add a package …", #selector(addPackage)))
+        sub.addItem(action("Vodafone says remaining is …", #selector(setRemaining)))
+        sub.addItem(action("Ask Vodafone (*123#)", #selector(askVodafone)))
+        sub.addItem(.separator())
+        sub.addItem(action(r.guardOff ? "🔓 Hotspot protection off until the reset — turn back on"
+                                      : "🔒 Hotspot protection on (keeps \(gb(r.reserve))) — turn off until reset",
+                           #selector(toggleGuard)))
+        sub.addItem(action("Ask the phone now", #selector(askNow)))
+        if !net.onHotspot {
+            sub.addItem(.separator())
+            sub.addItem(info("Changes reach the phone only over its hotspot"))
+        }
+        settings.submenu = sub
+        menu.addItem(settings)
     }
 
     // MARK: - Rows
@@ -239,23 +240,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         item.target = self
         item.isEnabled = true
         return item
-    }
-
-    /// Three columns on tab stops, digits monospaced, so the numbers line up
-    /// from one second to the next instead of jittering.
-    static func columns(_ cols: [String]) -> NSAttributedString {
-        let style = NSMutableParagraphStyle()
-        style.tabStops = [NSTextTab(textAlignment: .left, location: 120),
-                          NSTextTab(textAlignment: .left, location: 215)]
-        return NSAttributedString(string: cols.joined(separator: "\t"), attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
-            .paragraphStyle: style,
-            .foregroundColor: NSColor.secondaryLabelColor,
-        ])
-    }
-
-    private static func bold(_ s: String) -> NSAttributedString {
-        NSAttributedString(string: s, attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)])
     }
 
     /// The Ethernet symbol, tinted with the link's state.
@@ -279,11 +263,75 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         statusItem.button?.performClick(nil)
     }
 
+    // MARK: - Roaming settings (sent to the phone)
+
+    @objc private func setPlan() {
+        guard let gb = Prompt.number("Monthly roaming plan", "GB per month, as Vodafone states it (e.g. 13.38).",
+                                     initial: roaming.reading?.planMb.map { Double($0) / 1000 }) else { return }
+        send(["planMb": "\(Int64((gb * 1000).rounded()))"], what: "plan \(gb) GB")
+    }
+
+    @objc private func setResetDay() {
+        guard let day = Prompt.number("Plan resets on day", "Day of the month (1–31).",
+                                      initial: roaming.reading?.resetDay.map(Double.init)),
+              (1...31).contains(Int(day)) else { return }
+        send(["resetDay": "\(Int(day))"], what: "reset day \(Int(day))")
+    }
+
+    @objc private func addPackage() {
+        guard let gb = Prompt.number("Add a roaming package", "GB bought for this cycle; added to what is left.",
+                                     initial: nil), let r = roaming.reading else { return }
+        let adjustMb = r.adjust / 1_000_000 + Int64((gb * 1000).rounded())
+        send(["adjustMb": "\(adjustMb)"], what: "+\(gb) GB this cycle")
+    }
+
+    /// remaining = plan + adjust − used ⇒ adjust = remaining − plan + used.
+    @objc private func setRemaining() {
+        guard let gb = Prompt.number("Vodafone says remaining is", "GB left this cycle, from *123# or the My Vodafone app.",
+                                     initial: nil) else { return }
+        applyRemaining(Int64((gb * 1000).rounded()))
+    }
+
+    private func applyRemaining(_ mb: Int64) {
+        guard let r = roaming.reading, let plan = r.planMb else { return }
+        send(["adjustMb": "\(mb - plan + r.cycleTotal / 1_000_000)"], what: "remaining \(Double(mb) / 1000) GB")
+    }
+
+    @objc private func toggleGuard() {
+        let off = !(roaming.reading?.guardOff ?? false)
+        send(["guardOff": off ? "1" : "0"], what: off ? "protection off until reset" : "protection on")
+    }
+
+    @objc private func askVodafone() {
+        netInfo("📶 asking Vodafone (*123#) through the phone")
+        phone.askVodafone { [weak self] answer, error in
+            guard let answer else { return Prompt.show("Vodafone did not answer", error ?? "?") }
+            netInfo("📶 *123# → \(answer)")
+            if let mb = UssdPolicy.megabytes(in: answer) {
+                if Prompt.confirm("Vodafone says", answer, ok: "Use \(Double(mb) / 1000) GB as remaining") {
+                    self?.applyRemaining(mb)
+                }
+            } else {
+                Prompt.show("Vodafone says", answer)
+            }
+        }
+    }
+
+    private func send(_ params: [String: String], what: String) {
+        phone.configure(params) { reading, error in
+            if let error {
+                netError("📶 roaming setting (\(what)) not sent: \(error)")
+                Prompt.show("Not sent to the phone", "\(what): \(error)")
+            } else {
+                netInfo("📶 roaming setting sent: \(what) → \(reading.map { RoamingWarningPolicy.gb($0.remaining) } ?? "?") left")
+            }
+        }
+    }
+
     // MARK: - Actions
 
     @objc private func speedTestAction() {
-        traffic.runSpeedTest { [weak self] _ in self?.refreshLiveRows() }
-        refreshLiveRows()
+        traffic.runSpeedTest { _ in }
     }
 
     @objc private func askNow() {
@@ -303,4 +351,53 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func quitAction() { NSApp.terminate(nil) }
+}
+
+/// `*123#`'s answer → the first "N GB" / "N MB" in it. Not applied by itself: the
+/// exact wording is not known yet, and a wrong number would disarm the reserve.
+enum UssdPolicy {
+    static func megabytes(in text: String) -> Int64? {
+        guard let m = text.range(of: #"(\d+(?:[.,]\d+)?)\s*(GB|MB)"#, options: [.regularExpression, .caseInsensitive])
+        else { return nil }
+        let match = String(text[m])
+        let digits = match.prefix { $0.isNumber || $0 == "." || $0 == "," }.replacingOccurrences(of: ",", with: ".")
+        let number = Double(digits) ?? 0
+        return Int64((match.uppercased().hasSuffix("GB") ? number * 1000 : number).rounded())
+    }
+}
+
+/// Small modal questions. The app has no window, so it is brought forward first.
+enum Prompt {
+    static func number(_ title: String, _ text: String, initial: Double?) -> Double? {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 160, height: 24))
+        if let initial { field.stringValue = String(format: "%g", initial) }
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return Double(field.stringValue.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces))
+    }
+
+    static func show(_ title: String, _ text: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        alert.runModal()
+    }
+
+    static func confirm(_ title: String, _ text: String, ok: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = text
+        alert.addButton(withTitle: ok)
+        alert.addButton(withTitle: "Close")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
 }

@@ -101,3 +101,33 @@ final class RateHistoryTests: XCTestCase {
                        "📱 phone — ↓ max 8.4 MB/s · ↑ max 1.1 MB/s · ⚡ 21.0 MB/s · 38 ms · 2 h ago")
     }
 }
+
+/// The badge beside the phone's bars, and reading Vodafone's *123# answer.
+final class RoamingAlertTests: XCTestCase {
+    private func reading(roaming: Bool, blocked: Bool = false, ago: TimeInterval = 60) -> RoamingWarningPolicy.Reading {
+        .init(cycleTotal: 0, cycleHotspot: 0, today: 1, roamingNow: roaming, limit: 13_380_000_000,
+              lowFraction: 0.1, nextReset: Date(), readAt: Date() - ago, hotspotBlocked: blocked)
+    }
+
+    func testUnderFiveGigsWarns() {
+        XCTAssertEqual(RoamingAlertPolicy.alert(reading(roaming: true), left: 4_900_000_000, now: Date()), .low)
+        XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: true), left: 5_100_000_000, now: Date()))
+    }
+
+    func testNothingLeftOrBlockedIsCapped() {
+        XCTAssertEqual(RoamingAlertPolicy.alert(reading(roaming: true), left: 0, now: Date()), .capped)
+        XCTAssertEqual(RoamingAlertPolicy.alert(reading(roaming: true, blocked: true), left: 900_000_000, now: Date()), .capped)
+    }
+
+    /// At home the same numbers cost nothing; a stale reading says nothing about now.
+    func testNoBadgeAtHomeOrOnAStaleReading() {
+        XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: false), left: 0, now: Date()))
+        XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: true, ago: 3600), left: 0, now: Date()))
+    }
+
+    func testUssdNumbers() {
+        XCTAssertEqual(UssdPolicy.megabytes(in: "Mai ai 12,5 GB in SEE pana la 02.11"), 12_500)
+        XCTAssertEqual(UssdPolicy.megabytes(in: "Trafic ramas: 850 MB"), 850)
+        XCTAssertNil(UssdPolicy.megabytes(in: "Serviciu indisponibil"))
+    }
+}

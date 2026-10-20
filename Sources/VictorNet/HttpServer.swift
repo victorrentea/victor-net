@@ -11,7 +11,6 @@ import Network
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state
 ///   GET /test/roaming/simulate/<pct>   → pretend <pct>% is left (`off` clears)
-///   GET /test/roaming/reset-dismissal  → forget today's dismissal of the red pill
 ///   GET /test/menu/open?close=4        → open the menu as a click would, closing itself
 final class HttpServer {
     static let port: UInt16 = 55126

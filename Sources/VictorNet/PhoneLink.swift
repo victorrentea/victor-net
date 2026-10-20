@@ -114,6 +114,42 @@ final class PhoneLink {
         }.resume()
     }
 
+    /// Settings go to the phone, which keeps them because it is the one that
+    /// counts and refuses the hotspot (`/config` in `StatusServer.kt`); only on
+    /// its hotspot. Main thread: the fresh reading, or why not.
+    func configure(_ params: [String: String], done: @escaping (RoamingWarningPolicy.Reading?, String?) -> Void) {
+        let q = params.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        get("/config?\(q)", timeout: 4) { [weak self] data, error in
+            guard let data else { return done(nil, error) }
+            let (_, reading) = PhoneStatusPolicy.parse(data, now: Date())
+            if let reading { self?.onReading?(reading) }
+            done(reading, reading == nil ? "the phone answered without a reading" : nil)
+        }
+    }
+
+    /// `*123#` dialled by the phone on its data SIM; Vodafone's answer as text.
+    func askVodafone(done: @escaping (String?, String?) -> Void) {
+        get("/ussd", timeout: 25) { data, error in
+            guard let data, let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                return done(nil, error ?? "unreadable answer")
+            }
+            done(o["answer"] as? String, o["error"] as? String)
+        }
+    }
+
+    private func get(_ path: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
+        guard onHotspot(), let gw = Self.gateway(),
+              let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {
+            return done(nil, "only while this Mac is on the phone's hotspot")
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            RunLoop.main.perform(inModes: [.common]) { done(data, error?.localizedDescription) }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
+        }.resume()
+    }
+
     /// The IPv4 default router — on the hotspot, the phone itself.
     static func gateway() -> String? {
         guard let store = SCDynamicStoreCreate(nil, "VictorNet.PhoneLink" as CFString, nil, nil),

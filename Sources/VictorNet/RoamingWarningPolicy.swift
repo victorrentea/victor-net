@@ -30,6 +30,10 @@ enum RoamingWarningPolicy {
         /// Victor switched the phone's protection off until the next reset
         /// (2026-10-20: an extra package was bought, the reserve is not wanted).
         var guardOff: Bool = false
+        /// The settings the phone holds, as the Mac shows and edits them.
+        var planMb: Int64?
+        var adjust: Int64 = 0
+        var resetDay: Int?
 
         var remaining: Int64 { max(0, limit - cycleTotal) }
         var remainingFraction: Double { limit > 0 ? Double(remaining) / Double(limit) : 0 }
@@ -69,7 +73,10 @@ enum RoamingWarningPolicy {
             readAt: Date(timeIntervalSince1970: readAt / 1000),
             hotspotBlocked: (o["hotspotBlocked"] as? Bool) ?? false,
             reserve: (o["reserve"] as? NSNumber)?.int64Value ?? 1_000_000_000,
-            guardOff: (o["guardOff"] as? Bool) ?? false)
+            guardOff: (o["guardOff"] as? Bool) ?? false,
+            planMb: (o["planMb"] as? NSNumber)?.int64Value,
+            adjust: (o["adjust"] as? NSNumber)?.int64Value ?? 0,
+            resetDay: (o["resetDay"] as? NSNumber)?.intValue)
     }
 
     /// Show the warning now? Only for a fresh reading taken *today* (its

@@ -80,30 +80,57 @@ enum Icons {
     static func image(for look: NetworkLook) -> NSImage? {
         switch look {
         case .wired: return wired()
-        case .hotspot(let level, let weakWifi):
-            let bars = cellular(level: level)
-            guard let weakWifi, let wifi = wifi(strength: weakWifi) else { return bars }
-            return pair(bars, wifi)
+        case .hotspot(let level, let weakWifi, let alert):
+            var image = cellular(level: level)
+            if let weakWifi, let wifi = wifi(strength: weakWifi) { image = pair(image, wifi) }
+            guard let alert else { return image }
+            return badged(image, alert)
         case .wifi(let s): return wifi(strength: s)
         case .offline: return offline()
         }
     }
 
-    /// The last seconds as bars, the newest in the accent colour — for a menu
-    /// row, so not a template. `scale` is the 10-minute maximum, so a bar's
-    /// height reads against the best this network has done, not the window's.
-    static func bars(_ values: [Double], scale: Double, count: Int = 20) -> NSImage {
-        let w: CGFloat = 2, gap: CGFloat = 1, h: CGFloat = 13
-        let padded = Array(repeating: 0.0, count: max(0, count - values.count)) + values.suffix(count)
-        let size = NSSize(width: CGFloat(count) * (w + gap), height: h)
-        return NSImage(size: size, flipped: false) { _ in
-            let top = max(scale, padded.max() ?? 0, 1)
-            for (i, v) in padded.enumerated() {
-                let bh = max(1, CGFloat(v / top) * h)
-                (i == padded.count - 1 ? NSColor.controlAccentColor : NSColor.secondaryLabelColor).set()
-                NSRect(x: CGFloat(i) * (w + gap), y: 0, width: w, height: bh).fill()
+    /// The glyphs followed by ⚠ (yellow) or a red disc with a white ✕. Coloured,
+    /// so not a template: the glyphs are drawn in `labelColor`, resolved at draw
+    /// time against the menu bar's own appearance.
+    static func badged(_ glyphs: NSImage, _ alert: RoamingAlert) -> NSImage {
+        let d: CGFloat = 13, gap: CGFloat = 3
+        let size = NSSize(width: glyphs.size.width + gap + d, height: max(glyphs.size.height, barHeight))
+        let image = NSImage(size: size, flipped: false) { _ in
+            let g = NSRect(x: 0, y: (size.height - glyphs.size.height) / 2,
+                           width: glyphs.size.width, height: glyphs.size.height)
+            // A template drawn by hand is just a mask: fill it with the text colour.
+            glyphs.draw(in: g)
+            NSColor.labelColor.set()
+            g.fill(using: .sourceAtop)
+            let b = NSRect(x: glyphs.size.width + gap, y: (size.height - d) / 2, width: d, height: d)
+            switch alert {
+            case .low:
+                let t = NSBezierPath()
+                t.move(to: NSPoint(x: b.midX, y: b.maxY))
+                t.line(to: NSPoint(x: b.maxX, y: b.minY + 0.5))
+                t.line(to: NSPoint(x: b.minX, y: b.minY + 0.5))
+                t.close()
+                NSColor.systemYellow.set()
+                t.fill()
+                NSColor.black.set()
+                NSRect(x: b.midX - 0.9, y: b.minY + 4.6, width: 1.8, height: 4.6).fill()
+                NSRect(x: b.midX - 0.9, y: b.minY + 2.2, width: 1.8, height: 1.6).fill()
+            case .capped:
+                NSColor.systemRed.set()
+                NSBezierPath(ovalIn: b).fill()
+                let x = NSBezierPath()
+                let i = b.insetBy(dx: 3.8, dy: 3.8)
+                x.move(to: NSPoint(x: i.minX, y: i.minY)); x.line(to: NSPoint(x: i.maxX, y: i.maxY))
+                x.move(to: NSPoint(x: i.minX, y: i.maxY)); x.line(to: NSPoint(x: i.maxX, y: i.minY))
+                x.lineWidth = 1.8
+                x.lineCapStyle = .round
+                NSColor.white.set()
+                x.stroke()
             }
             return true
         }
+        image.isTemplate = false
+        return image
     }
 }
