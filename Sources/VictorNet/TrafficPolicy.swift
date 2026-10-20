@@ -126,6 +126,12 @@ enum TrafficPolicy {
         return nil
     }
 
+    /// Always MB/s, two decimals — for tables, where a column that mixes KB/s and
+    /// MB/s cannot be compared at a glance (Victor, 2026-10-20).
+    static func mbps(_ bytesPerSecond: Double) -> String {
+        String(format: "%.2f MB/s", max(0, bytesPerSecond) / 1_000_000)
+    }
+
     /// Bytes per second, decimal units like Activity Monitor's network tab.
     static func rate(_ bytesPerSecond: Double) -> String {
         let b = max(0, bytesPerSecond)

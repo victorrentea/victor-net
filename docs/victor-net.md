@@ -51,12 +51,12 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 📱 Phone: LTE · 3/4 · -97 dBm · Plus
 ──────────
 📈 📱 victor
-               avg over 5s   best in 10 min
-↓ Download        1.2 MB/s         8.4 MB/s
-↑ Upload           40 KB/s         1.1 MB/s
+📱 victor       avg over 5s   best in 10 min
+↓ Download       1.20 MB/s        8.40 MB/s
+↑ Upload         0.04 MB/s        1.10 MB/s
 Latency             86 ms            81 ms
 ⚡ Test speed (10 MB) — last 21.0 MB/s, 2 h ago
-🗂️ Compare networks ›     (one table: network · ↓ best · ↑ best · ⚡ · latency · seen)
+🗂️ Compare networks ›     (one table, every network, current in bold: network · ↓ best · ↑ best · ⚡ · latency · seen)
 ──────────
 Busiest apps — avg over 5s
 Google Chrome   ↓ 1.2 MB/s   ↑ 40 KB/s
@@ -78,6 +78,9 @@ Google Chrome   ↓ 1.2 MB/s   ↑ 40 KB/s
   the best in 10 minutes.
 - **⚡ Test speed** — "best" only says what something happened to use; this says what the
   link *can* do: one download from `speed.cloudflare.com`, 25 MB — **10 MB on the hotspot**.
+- **All numbers in MB/s, two decimals** in every table — a column mixing KB/s and MB/s
+  cannot be read across (Victor, 2026-10-20). The current network's name heads the first
+  column of the main table.
 - **🗂️ Compare networks** — every network's best of the day, last speed test, median latency
   and when it was last seen (`~/.victor-net/networks.json`), current one in bold. Keyed by
   SSID; an unnamed Wi-Fi (no Location grant) is not filed.

@@ -112,12 +112,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
-        // This network, as a table.
-        menu.addItem(info("📈 \(traffic.network?.name ?? "No network")"))
-        let rate = TrafficPolicy.rate
+        // This network, as a table; its name heads the first column.
+        let rate = TrafficPolicy.mbps
         func r(_ v: Double?) -> String { v.map(rate) ?? "—" }
         func ms(_ v: Double?) -> String { v.map { String(format: "%.0f ms", $0) } ?? "—" }
-        menu.addItem(MenuTable.item(header: ["", "avg over 5s", "best in 10 min"], rows: [
+        menu.addItem(MenuTable.item(header: [traffic.network?.name ?? "No network", "avg over 5s", "best in 10 min"], rows: [
             ["↓ Download", r(traffic.down.average), r(traffic.down.maxAverage)],
             ["↑ Upload", r(traffic.up.average), r(traffic.up.maxAverage)],
             ["Latency", ms(traffic.latencyRecent), ms(traffic.latencyBest)],
@@ -152,7 +151,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let top = traffic.apps.top()
         appsFilled = true
         let rows = top.isEmpty ? [["nothing is moving data", "", ""]]
-            : top.map { [$0.0, "↓ " + TrafficPolicy.rate($0.1), "↑ " + TrafficPolicy.rate($0.2)] }
+            : top.map { [$0.0, "↓ " + TrafficPolicy.mbps($0.1), "↑ " + TrafficPolicy.mbps($0.2)] }
         item.view = MenuTable.view(header: nil, rows: rows)
     }
 
@@ -160,29 +159,32 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if traffic.speedTestRunning { return "⚡ Testing speed…" }
         let mb = traffic.network?.kind == "hotspot" ? 10 : 25
         if let key = traffic.network?.key, let r = traffic.book.records[key], let s = r.speedDown, let at = r.speedAt {
-            return "⚡ Test speed (\(mb) MB) — last \(TrafficPolicy.rate(s)), \(NetworkBookPolicy.ago(at, now: Date()))"
+            return "⚡ Test speed (\(mb) MB) — last \(TrafficPolicy.mbps(s)), \(NetworkBookPolicy.ago(at, now: Date()))"
         }
         return "⚡ Test speed (downloads \(mb) MB)"
     }
 
+    /// Every network side by side, the current one included and in bold (Victor
+    /// changed his mind on that: the point is one table to read across), all in
+    /// MB/s — a column mixing KB/s and MB/s cannot be compared at a glance.
     private func otherNetworksItem() -> NSMenuItem {
         let item = NSMenuItem(title: "🗂️ Compare networks", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         sub.autoenablesItems = false
         let now = Date()
-        let records = traffic.book.records.sorted { $0.value.lastSeen > $1.value.lastSeen }
-        if records.isEmpty {
-            sub.addItem(info("Nothing measured yet"))
+        let others = traffic.book.records.sorted { $0.value.lastSeen > $1.value.lastSeen }
+        if others.isEmpty {
+            sub.addItem(info("No network measured yet"))
         } else {
-            let rate = TrafficPolicy.rate
-            let rows = records.map { _, r -> [String] in
+            let rate = TrafficPolicy.mbps
+            let rows = others.map { _, r -> [String] in
                 [r.name, rate(r.maxDown), rate(r.maxUp), r.speedDown.map(rate) ?? "—",
                  r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "—", NetworkBookPolicy.ago(r.lastSeen, now: now)]
             }
-            let current = Set(records.enumerated().filter { $0.element.key == traffic.network?.key }.map(\.offset))
+            let current = Set(others.enumerated().filter { $0.element.key == traffic.network?.key }.map(\.offset))
             sub.addItem(MenuTable.item(header: ["network", "↓ best", "↑ best", "⚡ test", "latency", "seen"],
                                        rows: rows, bold: current))
-            sub.addItem(info("best = highest 5 s average today · ⚡ = last speed test"))
+            sub.addItem(info("best = highest 5 s average that day · ⚡ = last speed test"))
         }
         item.submenu = sub
         return item
