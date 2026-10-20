@@ -58,6 +58,14 @@ enum Icons {
         return image
     }
 
+    /// The phone's hotspot in a list: the system's own Personal Hotspot symbol.
+    static func hotspot() -> NSImage? {
+        let image = NSImage(systemSymbolName: "personalhotspot", accessibilityDescription: "Hotspot")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        image?.isTemplate = true
+        return image
+    }
+
     static func offline() -> NSImage? {
         let image = NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: "Offline")?
             .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))

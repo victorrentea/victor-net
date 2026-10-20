@@ -48,10 +48,17 @@ final class NetworkLookTests: XCTestCase {
     func testPhoneStatusParsesSignalAndRoaming() {
         let json = #"{"signal":{"level":7,"dbm":-101,"network":"5G"},"roaming":{"cycleTotal":5000000000,"today":1,"limit":13703000000,"readAt":1760950000000,"guardOff":true}}"#
         let (s, r) = PhoneStatusPolicy.parse(Data(json.utf8), now: Date())
-        XCTAssertEqual(s?.level, 4, "clamped to 0…4")
+        XCTAssertEqual(s?.level, 2, "from the dBm (-101), the phone's own scale")
         XCTAssertEqual(s?.network, "5G")
         XCTAssertEqual(r?.remaining, 8_703_000_000)
         XCTAssertEqual(r?.guardOff, true)
+    }
+
+    /// −102 dBm: the phone's status bar showed 2/4 where Android's level said 3.
+    func testBarsFollowThePhonesOwnScale() {
+        XCTAssertEqual(PhoneStatusPolicy.bars(dbm: -64), 4)
+        XCTAssertEqual(PhoneStatusPolicy.bars(dbm: -102), 2)
+        XCTAssertEqual(PhoneStatusPolicy.bars(dbm: -125), 0)
     }
 
     func testConfigParsesCommentsAndSpaces() {
@@ -125,9 +132,22 @@ final class RoamingAlertTests: XCTestCase {
         XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: true, ago: 3600), left: 0, now: Date()))
     }
 
-    func testUssdNumbers() {
-        XCTAssertEqual(UssdPolicy.megabytes(in: "Mai ai 12,5 GB in SEE pana la 02.11"), 12_500)
-        XCTAssertEqual(UssdPolicy.megabytes(in: "Trafic ramas: 850 MB"), 850)
-        XCTAssertNil(UssdPolicy.megabytes(in: "Serviciu indisponibil"))
+    /// Vodafone's 22.86 GB were true at 09:43, when the phone had counted 37.0 GB:
+    /// what was used after 09:43 keeps coming off Vodafone's number.
+    func testVodafoneFigureIsAnchoredAtItsOwnMoment() {
+        let v = VodafoneBalance(remainingMb: 22_860, at: Date(), usedAtBytes: 37_000_000_000,
+                                received: Date(), validUntil: nil)
+        let adjust = VodafonePolicy.adjustMb(v, planMb: 13_380, usedNowBytes: 38_000_000_000)
+        let remainingNowMb = 13_380 + adjust - 38_000
+        XCTAssertEqual(adjust, 46_480)
+        XCTAssertEqual(remainingNowMb, 21_860)
+    }
+
+    func testPhoneStatusCarriesVodafone() {
+        let json = #"{"vodafone":{"remainingMb":22860,"at":1792482180000,"usedAt":37000000000,"received":1792498000000,"text":"…","validUntil":null}}"#
+        let v = PhoneStatusPolicy.vodafone(Data(json.utf8))
+        XCTAssertEqual(v?.remainingMb, 22_860)
+        XCTAssertEqual(v?.usedAtBytes, 37_000_000_000)
+        XCTAssertNil(v?.validUntil)
     }
 }

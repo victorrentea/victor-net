@@ -115,6 +115,26 @@ final class NetworkState {
         return Set((iface?.cachedScanResults() ?? []).compactMap { $0.ssid })
     }
 
+    /// Every network in range from the last scan, one per SSID (the strongest),
+    /// strongest first — for *Other networks*.
+    func scanResults() -> [(ssid: String, rssi: Int, secure: Bool)] {
+        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
+        var best: [String: (Int, Bool)] = [:]
+        for n in iface?.cachedScanResults() ?? [] {
+            guard let ssid = n.ssid, !ssid.isEmpty else { continue }
+            let secure = !n.supportsSecurity(.none)
+            if best[ssid].map({ n.rssiValue > $0.0 }) ?? true { best[ssid] = (n.rssiValue, secure) }
+        }
+        return best.map { ($0.key, $0.value.0, $0.value.1) }.sorted { $0.1 > $1.1 }
+    }
+
+    var wifiPower: Bool { CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.powerOn() ?? false }
+
+    /// `networksetup -setairportpower`, which needs no admin, unlike CoreWLAN's `setPower`.
+    func setWifiPower(_ on: Bool, done: @escaping (String?) -> Void) {
+        run(["-setairportpower", Config.wifiInterface, on ? "on" : "off"], done: done)
+    }
+
     /// The networks this Mac remembers (System Settings › Wi-Fi › Known networks).
     func knownSSIDs() -> Set<String> {
         let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
@@ -133,13 +153,17 @@ final class NetworkState {
         }
     }
 
-    /// Joins a known network with the password the keychain already holds —
-    /// `networksetup`, as the hotspot fallback does (`HotspotFallback.joinHotspot`).
-    func join(_ ssid: String, done: @escaping (String?) -> Void) {
+    /// Joins a network — a known one with the password the keychain already
+    /// holds (`password` nil), as the hotspot fallback does — via `networksetup`.
+    func join(_ ssid: String, password: String? = nil, done: @escaping (String?) -> Void) {
+        run(["-setairportnetwork", Config.wifiInterface, ssid] + (password.map { [$0] } ?? []), done: done)
+    }
+
+    private func run(_ args: [String], done: @escaping (String?) -> Void) {
         scanQueue.async {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
-            p.arguments = ["-setairportnetwork", Config.wifiInterface, ssid]
+            p.arguments = args
             let out = Pipe()
             p.standardOutput = out
             p.standardError = out
@@ -151,7 +175,9 @@ final class NetworkState {
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 // networksetup exits 0 even when it fails; it says so in words.
                 if p.terminationStatus != 0 || text.localizedCaseInsensitiveContains("error")
-                    || text.localizedCaseInsensitiveContains("could not") { failure = text.isEmpty ? "exit \(p.terminationStatus)" : text }
+                    || text.localizedCaseInsensitiveContains("could not") {
+                    failure = text.isEmpty ? "exit \(p.terminationStatus)" : text
+                }
             } catch {
                 failure = "\(error)"
             }

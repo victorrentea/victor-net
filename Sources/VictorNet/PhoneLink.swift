@@ -11,6 +11,26 @@ import SystemConfiguration
 /// (`PhoneRoamingMonitor`). On the hotspot the gateway *is* the phone, a
 /// request costs a few milliseconds and no paging, and 5 s is what a signal
 /// icon needs — a Bluetooth page every 5 s would cost ~4 s each.
+/// "La 20oct26 h09:43, mai aveti: … 22.86GB din Trafic rmg optiune …" — what
+/// Vodafone said, when its data was taken, and how much the phone had counted in
+/// the cycle at that moment.
+struct VodafoneBalance: Equatable {
+    let remainingMb: Int64
+    let at: Date
+    let usedAtBytes: Int64?
+    let received: Date
+    let validUntil: Date?
+}
+
+enum VodafonePolicy {
+    /// remaining = plan + adjust − used, at the moment Vodafone's figure was true:
+    /// adjust = remaining − plan + used-then. What was used after that keeps
+    /// counting down from Vodafone's number.
+    static func adjustMb(_ v: VodafoneBalance, planMb: Int64, usedNowBytes: Int64) -> Int64 {
+        v.remainingMb - planMb + (v.usedAtBytes ?? usedNowBytes) / 1_000_000
+    }
+}
+
 struct PhoneSignal: Equatable {
     /// 0…4, Android's `SignalStrength.level` for the data SIM.
     let level: Int
@@ -27,7 +47,8 @@ enum PhoneStatusPolicy {
         guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return (nil, nil) }
         var signal: PhoneSignal?
         if let s = o["signal"] as? [String: Any], let level = (s["level"] as? NSNumber)?.intValue {
-            signal = PhoneSignal(level: max(0, min(4, level)), dbm: (s["dbm"] as? NSNumber)?.intValue,
+            let dbm = (s["dbm"] as? NSNumber)?.intValue
+            signal = PhoneSignal(level: dbm.map(bars(dbm:)) ?? max(0, min(4, level)), dbm: dbm,
                                  network: s["network"] as? String, operatorName: s["operator"] as? String,
                                  readAt: now)
         }
@@ -38,6 +59,33 @@ enum PhoneStatusPolicy {
             reading = RoamingWarningPolicy.parse(line)
         }
         return (signal, reading)
+    }
+
+    /// Vodafone's last balance SMS, as the phone caught it (`VodafoneSms.kt`).
+    static func vodafone(_ data: Data) -> VodafoneBalance? {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let v = o["vodafone"] as? [String: Any],
+              let mb = (v["remainingMb"] as? NSNumber)?.int64Value,
+              let at = (v["at"] as? NSNumber)?.doubleValue,
+              let received = (v["received"] as? NSNumber)?.doubleValue else { return nil }
+        let used = (v["usedAt"] as? NSNumber)?.int64Value ?? -1
+        return VodafoneBalance(remainingMb: mb, at: Date(timeIntervalSince1970: at / 1000),
+                               usedAtBytes: used >= 0 ? used : nil,
+                               received: Date(timeIntervalSince1970: received / 1000),
+                               validUntil: (v["validUntil"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) })
+    }
+
+    /// Bars from dBm on the scale the phone's own status bar uses, not Android's:
+    /// at −102 dBm the S24 showed 2/4 while `SignalStrength.level` said 3
+    /// (AOSP's LTE thresholds are −98/−108/−118; Samsung's are stricter).
+    static func bars(dbm: Int) -> Int {
+        switch dbm {
+        case (-90)...: return 4
+        case (-100)...: return 3
+        case (-110)...: return 2
+        case (-120)...: return 1
+        default: return 0
+        }
     }
 
     /// A signal older than this is not drawn: three missed polls.
@@ -63,6 +111,7 @@ final class PhoneLink {
     /// Main thread.
     var onSignal: ((PhoneSignal?) -> Void)?
     var onReading: ((RoamingWarningPolicy.Reading) -> Void)?
+    var onVodafone: ((VodafoneBalance) -> Void)?
 
     private(set) var signal: PhoneSignal?
 
@@ -109,6 +158,7 @@ final class PhoneLink {
                     self.onSignal?(signal)
                 }
                 if let reading { self.onReading?(reading) }
+                if let v = PhoneStatusPolicy.vodafone(data) { self.onVodafone?(v) }
             }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }.resume()

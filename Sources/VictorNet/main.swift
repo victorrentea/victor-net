@@ -71,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.menu?.refreshIcon()
         }
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
+        phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         phone.start()
 
         // No pill on screen for a low allowance (Victor, 2026-10-20: "I don't

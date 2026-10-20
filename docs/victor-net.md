@@ -46,19 +46,36 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```
-network            ↓ best      ↑ best     latency   last seen
-◁‐‐▷ Ethernet      not connected                                ← always listed
-✓ 📱 victor        8.40 MB/s   1.10 MB/s    81 ms   now          ← ✓ = in use
-  🛜 Hotel-Guest   3.10 MB/s   0.42 MB/s    38 ms   35 min       ← click = join
-⚡ Test speed (10 MB) — last 21.00 MB/s, 2 h ago
+best of the day      ↓ MB/s  ↑ MB/s  ping   seen
+<‐‐> Ethernet        not connected                       ← always listed
+✓ (·)) victor          8.40    1.10    81    now         ← ✓ = in use; Personal Hotspot symbol
+  wifi Hotel-Guest     3.10    0.42    38    35 min      ← Wi-Fi arcs at its strength; click = join
+Other Networks ›                                         ← everything else in range, 🔒 = password
+✓ Wi-Fi                                                  ← the radio's switch
 ──────────
-⛔ Roaming: 0.0 GB left of 13.4 GB · resets 2 Nov
-    roaming now · used 37.8 GB · read now
-Monthly plan: 13.38 GB …  ·  Resets on day 2 …  ·  Extra this cycle …  ·  Vodafone says remaining is …
-Ask Vodafone (*123#)  ·  🔒 Hotspot protection …  ·  Ask the phone now      ← in the main menu, no submenu
-🛜 Auto-start Mobile Hotspot  ✓
-⏸️ Pause Claude on roaming data
+📶 Roaming: 22.9 GB left · per Vodafone 4 h ago
+    used 38.0 GB this cycle · resets 2 Nov
+Ask Vodafone for what is left
+✓ 🔒 Hotspot protection — keeps 1.0 GB
+✓ ⏸️ Pause Claude on roaming data
+✓ 🛜 Auto-start Mobile Hotspot
+──────────
+⚡ Test speed (downloads 25 MB)
+Wi-Fi Settings…
 ```
+
+- **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
+  known/measured networks in range with their numbers, *Other Networks* (all in range,
+  strongest first, a password asked only for a secured network this Mac does not know), and
+  the Wi-Fi switch (`networksetup -setairportpower`, no admin). Captive portals and hidden
+  networks stay with *Wi-Fi Settings…*.
+- **Narrow table**: numbers only, the unit in the header (`↓ MB/s`), "seen" for the last time.
+- **Roaming is one group**, Pause Claude included. Native ticks now (the check column is there
+  anyway for the network ✓).
+- **The speed test is a line near the bottom**, out of the way.
+- **The phone's bars follow the phone's own scale**: computed on the Mac from dBm
+  (≥ −90 → 4, ≥ −100 → 3, ≥ −110 → 2, ≥ −120 → 1). At −102 dBm the S24 showed 2/4 while
+  Android's `SignalStrength.level` said 3 (AOSP's LTE thresholds are −98/−108/−118).
 
 - **No Wired / Wi-Fi / Phone status rows** (Victor: the icon and the ✓ already say it).
 - **One row per network, clickable** (`networkRows`): every Wi-Fi **in range** (the last
