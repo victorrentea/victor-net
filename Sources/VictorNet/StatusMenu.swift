@@ -168,10 +168,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             a.key == traffic.network?.key ? true : b.key == traffic.network?.key ? false
                 : (a.value.maxDown, b.key) > (b.value.maxDown, a.key)
         }
-        let rate: (Double) -> String = { $0 > 0 ? String(format: "%.1f", $0 / 1_000_000) : "—" }
+        // One unit for the whole list, so the column reads straight down: KB/s
+        // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
+        let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
+        let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
-        var items = [NSMenuItem(view: MenuRowView(name: "best today, MB/s", columns: ["↓", "↑", "ping", "seen"], header: true))]
+        var items = [NSMenuItem(view: MenuRowView(name: "best today", columns: ["↓" + unit.name, "↑" + unit.name, "ms", "seen"], header: true))]
         // Ethernet: always listed, greyed when there is no cable.
         if traffic.network?.key != "wired" {
             items.append(NSMenuItem(view: MenuRowView(name: "Ethernet", icon: Icons.wired(), enabled: false, dimmed: true)))

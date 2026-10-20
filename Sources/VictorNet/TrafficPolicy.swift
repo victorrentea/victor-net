@@ -126,6 +126,21 @@ enum TrafficPolicy {
         return nil
     }
 
+    struct Unit {
+        let name: String
+        let divisor: Double
+        let decimals: Int
+        func format(_ bytesPerSecond: Double) -> String {
+            String(format: "%.\(decimals)f", max(0, bytesPerSecond) / divisor)
+        }
+    }
+
+    /// One unit for a whole column: KB/s while every value is under 1 MB/s.
+    static func listUnit(_ values: [Double]) -> Unit {
+        (values.max() ?? 0) < 1_000_000 ? Unit(name: "KB/s", divisor: 1_000, decimals: 0)
+                                         : Unit(name: "MB/s", divisor: 1_000_000, decimals: 1)
+    }
+
     /// Always MB/s, two decimals — for tables, where a column that mixes KB/s and
     /// MB/s cannot be compared at a glance (Victor, 2026-10-20).
     static func mbps(_ bytesPerSecond: Double) -> String {

@@ -94,6 +94,14 @@ final class TrafficPolicyTests: XCTestCase {
         XCTAssertEqual(TrafficPolicy.appName(executablePath: "/Users/x/.local/share/claude/versions/2.1.304"), "claude")
     }
 
+    /// One unit for the list: KB/s only while nothing reaches 1 MB/s.
+    func testListUnit() {
+        XCTAssertEqual(TrafficPolicy.listUnit([400_000, 90_000]).format(400_000), "400")
+        XCTAssertEqual(TrafficPolicy.listUnit([400_000, 90_000]).name, "KB/s")
+        XCTAssertEqual(TrafficPolicy.listUnit([7_300_000, 90_000]).format(90_000), "0.1")
+        XCTAssertEqual(TrafficPolicy.listUnit([7_300_000]).name, "MB/s")
+    }
+
     func testRateUnits() {
         XCTAssertEqual(TrafficPolicy.rate(512), "512 B/s")
         XCTAssertEqual(TrafficPolicy.rate(140_400), "140 KB/s")

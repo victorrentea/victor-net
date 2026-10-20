@@ -56,7 +56,8 @@ final class MenuRowView: NSView {
         n.lineBreakMode = .byTruncatingTail
         add(n, x: header ? MenuRowLayout.checkX : MenuRowLayout.nameX, width: nameEnd - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
         for (i, text) in columns.enumerated() where i < MenuRowLayout.columnRights.count {
-            let c = label(text, font: header ? .systemFont(ofSize: size, weight: .medium)
+            // Header units in a size smaller, so "↓MB/s" fits its column.
+            let c = label(text, font: header ? .systemFont(ofSize: size - 1, weight: .medium)
                           : .monospacedDigitSystemFont(ofSize: size - 1, weight: .regular),
                           color: header ? base : .secondaryLabelColor)
             c.alignment = .right
