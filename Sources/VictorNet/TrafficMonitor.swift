@@ -22,9 +22,9 @@ import Network
 /// Every network's figures are kept in `NetworkBook` (`~/.victor-net/networks.json`)
 /// for the *Other networks* submenu.
 
-/// Per-second rates, kept for 10 minutes.
+/// Per-second rates, kept for an hour ("best last hour", Victor 2026-10-20).
 struct RateHistory {
-    static let keep: TimeInterval = 600
+    static let keep: TimeInterval = 3600
     static let window = 5
 
     private(set) var samples: [(at: Date, value: Double)] = []
@@ -267,11 +267,9 @@ final class TrafficMonitor {
         let maxDown = down.maxAverage ?? 0, maxUp = up.maxAverage ?? 0
         let median = latency.isEmpty ? nil : latency.map(\.ms).sorted()[latency.count / 2]
         book.update(net.key, { r in
-            // The book keeps the best of the day: a network seen yesterday may
-            // be a different room's load, or a different hotel with the same SSID.
-            let sameDay = now.timeIntervalSince(r.lastSeen) < 86_400
-            r.maxDown = max(maxDown, sameDay ? r.maxDown : 0)
-            r.maxUp = max(maxUp, sameDay ? r.maxUp : 0)
+            // The book keeps the best of the last hour spent on it.
+            r.maxDown = maxDown
+            r.maxUp = maxUp
             if let median { r.latencyMs = median }
             r.lastSeen = now
         }, name: net.name, kind: net.kind)

@@ -66,7 +66,9 @@ enum RoamingDataPolicy {
 enum RoamingDataSettings {
     static let suspendKey = "RoamingData.suspendClaude"
     static var suspendClaude: Bool {
-        get { UserDefaults.standard.object(forKey: suspendKey) as? Bool ?? true }
+        // Default: Claude allowed on roaming (Victor, 2026-10-20 — the menu asks it
+        // the positive way, "Allow Claude on Roaming", ticked by default).
+        get { UserDefaults.standard.object(forKey: suspendKey) as? Bool ?? false }
         set { UserDefaults.standard.set(newValue, forKey: suspendKey) }
     }
 }

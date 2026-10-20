@@ -76,7 +76,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             look = .hotspot(level: level, weakWifi: weak,
                             alert: RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date()))
         }
-        button.image = Icons.image(for: look)
+        button.image = look == .offline ? (net.wifiPower ? Icons.wifiIdle() : Icons.wifiOff()) : Icons.image(for: look)
         button.title = ""
     }
 
@@ -97,30 +97,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         net.refresh()
 
-        if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
-            menu.addItem(info("📵 Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))"))
-        }
-        // Networks, the way macOS lists them: the ones worth comparing as a
-        // table (✓ = in use, click = join), then everything else in range, then
-        // the Wi-Fi switch. No status rows above: the icon and the ✓ say it.
+        // Networks, the way macOS lists them: the switch, the ones worth
+        // comparing (✓ = in use, click = join), everything else in range, the
+        // settings. Offline, a greyed "Offline N min" stands where the list was.
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
-        networkRows().forEach(menu.addItem)
+        if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
+            menu.addItem(NSMenuItem(view: MenuRowView(
+                name: "Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))",
+                icon: Icons.noTraffic(), enabled: false, dimmed: true)))
+        } else {
+            networkRows().forEach(menu.addItem)
+        }
         menu.addItem(otherNetworksRow())
+        menu.addItem(action("Wi-Fi Settings…", #selector(openWifiSettings)))
 
         // Everything about roaming, together.
         if Config.hasPhone {
             menu.addItem(.separator())
             addRoamingRows()
-            let hotspot = action("Auto-start Mobile Hotspot", #selector(toggleHotspot))
-            hotspot.image = Icons.hotspot()
-            hotspot.state = HotspotFallbackSettings.isEnabled ? .on : .off
-            menu.addItem(hotspot)
         }
 
         menu.addItem(.separator())
         menu.addItem(action(speedTitle(), #selector(speedTestAction)))
-        menu.addItem(action("Wi-Fi Settings…", #selector(openWifiSettings)))
         menu.addItem(info("Built \(BuildInfo.time)"))
         // No ⌘Q shown: its column made the whole menu wider for nothing.
         menu.addItem(action("Quit", #selector(quitAction)))
@@ -172,13 +171,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
         let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
         let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
+        func cell(_ r: NetworkRecord) -> String {
+            "↓\(rate(r.maxDown)) / ↑\(rate(r.maxUp)) / " + (r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "— ms")
+        }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
-        var items = [NSMenuItem(view: MenuRowView(name: "best today", columns: ["↓" + unit.name, "↑" + unit.name, "ms", "seen"], header: true))]
-        // Ethernet: always listed, greyed when there is no cable.
-        if traffic.network?.key != "wired" {
-            items.append(NSMenuItem(view: MenuRowView(name: "Ethernet", icon: Icons.wired(), enabled: false, dimmed: true)))
-        }
+        // The header labels the numbers, not the line: "best last hour" sits
+        // over the cell it describes. No Ethernet row without a cable.
+        var items = [NSMenuItem(view: MenuRowView(name: "", columns: ["best last hour, \(unit.name)", "seen"], header: true))]
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
             let current = key == traffic.network?.key
@@ -191,7 +191,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             }
             let seen = r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
             let row = MenuRowView(name: ssid ?? "Ethernet",
-                                  columns: [rate(r.maxDown), rate(r.maxUp), r.latencyMs.map { String(format: "%.0f", $0) } ?? "—", seen],
+                                  columns: [cell(r), seen],
                                   icon: icon, checked: current, enabled: !current && ssid != nil)
             if !current, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
             items.append(NSMenuItem(view: row))
@@ -203,8 +203,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// it, as macOS does, and they stay until the menu closes, refreshed as new
     /// scans land (every 8 s while open).
     private func otherNetworksRow() -> NSMenuItem {
-        let row = MenuRowView(name: "Other Networks", trailing: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
-                                                                    accessibilityDescription: nil))
+        // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
+        let row = MenuRowView(name: "Other Networks", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
+                                                                   accessibilityDescription: nil))
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in self?.toggleOthers() }
         let item = NSMenuItem(view: row)
@@ -291,33 +292,38 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// Only roaming counts (at home the data is unlimited): what is left, of how
     /// much in all this cycle — the used part plus what is left.
     private func addRoamingRows() {
-        let gb = RoamingWarningPolicy.gb
+        let gb: (Int64) -> String = { String(format: "%.1f", Double($0) / 1e9) }
+        let day = DateFormatter()
+        day.dateFormat = "d MMM"
         if let r = roaming.reading {
+            // One line, no emoji: "Roaming: 22.6/60.9 GB left until 2 Nov" — the
+            // total is what this cycle allowed in all, used + left.
             let left = roamingLeft ?? r.remaining
-            let alert = RoamingAlertPolicy.alert(r, left: left, now: Date())
-            let mark = alert == .capped ? "⛔" : alert == .low ? "⚠️" : "📶"
-            menu.addItem(info("\(mark) Roaming: \(gb(left)) left of \(gb(left + r.cycleTotal))"))
-            let day = DateFormatter()
-            day.dateFormat = "d MMM"
-            var detail = "    " + (vodafone.map { "Vodafone, \(NetworkBookPolicy.ago($0.at, now: Date()))" } ?? "phone's count")
-            detail += " · resets " + day.string(from: r.nextReset)
-            menu.addItem(info(detail))
+            // +12 h: the reset is midnight in the phone's time zone, which may
+            // still be the day before in this Mac's.
+            menu.addItem(info("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))"))
         } else {
-            menu.addItem(info("📶 Roaming: the phone has not answered yet"))
+            menu.addItem(info("Roaming: the phone has not answered yet"))
         }
         let asking = askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false
-        let ask = action(asking ? "Asking Vodafone… (the answer comes by SMS)" : "Ask Vodafone for what is left", #selector(askVodafone))
+        let ask = action(asking ? "Asking Vodafone… (the answer comes by SMS)" : "Ask Vodafone for What Is Left", #selector(askVodafone))
         ask.isEnabled = !asking
         menu.addItem(ask)
+        // Said the positive way, ticked by default.
+        let allow = action("Allow Claude on Roaming", #selector(toggleSuspend))
+        allow.state = RoamingDataSettings.suspendClaude ? .off : .on
+        menu.addItem(allow)
+        let start = action("Auto-Start Mobile Hotspot", #selector(toggleHotspot))
+        start.image = Icons.hotspot()
+        start.state = HotspotFallbackSettings.isEnabled ? .on : .off
+        menu.addItem(start)
         if let r = roaming.reading {
-            let guardItem = action("🔒 Auto-stop hotspot at \(gb(r.reserve)) left" + (r.guardOff ? " (off until the reset)" : ""),
-                                   #selector(toggleGuard))
-            guardItem.state = r.guardOff ? .off : .on
-            menu.addItem(guardItem)
+            let stop = action("Auto-Stop Mobile Hotspot Below \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB"
+                              + (r.guardOff ? " (off until reset)" : ""), #selector(toggleGuard))
+            stop.image = Icons.hotspotOff()
+            stop.state = r.guardOff ? .off : .on
+            menu.addItem(stop)
         }
-        let pause = action("⏸️ Pause Claude on roaming", #selector(toggleSuspend))
-        pause.state = RoamingDataSettings.suspendClaude ? .on : .off
-        menu.addItem(pause)
     }
 
     // MARK: - Rows

@@ -91,6 +91,77 @@ enum Icons {
         return image
     }
 
+    /// Wi-Fi switched off, as macOS draws it: the arcs greyed, the slash across
+    /// them in full text colour (white on a dark bar). Not a template — two tones.
+    static func wifiOff() -> NSImage? {
+        guard let arcs = wifi(strength: 1) else { return nil }
+        let size = NSSize(width: arcs.size.width + 2, height: max(arcs.size.height, barHeight))
+        let image = NSImage(size: size, flipped: false) { r in
+            let a = NSRect(x: 1, y: (size.height - arcs.size.height) / 2, width: arcs.size.width, height: arcs.size.height)
+            tinted(arcs, NSColor.labelColor.withAlphaComponent(0.35)).draw(in: a)
+            let slash = NSBezierPath()
+            slash.move(to: NSPoint(x: a.minX + 1, y: a.maxY - 0.5))
+            slash.line(to: NSPoint(x: a.maxX - 1, y: a.minY + 0.5))
+            slash.lineWidth = 1.6
+            slash.lineCapStyle = .round
+            NSColor.labelColor.set()
+            slash.stroke()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// Wi-Fi on but joined to nothing: the full symbol, greyed, a size larger —
+    /// macOS's "not connected".
+    static func wifiIdle() -> NSImage? {
+        guard let arcs = NSImage(systemSymbolName: "wifi", variableValue: 1, accessibilityDescription: "Wi-Fi")?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular)) else { return nil }
+        let image = NSImage(size: arcs.size, flipped: false) { r in
+            tinted(arcs, NSColor.labelColor.withAlphaComponent(0.35)).draw(in: r)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// The hotspot glyph struck through — "Auto-Stop Mobile Hotspot".
+    static func hotspotOff() -> NSImage? {
+        guard let base = hotspot() else { return nil }
+        let image = NSImage(size: base.size, flipped: false) { r in
+            base.draw(in: r)
+            NSColor.black.set()
+            let slash = NSBezierPath()
+            slash.move(to: NSPoint(x: r.minX + 1.5, y: r.maxY - 1.5))
+            slash.line(to: NSPoint(x: r.maxX - 1.5, y: r.minY + 1.5))
+            slash.lineWidth = 1.5
+            slash.lineCapStyle = .round
+            slash.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// No traffic at all: two arrows back and forth, struck through.
+    static func noTraffic() -> NSImage? {
+        guard let arrows = NSImage(systemSymbolName: "arrow.left.arrow.right", accessibilityDescription: "Offline")?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .regular)) else { return nil }
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in
+            arrows.draw(in: r.insetBy(dx: 1, dy: 2))
+            NSColor.black.set()
+            let slash = NSBezierPath()
+            slash.move(to: NSPoint(x: r.minX + 2, y: r.maxY - 2))
+            slash.line(to: NSPoint(x: r.maxX - 2, y: r.minY + 2))
+            slash.lineWidth = 1.4
+            slash.lineCapStyle = .round
+            slash.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     static func offline() -> NSImage? {
         let image = NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: "Offline")?
             .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))

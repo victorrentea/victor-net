@@ -8,14 +8,15 @@ import AppKit
 /// from AppKit, so it is here.
 enum MenuRowLayout {
     /// The whole menu's width — narrow, like the native one.
-    static let width: CGFloat = 300
+    static let width: CGFloat = 320
     static let height: CGFloat = 22
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
-    /// Right edges of the numeric columns: ↓, ↑, ping, seen.
-    static let columnRights: [CGFloat] = [186, 226, 254, 290]
-    static let columnWidth: CGFloat = 40
+    /// Two columns, right-aligned: "↓7.3 / ↑1.2 / 94 ms" in one cell (Victor:
+    /// one cell saves the width three would take), then "seen".
+    static let columnRights: [CGFloat] = [262, 308]
+    static let columnWidths: [CGFloat] = [122, 42]
 }
 
 final class MenuRowView: NSView {
@@ -43,6 +44,7 @@ final class MenuRowView: NSView {
         }
         if let icon {
             let v = NSImageView(image: icon)
+            v.alphaValue = dimmed ? 0.45 : 1
             v.frame = NSRect(x: MenuRowLayout.iconX, y: (frame.height - 16) / 2, width: 18, height: 16)
             v.imageScaling = .scaleProportionallyDown
             v.contentTintColor = base
@@ -50,7 +52,7 @@ final class MenuRowView: NSView {
             images.append(v)
         }
         let nameEnd = columns.isEmpty ? MenuRowLayout.width - 30
-            : MenuRowLayout.columnRights[0] - MenuRowLayout.columnWidth - 4
+            : MenuRowLayout.columnRights[0] - MenuRowLayout.columnWidths[0] - 4
         let n = label(name, font: header ? .systemFont(ofSize: size, weight: .medium)
                       : .systemFont(ofSize: size, weight: bold ? .semibold : .regular), color: base)
         n.lineBreakMode = .byTruncatingTail
@@ -61,7 +63,7 @@ final class MenuRowView: NSView {
                           : .monospacedDigitSystemFont(ofSize: size - 1, weight: .regular),
                           color: header ? base : .secondaryLabelColor)
             c.alignment = .right
-            add(c, x: MenuRowLayout.columnRights[i] - MenuRowLayout.columnWidth, width: MenuRowLayout.columnWidth)
+            add(c, x: MenuRowLayout.columnRights[i] - MenuRowLayout.columnWidths[i], width: MenuRowLayout.columnWidths[i])
         }
         if let trailing {
             let v = NSImageView(image: trailing)
@@ -124,15 +126,15 @@ final class MenuSwitchRow: NSView {
     var onChange: ((Bool) -> Void)?
 
     init(title: String, on: Bool) {
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width, height: 30))
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width, height: 34))
         let l = NSTextField(labelWithString: title)
         l.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        l.frame = NSRect(x: MenuRowLayout.checkX + 4, y: 7, width: 150, height: 17)
+        l.frame = NSRect(x: MenuRowLayout.checkX + 4, y: 9, width: 150, height: 17)
         addSubview(l)
-        toggle.controlSize = .small
+        toggle.controlSize = .regular
         toggle.state = on ? .on : .off
         toggle.sizeToFit()
-        toggle.frame.origin = NSPoint(x: MenuRowLayout.width - toggle.frame.width - 14, y: (30 - toggle.frame.height) / 2)
+        toggle.frame.origin = NSPoint(x: MenuRowLayout.width - toggle.frame.width - 14, y: (34 - toggle.frame.height) / 2)
         toggle.target = self
         toggle.action = #selector(changed)
         addSubview(toggle)

@@ -92,11 +92,11 @@ final class RateHistoryTests: XCTestCase {
         XCTAssertEqual(h.maxAverage, 100)
     }
 
-    func testSamplesOlderThanTenMinutesFallOut() {
+    func testSamplesOlderThanAnHourFallOut() {
         var h = RateHistory()
         let t0 = Date()
         h.add(1_000_000, at: t0)
-        h.add(5, at: t0 + 601)
+        h.add(5, at: t0 + 3601)
         XCTAssertEqual(h.maxAverage, 5)
     }
 
