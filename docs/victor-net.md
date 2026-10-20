@@ -9,7 +9,7 @@ system Wi-Fi item, which Victor takes out of the menu bar.
 | the Mac is on…        | icon |
 |-----------------------|------|
 | a cable with an address | dashed ⇄ (drawn: a dashed line with an arrowhead at each end) |
-| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s; while the phone roams, a yellow ⚠ beside them under 5 GB left, a red disc with a white ✕ once nothing is left (or the phone refuses the hotspot) |
+| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s; while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
 | any other Wi-Fi       | the system Wi-Fi symbol, arcs filled by RSSI (−50 dBm full, −90 empty) |
 | nothing               | Wi-Fi slashed |
 
@@ -51,14 +51,14 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 📱 Phone: LTE · 3/4 · -97 dBm · Plus
 ──────────
 📈 📱 victor
-               5 s average   best in 10 min
+               avg over 5s   best in 10 min
 ↓ Download        1.2 MB/s         8.4 MB/s
 ↑ Upload           40 KB/s         1.1 MB/s
 Latency             86 ms            81 ms
 ⚡ Test speed (10 MB) — last 21.0 MB/s, 2 h ago
 🗂️ Compare networks ›     (one table: network · ↓ best · ↑ best · ⚡ · latency · seen)
 ──────────
-Busiest apps — 5 s average
+Busiest apps — avg over 5s
 Google Chrome   ↓ 1.2 MB/s   ↑ 40 KB/s
 ──────────
 ⛔ Roaming: 0.0 GB left of 13.4 GB · resets 2 Nov

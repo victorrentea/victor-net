@@ -90,12 +90,23 @@ enum Icons {
         }
     }
 
-    /// The glyphs followed by ⚠ (yellow) or a red disc with a white ✕. Coloured,
-    /// so not a template: the glyphs are drawn in `labelColor`, resolved at draw
-    /// time against the menu bar's own appearance.
+    /// A small ⚠ (yellow) or red disc with a white ✕ **in the top-left corner,
+    /// over the bars** (Victor, 2026-10-20) — the corner the rising bars leave
+    /// empty. Coloured, so not a template: the glyphs are filled with
+    /// `labelColor`, resolved at draw time against the menu bar's appearance.
+    /// A template filled with one colour (for the test render).
+    static func tinted(_ template: NSImage, _ color: NSColor) -> NSImage {
+        NSImage(size: template.size, flipped: false) { r in
+            template.draw(in: r)
+            color.set()
+            r.fill(using: .sourceAtop)
+            return true
+        }
+    }
+
     static func badged(_ glyphs: NSImage, _ alert: RoamingAlert) -> NSImage {
-        let d: CGFloat = 13, gap: CGFloat = 3
-        let size = NSSize(width: glyphs.size.width + gap + d, height: max(glyphs.size.height, barHeight))
+        let d: CGFloat = 9
+        let size = NSSize(width: glyphs.size.width, height: max(glyphs.size.height, barHeight))
         let image = NSImage(size: size, flipped: false) { _ in
             let g = NSRect(x: 0, y: (size.height - glyphs.size.height) / 2,
                            width: glyphs.size.width, height: glyphs.size.height)
@@ -103,27 +114,27 @@ enum Icons {
             glyphs.draw(in: g)
             NSColor.labelColor.set()
             g.fill(using: .sourceAtop)
-            let b = NSRect(x: glyphs.size.width + gap, y: (size.height - d) / 2, width: d, height: d)
+            let b = NSRect(x: 0, y: size.height - d, width: d, height: d)
             switch alert {
             case .low:
                 let t = NSBezierPath()
                 t.move(to: NSPoint(x: b.midX, y: b.maxY))
-                t.line(to: NSPoint(x: b.maxX, y: b.minY + 0.5))
-                t.line(to: NSPoint(x: b.minX, y: b.minY + 0.5))
+                t.line(to: NSPoint(x: b.maxX, y: b.minY))
+                t.line(to: NSPoint(x: b.minX, y: b.minY))
                 t.close()
                 NSColor.systemYellow.set()
                 t.fill()
                 NSColor.black.set()
-                NSRect(x: b.midX - 0.9, y: b.minY + 4.6, width: 1.8, height: 4.6).fill()
-                NSRect(x: b.midX - 0.9, y: b.minY + 2.2, width: 1.8, height: 1.6).fill()
+                NSRect(x: b.midX - 0.6, y: b.minY + 3, width: 1.2, height: 3.4).fill()
+                NSRect(x: b.midX - 0.6, y: b.minY + 1.2, width: 1.2, height: 1.1).fill()
             case .capped:
                 NSColor.systemRed.set()
                 NSBezierPath(ovalIn: b).fill()
                 let x = NSBezierPath()
-                let i = b.insetBy(dx: 3.8, dy: 3.8)
+                let i = b.insetBy(dx: 2.6, dy: 2.6)
                 x.move(to: NSPoint(x: i.minX, y: i.minY)); x.line(to: NSPoint(x: i.maxX, y: i.maxY))
                 x.move(to: NSPoint(x: i.minX, y: i.maxY)); x.line(to: NSPoint(x: i.maxX, y: i.minY))
-                x.lineWidth = 1.8
+                x.lineWidth = 1.4
                 x.lineCapStyle = .round
                 NSColor.white.set()
                 x.stroke()

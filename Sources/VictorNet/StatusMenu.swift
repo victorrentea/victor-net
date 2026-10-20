@@ -117,7 +117,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let rate = TrafficPolicy.rate
         func r(_ v: Double?) -> String { v.map(rate) ?? "—" }
         func ms(_ v: Double?) -> String { v.map { String(format: "%.0f ms", $0) } ?? "—" }
-        menu.addItem(MenuTable.item(header: ["", "5 s average", "best in 10 min"], rows: [
+        menu.addItem(MenuTable.item(header: ["", "avg over 5s", "best in 10 min"], rows: [
             ["↓ Download", r(traffic.down.average), r(traffic.down.maxAverage)],
             ["↑ Upload", r(traffic.up.average), r(traffic.up.maxAverage)],
             ["Latency", ms(traffic.latencyRecent), ms(traffic.latencyBest)],
@@ -126,7 +126,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(otherNetworksItem())
         menu.addItem(.separator())
 
-        menu.addItem(info("Busiest apps — 5 s average"))
+        menu.addItem(info("Busiest apps — avg over 5s"))
         let apps = MenuTable.item(header: nil, rows: [["measuring…", "", ""]])
         appsItem = apps
         menu.addItem(apps)
@@ -261,6 +261,31 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.menu.cancelTracking() }
         RunLoop.main.add(timer, forMode: .common)
         statusItem.button?.performClick(nil)
+    }
+
+    /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.
+    func renderIconForTest() -> String? {
+        guard let icon = statusItem.button?.image else { return nil }
+        let scale: CGFloat = 8, pad: CGFloat = 4
+        let cell = NSSize(width: (icon.size.width + 2 * pad) * scale, height: (icon.size.height + 2 * pad) * scale)
+        let out = NSImage(size: NSSize(width: cell.width * 2, height: cell.height))
+        out.lockFocus()
+        for (i, name) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
+            NSAppearance(named: name)?.performAsCurrentDrawingAppearance {
+                (i == 0 ? NSColor(white: 0.93, alpha: 1) : NSColor(white: 0.16, alpha: 1)).setFill()
+                let r = NSRect(x: CGFloat(i) * cell.width, y: 0, width: cell.width, height: cell.height)
+                r.fill()
+                let img = icon.isTemplate ? Icons.tinted(icon, .labelColor) : icon
+                img.draw(in: NSRect(x: r.minX + pad * scale, y: pad * scale,
+                                    width: icon.size.width * scale, height: icon.size.height * scale))
+            }
+        }
+        out.unlockFocus()
+        guard let tiff = out.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
+        else { return nil }
+        let url = Config.directory.appendingPathComponent("icon-test.png")
+        try? png.write(to: url)
+        return url.path
     }
 
     // MARK: - Roaming settings (sent to the phone)

@@ -113,6 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
             return (200, roaming.diagnosticsJSON)
+        case "/test/icon":
+            // The current icon, 8× on a light and a dark bar, to look at.
+            var path = ""
+            onMain { path = self.menu?.renderIconForTest() ?? "" }
+            return (200, HttpServer.json(["png": path]))
         case "/test/menu/open":
             let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 10)
             DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs) }
