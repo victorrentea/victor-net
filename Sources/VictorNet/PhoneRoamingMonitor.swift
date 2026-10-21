@@ -74,6 +74,24 @@ final class PhoneRoamingMonitor {
         return _simulated ?? _reading
     }
 
+    /// The last reading, kept on disk (Victor, 2026-10-21: "should be cached on the
+    /// Mac even if the phone is unavailable"): after a restart the menu shows it at
+    /// once instead of "the phone has not answered yet", with its age.
+    static let cachePath = Config.directory.appendingPathComponent("roaming-last.json")
+
+    init() {
+        if let line = try? String(contentsOf: Self.cachePath, encoding: .utf8) {
+            _reading = RoamingWarningPolicy.parse(line)
+        }
+    }
+
+    /// Under `lock`.
+    private func keep(_ r: RoamingWarningPolicy.Reading) {
+        _reading = r
+        let line = RoamingWarningPolicy.line(r)
+        DispatchQueue.global(qos: .utility).async { try? line.write(to: Self.cachePath, atomically: true, encoding: .utf8) }
+    }
+
     func start() {
         guard timer == nil, Config.hasPhone else { return }
         bluetooth.start()
@@ -94,7 +112,7 @@ final class PhoneRoamingMonitor {
     /// every 5 s — replaces the Bluetooth one: it is the same JSON, fresher.
     func accept(_ r: RoamingWarningPolicy.Reading) {
         lock.lock()
-        _reading = r
+        keep(r)
         _lastPollAt = Date()
         _lastError = nil
         let current = _simulated ?? r
@@ -179,7 +197,7 @@ final class PhoneRoamingMonitor {
         _lastPollAt = Date()
         _lastLine = line
         _lastError = error
-        if let parsed { _reading = parsed }
+        if let parsed { keep(parsed) }
         let current = _simulated ?? _reading
         lock.unlock()
 

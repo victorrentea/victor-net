@@ -83,4 +83,12 @@ final class RoamingWarningPolicyTests: XCTestCase {
         XCTAssertNil(RoamingWarningPolicy.parse(#"{"v":1,"error":"no Usage access"}"#))
         XCTAssertNil(RoamingWarningPolicy.parse("garbage"))
     }
+
+    /// The copy kept on disk reads back as the same reading.
+    func testDiskLineRoundTrips() {
+        let line = #"{"v":1,"cycleTotal":38276835813,"cycleHotspot":33703322969,"today":0,"roamingNow":false,"nextReset":1793570400000,"limit":49452000000,"lowFraction":0.1,"reserve":1000000000,"hotspotBlocked":false,"guardOff":false,"adjust":36072000000,"planMb":13380,"resetDay":2,"readAt":1792566228681}"#
+        let r = RoamingWarningPolicy.parse(line)
+        XCTAssertNotNil(r)
+        XCTAssertEqual(RoamingWarningPolicy.parse(RoamingWarningPolicy.line(r!)), r)
+    }
 }

@@ -80,6 +80,7 @@ final class RoamingDataWatch {
     private static let every: TimeInterval = 5
 
     private let phone: PhoneRoamingMonitor
+    private let net: NetworkState
     private let location: () -> (CLLocation, Date)?
     private let geocoder = CLGeocoder()
     private var country: String?
@@ -92,7 +93,8 @@ final class RoamingDataWatch {
     var onChange: ((RoamingDataPolicy.Verdict) -> Void)?
     private(set) var verdict = RoamingDataPolicy.Verdict(roamingData: false, source: .notOnHotspot)
 
-    init(phone: PhoneRoamingMonitor, location: @escaping () -> (CLLocation, Date)?) {
+    init(phone: PhoneRoamingMonitor, net: NetworkState, location: @escaping () -> (CLLocation, Date)?) {
+        self.net = net
         self.phone = phone
         self.location = location
     }
@@ -109,7 +111,8 @@ final class RoamingDataWatch {
 
     private func tick() {
         let now = Date()
-        let onHotspot = CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.ssid() == Config.hotspotSSID
+        // The last background read, never CoreWLAN here: this runs on the main thread.
+        let onHotspot = net.ssid == Config.hotspotSSID
         if onHotspot { geocodeIfNeeded(now: now) }
         let r = phone.reading
         let v = RoamingDataPolicy.decide(

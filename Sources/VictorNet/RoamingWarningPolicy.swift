@@ -79,6 +79,21 @@ enum RoamingWarningPolicy {
             resetDay: (o["resetDay"] as? NSNumber)?.intValue)
     }
 
+    /// The inverse of `parse`, for the copy kept on disk (`PhoneRoamingMonitor`).
+    static func line(_ r: Reading) -> String {
+        var o: [String: Any] = [
+            "v": 1, "cycleTotal": r.cycleTotal, "cycleHotspot": r.cycleHotspot, "today": r.today,
+            "roamingNow": r.roamingNow, "limit": r.limit, "lowFraction": r.lowFraction,
+            "nextReset": Int64(r.nextReset.timeIntervalSince1970 * 1000),
+            "readAt": Int64(r.readAt.timeIntervalSince1970 * 1000),
+            "hotspotBlocked": r.hotspotBlocked, "reserve": r.reserve, "guardOff": r.guardOff, "adjust": r.adjust,
+        ]
+        if let p = r.planMb { o["planMb"] = p }
+        if let d = r.resetDay { o["resetDay"] = d }
+        let data = (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data()
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
     /// Show the warning now? Only for a fresh reading taken *today* (its
     /// `today` counter is the phone's day, so yesterday's reading would claim
     /// yesterday's roaming), and not once it has been dismissed today — the

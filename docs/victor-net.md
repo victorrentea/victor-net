@@ -168,3 +168,14 @@ other Wi-Fi. Signed with the stable local identity so rebuilds keep both grants.
 `127.0.0.1:55126` — `/ping`, `/test/state` (network, icon, traffic, phone link, roaming),
 `/test/menu/open?close=N`, `/test/hotspot`, `/test/roaming[/simulate/<pct>|/reset-dismissal]`.
 `/test/state` answers while the menu is open (it reads through the run loop's common modes).
+
+## CoreWLAN never on the main thread (2026-10-21)
+
+Twice that evening `airportd` stopped answering for minutes (`networksetup -getairportnetwork`
+hung too, `airportd` at 0% CPU), and Victor Net froze: the main thread sat in
+`CWFInterface.SSID` (XPC to `airportd`) from `RoamingDataWatch.tick`, so the menu and the icon
+were dead. Every CoreWLAN read now runs on `NetworkState`'s `readQueue` into a `WifiSnapshot`
+(ssid, rssi, power, last scan, known networks); the main thread reads only the snapshot, and a
+read still hanging is skipped, not queued. `GET /test/state` → `network.wifi_read_age_s` says
+how stale it is. If `airportd` itself is wedged: `sudo killall airportd` (launchd restarts it).
+It started while the menu scanned back to back; not proven to be the cause.

@@ -83,9 +83,73 @@ enum NetworkLookPolicy {
 final class NetworkState {
     static let unnamedKey = "wifi:?"
     private(set) var wired: WiredLinkState = .disconnected
-    private(set) var ssid: String?
-    private(set) var rssi: Int?
+    var ssid: String? { snapshot.ssid }
+    var rssi: Int? { snapshot.rssi }
     var phoneSignal: PhoneSignal?
+
+    /// Everything read from CoreWLAN, as of the last background read.
+    ///
+    /// **Never on the main thread** (2026-10-21): every CoreWLAN call is an XPC
+    /// round trip to `airportd`, and twice that evening `airportd` stopped
+    /// answering for minutes (even `networksetup -getairportnetwork` hung). The
+    /// menu, the icon and `RoamingDataWatch` all froze behind one `ssid()`. Now
+    /// a read happens on `readQueue` and the main thread only ever sees the last
+    /// snapshot; a hung read just leaves it stale.
+    struct WifiSnapshot {
+        var ssid: String?
+        var rssi: Int?
+        var power = false
+        var scan: [(ssid: String, rssi: Int, secure: Bool)] = []
+        var known: Set<String> = []
+        var at: Date?
+    }
+
+    private let lock = NSLock()
+    private var _snapshot = WifiSnapshot()
+    private var readInFlight = false
+    private let readQueue = DispatchQueue(label: "ro.victorrentea.victor-net.wifi-read", qos: .userInitiated)
+
+    var snapshot: WifiSnapshot { lock.lock(); defer { lock.unlock() }; return _snapshot }
+
+    init() {
+        // The first read is waited for (1 s at most), so the icon starts right.
+        let first = DispatchSemaphore(value: 0)
+        readWifi { first.signal() }
+        _ = first.wait(timeout: .now() + 1)
+    }
+
+    /// Reads CoreWLAN on `readQueue`; skipped while the previous read hangs.
+    private func readWifi(done: (() -> Void)? = nil) {
+        lock.lock()
+        guard !readInFlight else { lock.unlock(); return }
+        readInFlight = true
+        lock.unlock()
+        readQueue.async { [weak self] in
+            var s = WifiSnapshot()
+            let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
+            // `rssiValue` is 0 while not associated; `ssid` is nil without
+            // Location Services even while associated.
+            let r = iface?.rssiValue() ?? 0
+            s.rssi = r == 0 ? nil : r
+            s.ssid = s.rssi == nil ? nil : iface?.ssid()
+            s.power = iface?.powerOn() ?? false
+            var best: [String: (Int, Bool)] = [:]
+            for n in iface?.cachedScanResults() ?? [] {
+                guard let ssid = n.ssid, !ssid.isEmpty else { continue }
+                let secure = !n.supportsSecurity(.none)
+                if best[ssid].map({ n.rssiValue > $0.0 }) ?? true { best[ssid] = (n.rssiValue, secure) }
+            }
+            s.scan = best.map { ($0.key, $0.value.0, $0.value.1) }.sorted { $0.1 > $1.1 }
+            s.known = Set((iface?.configuration()?.networkProfiles.array as? [CWNetworkProfile] ?? []).compactMap { $0.ssid })
+            s.at = Date()
+            guard let self else { return }
+            self.lock.lock()
+            self._snapshot = s
+            self.readInFlight = false
+            self.lock.unlock()
+            done?()
+        }
+    }
 
     var onHotspot: Bool {
         guard let ssid, !Config.hotspotSSID.isEmpty else { return false }
@@ -106,29 +170,15 @@ final class NetworkState {
         return NetworkID(key: "wifi:\(name)", name: "🛜 \(name)", kind: "wifi")
     }
 
-    /// SSIDs in range, from the **last** scan (`cachedScanResults`, instant). A
-    /// fresh scan is asked for in the background when the menu opens, so the next
-    /// opening is current; scanning on the spot would block the menu for seconds
-    /// and briefly stall the link.
-    func reachableSSIDs() -> Set<String> {
-        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
-        return Set((iface?.cachedScanResults() ?? []).compactMap { $0.ssid })
-    }
+    /// SSIDs in range, from the **last** scan (`cachedScanResults`, as of the
+    /// last background read). Scans are asked for while the menu is open.
+    func reachableSSIDs() -> Set<String> { Set(snapshot.scan.map(\.ssid)) }
 
     /// Every network in range from the last scan, one per SSID (the strongest),
-    /// strongest first — for *Other networks*.
-    func scanResults() -> [(ssid: String, rssi: Int, secure: Bool)] {
-        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
-        var best: [String: (Int, Bool)] = [:]
-        for n in iface?.cachedScanResults() ?? [] {
-            guard let ssid = n.ssid, !ssid.isEmpty else { continue }
-            let secure = !n.supportsSecurity(.none)
-            if best[ssid].map({ n.rssiValue > $0.0 }) ?? true { best[ssid] = (n.rssiValue, secure) }
-        }
-        return best.map { ($0.key, $0.value.0, $0.value.1) }.sorted { $0.1 > $1.1 }
-    }
+    /// strongest first — for *More*.
+    func scanResults() -> [(ssid: String, rssi: Int, secure: Bool)] { snapshot.scan }
 
-    var wifiPower: Bool { CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.powerOn() ?? false }
+    var wifiPower: Bool { snapshot.power }
 
     /// `networksetup -setairportpower`, which needs no admin, unlike CoreWLAN's `setPower`.
     func setWifiPower(_ on: Bool, done: @escaping (String?) -> Void) {
@@ -136,10 +186,7 @@ final class NetworkState {
     }
 
     /// The networks this Mac remembers (System Settings › Wi-Fi › Known networks).
-    func knownSSIDs() -> Set<String> {
-        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
-        return Set((iface?.configuration()?.networkProfiles.array as? [CWNetworkProfile] ?? []).compactMap { $0.ssid })
-    }
+    func knownSSIDs() -> Set<String> { snapshot.known }
 
     private let scanQueue = DispatchQueue(label: "ro.victorrentea.victor-net.scan", qos: .utility)
     /// A scan is in flight now — the menu's spinner (Victor, 2026-10-21: "prove
@@ -166,6 +213,7 @@ final class NetworkState {
             } catch let e {
                 error = e.localizedDescription
             }
+            self?.readWifi()
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.scanning = false
@@ -218,15 +266,11 @@ final class NetworkState {
         }
     }
 
-    /// Cheap: CoreWLAN's cached values and one dynamic-store read.
+    /// Never blocks: one dynamic-store read here, the CoreWLAN read started in the
+    /// background (its result shows from the next call on).
     func refresh() {
         wired = WiredLink.current()
-        let iface = CWWiFiClient.shared().interface(withName: Config.wifiInterface)
-        // `rssiValue` is 0 while not associated; `ssid` is nil without
-        // Location Services even while associated.
-        let r = iface?.rssiValue() ?? 0
-        rssi = r == 0 ? nil : r
-        ssid = rssi == nil ? nil : iface?.ssid()
+        readWifi()
     }
 
     var stateJSON: [String: Any] {
@@ -239,6 +283,7 @@ final class NetworkState {
         case .offline: lookName = "offline"
         }
         return ["look": lookName, "ssid": orNull(ssid), "rssi": orNull(rssi),
-                "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot, "scan": scanJSON]
+                "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot, "scan": scanJSON,
+                "wifi_read_age_s": orNull(snapshot.at.map { Int(Date().timeIntervalSince($0)) })]
     }
 }

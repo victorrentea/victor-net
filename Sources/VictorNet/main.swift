@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.start()
         hotspot.start()
 
-        let watch = RoamingDataWatch(phone: roaming, location: { [weak self] in self?.hotspot.lastLocationFix() })
+        let watch = RoamingDataWatch(phone: roaming, net: net, location: { [weak self] in self?.hotspot.lastLocationFix() })
         watch.start()
         roamingData = watch
         menu.onRoamingSuspendToggled = { [weak watch] in watch?.refresh() }

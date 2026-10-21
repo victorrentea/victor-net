@@ -200,7 +200,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // over the cell it describes. No Ethernet row without a cable.
         // A click on it measures the current network now (Victor, 2026-10-21: the
         // best of the last hour is not always what he wants to see).
-        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "best last hour, \(unit.name)", "seen"],
+        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "\(unit.name), best last hour", "seen"],
                                  header: true)
         header.toolTip = "Click to test the speed of this network now"
         header.onClick = { [weak self] in self?.speedTestAction() }
@@ -349,7 +349,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // still be the day before in this Mac's.
             // One row with "Ask Vodafone" (Victor, 2026-10-21: one row less): ↺ = a
             // click asks Vodafone, through the phone, for what is really left.
-            roamingRow("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))")
+            // A reading over 30 min old (the phone out of reach, or cached on disk
+            // from before a restart) says when it is from.
+            let age = Date().timeIntervalSince(r.readAt)
+            let asOf = age > 30 * 60 ? " · \(NetworkBookPolicy.ago(r.readAt, now: Date()))" : ""
+            roamingRow("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
         } else {
             roamingRow("Roaming: the phone has not answered yet")
         }

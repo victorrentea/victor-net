@@ -174,3 +174,11 @@ Verified end to end from home on Ethernet: `GET /test/vodafone/ask` (= the menu 
 Seen once, not reproduced: a poll whose `R` the phone did not see within its 1.5 s window, so
 it took the channel for a hotspot request (`connected: Victor Mac`, app to the front). Both
 sightings were in the minute after the phone app was reinstalled.
+
+## The last reading survives a restart (21 Oct 2026)
+
+`PhoneRoamingMonitor` writes every reading to `~/.victor-net/roaming-last.json` (same JSON as the
+phone's, `RoamingWarningPolicy.line`) and loads it at launch, so the menu never says "the phone
+has not answered yet" just because the app restarted or the phone is out of reach. A reading over
+30 min old says its age in the row (`· 9 h ago`). The roaming row and "Ask Vodafone" are one row
+(↺): a click asks Vodafone.
