@@ -23,11 +23,16 @@ struct VodafoneBalance: Equatable {
 }
 
 enum VodafonePolicy {
-    /// remaining = plan + adjust − used, at the moment Vodafone's figure was true:
-    /// adjust = remaining − plan + used-then. What was used after that keeps
-    /// counting down from Vodafone's number.
+    /// Two pots (My Vodafone, 2026-10-21): the **monthly** EU roaming allowance
+    /// (`planMb`, "Date roaming SEE … din 13702.98") and the **bought option**,
+    /// whose remainder is the SMS's "N GB din Trafic rmg optiune". At Vodafone's
+    /// timestamp, left = option + what the monthly allowance still had then
+    /// (by the phone's count). Then remaining = plan + adjust − used ⇒
+    /// adjust = left − plan + used-then; what is used after that comes off.
     static func adjustMb(_ v: VodafoneBalance, planMb: Int64, usedNowBytes: Int64) -> Int64 {
-        v.remainingMb - planMb + (v.usedAtBytes ?? usedNowBytes) / 1_000_000
+        let usedThenMb = (v.usedAtBytes ?? usedNowBytes) / 1_000_000
+        let monthlyLeftThen = max(0, planMb - usedThenMb)
+        return v.remainingMb + monthlyLeftThen - planMb + usedThenMb
     }
 }
 

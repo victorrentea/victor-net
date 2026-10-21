@@ -143,6 +143,14 @@ final class RoamingAlertTests: XCTestCase {
         XCTAssertEqual(remainingNowMb, 21_860)
     }
 
+    /// Early in a trip the monthly allowance is not used up yet: it adds to the option.
+    func testMonthlyAllowanceLeftAddsToTheOption() {
+        let v = VodafoneBalance(remainingMb: 5_000, at: Date(), usedAtBytes: 3_380_000_000,
+                                received: Date(), validUntil: nil)
+        let adjust = VodafonePolicy.adjustMb(v, planMb: 13_380, usedNowBytes: 3_380_000_000)
+        XCTAssertEqual(13_380 + adjust - 3_380, 15_000, "10 GB monthly left + 5 GB option")
+    }
+
     func testPhoneStatusCarriesVodafone() {
         let json = #"{"vodafone":{"remainingMb":22860,"at":1792482180000,"usedAt":37000000000,"received":1792498000000,"text":"…","validUntil":null}}"#
         let v = PhoneStatusPolicy.vodafone(Data(json.utf8))
