@@ -147,14 +147,16 @@ final class NetworkState {
     private(set) var scanning = false
     /// The last scan that finished: when, how long it took, how many SSIDs it saw.
     private(set) var lastScan: (at: Date, took: TimeInterval, found: Int, error: String?)?
+    private(set) var lastScanStarted: Date?
     /// Main thread, when a scan starts and when it ends.
     var onScan: (() -> Void)?
 
     func scanInBackground() {
         guard !scanning else { return }
         scanning = true
-        onScan?()
         let began = Date()
+        lastScanStarted = began
+        onScan?()
         scanQueue.async { [weak self] in
             var found = 0
             var error: String?

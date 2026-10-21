@@ -83,19 +83,21 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
-        net.onScan = { [weak self] in self?.updateMoreStatus() }
+        net.onScan = { [weak self] in
+            self?.updateMoreStatus()
+            if self?.net.scanning == false { self?.refreshOthers() }
+        }
         net.scanInBackground()
-        // Every second while open: the "More" row's status; with the others
-        // unfolded, their list every 2 s and a fresh scan every 6 s (a scan takes
-        // seconds and briefly stalls the link, so not every second).
-        var tick = 0
+        // Every second while open: the "More" row's status, and a new scan as soon
+        // as the last one is over, at most every 2 s from its start (Victor,
+        // 2026-10-21: "every two, three seconds"). A scan itself takes ~5 s and
+        // briefly stalls the link, so while the menu is open it is near-continuous.
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
-            tick += 1
             self.updateMoreStatus()
-            guard self.othersExpanded else { return }
-            if tick % 6 == 0 { self.net.scanInBackground() }
-            if tick % 2 == 0 { self.refreshOthers() }
+            if !self.net.scanning, Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= 2 {
+                self.net.scanInBackground()
+            }
         }
         RunLoop.main.add(t, forMode: .common)
         rescanTimer = t
@@ -196,7 +198,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         // The header labels the numbers, not the line: "best last hour" sits
         // over the cell it describes. No Ethernet row without a cable.
-        var items = [NSMenuItem(view: MenuRowView(name: "", columns: ["best last hour, \(unit.name)", "seen"], header: true))]
+        // A click on it measures the current network now (Victor, 2026-10-21: the
+        // best of the last hour is not always what he wants to see).
+        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "best last hour, \(unit.name)", "seen"],
+                                 header: true)
+        header.toolTip = "Click to test the speed of this network now"
+        header.onClick = { [weak self] in self?.speedTestAction() }
+        var items = [NSMenuItem(view: header)]
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
             // ✓ on every network this Mac is on: the route (the cable, say) *and*
@@ -232,8 +240,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func moreRowView() -> MenuRowView {
         // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
+        // Grey, folded or not, like a section label (Victor, 2026-10-21); still clickable.
         let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
-                                                          accessibilityDescription: nil))
+                                                          accessibilityDescription: nil), dimmed: true)
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in self?.toggleOthers() }
         moreRow = row
@@ -299,13 +308,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
+    /// A network this Mac does not know: an open one is joined straight away; a
+    /// secured one goes to macOS's own join (Victor, 2026-10-21: "don't reinvent
+    /// the wheel"): System Settings › Wi-Fi, where a click on it brings the
+    /// system's password sheet, with Show password, saved to the keychain. No
+    /// public API opens that sheet by itself.
     private func joinOther(_ ssid: String, secure: Bool) {
-        var password: String?
-        if secure {
-            guard let pw = Prompt.password("Join “\(ssid)”", "The Wi-Fi password.") else { return }
-            password = pw
-        }
-        join(ssid, password: password)
+        guard secure else { return join(ssid, password: nil) }
+        netInfo("🛜 \(ssid) is secured — handing over to System Settings › Wi-Fi")
+        openWifiSettings()
     }
 
     private func wifiSwitchRow() -> NSMenuItem {
@@ -336,14 +347,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let left = roamingLeft ?? r.remaining
             // +12 h: the reset is midnight in the phone's time zone, which may
             // still be the day before in this Mac's.
-            menu.addItem(info("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))"))
+            // One row with "Ask Vodafone" (Victor, 2026-10-21: one row less): ↺ = a
+            // click asks Vodafone, through the phone, for what is really left.
+            roamingRow("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))")
         } else {
-            menu.addItem(info("Roaming: the phone has not answered yet"))
+            roamingRow("Roaming: the phone has not answered yet")
         }
-        let asking = askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false
-        let ask = action(asking ? "Asking Vodafone… (the answer comes by SMS)" : "Ask Vodafone for What Is Left", #selector(askVodafone))
-        ask.isEnabled = !asking
-        menu.addItem(ask)
         // Said the positive way, ticked by default.
         let allow = action("Allow Claude on Roaming", #selector(toggleSuspend))
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
@@ -359,6 +368,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             stop.state = r.guardOff ? .off : .on
             menu.addItem(stop)
         }
+    }
+
+    private func roamingRow(_ title: String) {
+        let asking = askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false
+        let row = action(asking ? "\(title) — asking Vodafone…" : title, #selector(askVodafone))
+        row.image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Ask Vodafone")
+        row.toolTip = "Ask Vodafone (*123#, through the phone) for what is left"
+        row.isEnabled = !asking
+        menu.addItem(row)
     }
 
     // MARK: - Rows
@@ -413,7 +431,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
             pane.appearance = NSAppearance(named: name)
             for (k, spinning) in [true, false].enumerated() {
-                let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
+                let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
                 row.setStatus(spinning ? "searching" : "14 in range · 3s ago", spinning: spinning)
                 row.frame.origin = NSPoint(x: 0, y: CGFloat(1 - k) * h)
                 pane.addSubview(row)
@@ -550,19 +568,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
 /// Small modal questions. The app has no window, so it is brought forward first.
 enum Prompt {
-    static func password(_ title: String, _ text: String) -> String? {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Join")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
-    }
-
     static func show(_ title: String, _ text: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()

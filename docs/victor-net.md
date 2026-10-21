@@ -47,15 +47,13 @@ charts. The figures sit in **real tables** — an `NSGridView` as the row's view
 
 ```
 Wi-Fi                                    [ON]       ← macOS's first line: a real switch
-best today, MB/s            ↓     ↑   ping  seen
+best last hour, MB/s        ↓     ↑   ping  seen   ← click = test the speed now
 <‐‐> Ethernet                                       ← always listed, greyed without a cable
 ✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
   wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
 › More                       ◌ searching             ← click: all others unfold below, live
 ──────────
-📶 Roaming: 22.6 GB left of 60.9 GB                 ← roaming only; total = used + left
-    Vodafone, 2 h ago · resets 2 Nov
-Ask Vodafone for what is left
+↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
 ✓ 🔒 Auto-stop hotspot at 1.0 GB left
   ⏸️ Pause Claude on roaming
 ✓ ((o)) Auto-start Mobile Hotspot                   ← Victor's hotspot glyph, drawn
@@ -69,17 +67,20 @@ Quit                                                ← no ⌘Q: its column wide
   names (tab stops in a title could not), a rounded highlight under the pointer, a click that
   acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
 - **More unfolds in place** (`toggleOthers`; "Other Networks" until 2026-10-21): rows inserted
-  below it while the menu stays open, rescanned every 6 s, gone when the menu closes (or on a
-  second click); 🔒 = password, asked only for a secured network this Mac does not know.
+  below it while the menu stays open, rescanned back to back, gone when the menu closes (or on a
+  second click); 🔒 = secured. A secured network this Mac does not know goes to System Settings
+  › Wi-Fi (macOS's own sheet, Show password, keychain); there is no public API for that sheet,
+  and the app's own password dialog is gone (2026-10-21).
 - **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*): on
   the More row's right, a spinner + "searching" while a CoreWLAN scan is in flight, then
-  "N in range · Ns ago". Scans run only while the menu is open: one on opening, then every
-  6 s once More is unfolded — never in the background (a scan takes ~5 s and stalls the link).
+  "N in range · Ns ago". More is grey, folded or not. Scans run only while the menu is open,
+  back to back (a new one once the last is over, at most every 2 s from its start), folded or
+  not — never in the background (a scan takes ~5 s and briefly stalls the link).
   `GET /test/state` → `network.scan`; `GET /test/more-row` draws the row in both states.
 
 - **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
   known/measured networks in range with their numbers, *More* (all in range,
-  strongest first, a password asked only for a secured network this Mac does not know), and
+  strongest first, a secured unknown one handed to System Settings), and
   the Wi-Fi switch (`networksetup -setairportpower`, no admin). Captive portals and hidden
   networks stay with *Wi-Fi Settings…*.
 - **Narrow table**: numbers only, the unit in the header (`↓ MB/s`), "seen" for the last time.

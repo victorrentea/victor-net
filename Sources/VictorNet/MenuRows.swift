@@ -31,7 +31,8 @@ final class MenuRowView: NSView {
     /// `columns` sit right-aligned at `MenuRowLayout.columnRights`.
     init(name: String, columns: [String] = [], icon: NSImage? = nil, checked: Bool = false,
          enabled: Bool = true, dimmed: Bool = false, header: Bool = false, trailing: NSImage? = nil, bold: Bool = false) {
-        self.enabled = enabled && !header
+        // Headers too: the networks' header measures the speed on a click.
+        self.enabled = enabled
         super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width,
                                  height: header ? 18 : MenuRowLayout.height))
         let size = header ? NSFont.smallSystemFontSize : NSFont.systemFontSize
