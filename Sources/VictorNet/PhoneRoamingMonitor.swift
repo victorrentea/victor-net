@@ -32,13 +32,19 @@ final class PhoneRoamingMonitor {
     /// both started in the same millisecond the stack mixed them up. Now the
     /// beacon answers both questions on one socket, told apart by the first byte.
     static let sppUUID: UInt16 = 0x1101
-    /// Written the moment the channel opens. The phone waits 1.5 s for it; a
-    /// channel that stays silent is a hotspot request, so this must never be late.
-    static let query = Data("R\n".utf8)
+    /// Written the moment the channel opens: `R <path>`. The phone waits 1.5 s for
+    /// the `R`; a channel that stays silent is a hotspot request, so this must never
+    /// be late. The path is one of `StatusServer.kt`'s routes — the same answers the
+    /// phone gives over HTTP on its hotspot, here reachable from anywhere in range
+    /// (21 Oct 2026: "Ask Vodafone" from home on tzutze went nowhere).
+    static func query(_ path: String) -> Data { Data("R \(path)\n".utf8) }
     static let pollInterval: TimeInterval = 20 * 60
     /// Page + SDP + open + the phone's reading. The opener gives up on its own
     /// well inside this; the budget only guards against a callback that never comes.
     private static let pollBudget: TimeInterval = 45
+    private static let reopenSettle: TimeInterval = 5
+    /// On `queue`: when the last exchange hung up.
+    private var lastHangUp: Date?
 
     private let queue = DispatchQueue(label: "ro.victorrentea.phone-roaming", qos: .utility)
     private let bluetooth = RunLoopThread(name: "ro.victorrentea.victor-net.bluetooth-roaming")
@@ -60,6 +66,8 @@ final class PhoneRoamingMonitor {
     /// Fired on the main thread after every poll, with the current reading
     /// (nil when there has never been one).
     var onReading: ((RoamingWarningPolicy.Reading?) -> Void)?
+    /// Vodafone's last balance SMS, carried by every `/status` (main thread).
+    var onVodafone: ((VodafoneBalance) -> Void)?
 
     var reading: RoamingWarningPolicy.Reading? {
         lock.lock(); defer { lock.unlock() }
@@ -95,7 +103,21 @@ final class PhoneRoamingMonitor {
     }
 
     /// `GET /test/roaming` — poll now (async), answer with the previous state.
-    func pollNow() { guard Config.hasPhone else { return }; queue.async { [weak self] in self?.poll(reason: "test") } }
+    func pollNow(reason: String = "test") {
+        guard Config.hasPhone else { return }
+        queue.async { [weak self] in self?.poll(reason: reason) }
+    }
+
+    /// Any `StatusServer.kt` route over Bluetooth (`/config?…`, `/ussd`), for when
+    /// the Mac is not on the hotspot. Main thread: the JSON line, or why not.
+    func request(_ path: String, budget: TimeInterval, done: @escaping (Data?, String?) -> Void) {
+        guard Config.hasPhone else { return done(nil, "no phone configured") }
+        queue.async { [weak self] in
+            guard let self else { return }
+            let (line, error) = self.exchange(path, budget: budget)
+            DispatchQueue.main.async { done(line.map { Data($0.utf8) }, error) }
+        }
+    }
 
     /// `GET /test/roaming/simulate/<pct>` — pretend the phone roams today with
     /// `pct`% left; `pct` < 0 clears the simulation. Shadows the real reading.
@@ -145,6 +167,46 @@ final class PhoneRoamingMonitor {
         pollInFlight = true
         defer { pollInFlight = false }
 
+        let (line, why) = exchange("/status", budget: Self.pollBudget)
+        var error = why
+        // `/status` = {"signal":…,"roaming":{…},"vodafone":{…}}; a phone older than
+        // 21 Oct 2026 ignores the path and answers the bare reading.
+        let data = line.map { Data($0.utf8) }
+        let parsed = data.flatMap { PhoneStatusPolicy.parse($0, now: Date()).1 } ?? line.flatMap(RoamingWarningPolicy.parse)
+        let vodafone = data.flatMap(PhoneStatusPolicy.vodafone)
+        if line != nil, parsed == nil { error = "unreadable answer from the phone" }
+        lock.lock()
+        _lastPollAt = Date()
+        _lastLine = line
+        _lastError = error
+        if let parsed { _reading = parsed }
+        let current = _simulated ?? _reading
+        lock.unlock()
+
+        if let parsed {
+            netInfo("📶 roaming (\(reason)): \(RoamingWarningPolicy.gb(parsed.cycleTotal)) of " +
+                        "\(RoamingWarningPolicy.gb(parsed.limit)), today \(RoamingWarningPolicy.gb(parsed.today))" +
+                        "\(parsed.roamingNow ? ", roaming now" : "")\(parsed.low ? " — LOW" : "")")
+        } else {
+            netInfo("📵 roaming poll (\(reason)) failed: \(error ?? "?")")
+        }
+        DispatchQueue.main.async {
+            self.onReading?(current)
+            if let vodafone { self.onVodafone?(vodafone) }
+        }
+    }
+
+    /// One question, one line: open the beacon's channel, write `R <path>`, read up
+    /// to the newline, hang up. On `queue` (blocks it — one exchange at a time).
+    private func exchange(_ path: String, budget: TimeInterval) -> (String?, String?) {
+        // The phone re-publishes its socket ~2 s after a hang-up; asked sooner, this
+        // Mac's SDP cache hands back the dead channel (21 Oct 2026: a `/config` sent
+        // right after a poll never reached the phone). Same as HotspotFallback's settle.
+        if let last = lastHangUp {
+            let wait = Self.reopenSettle - Date().timeIntervalSince(last)
+            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+        }
+        defer { lastHangUp = Date() }
         var line: String?
         var error: String? = "the phone never answered"
         let done = DispatchSemaphore(value: 0)
@@ -164,11 +226,11 @@ final class PhoneRoamingMonitor {
             }
             self.buffer = Data()
             let opener = PhoneChannelOpener(device: dev, service: IOBluetoothSDPUUID(uuid16: Self.sppUUID),
-                                            serviceName: "beacon (roaming query)") { [weak self] outcome in
+                                            serviceName: "beacon (\(path))") { outcome in
                 switch outcome {
                 case .opened(let ch, _):
-                    self?.channel = ch
-                    var bytes = [UInt8](Self.query)
+                    self.channel = ch
+                    var bytes = [UInt8](Self.query(path))
                     let written = ch.writeSync(&bytes, length: UInt16(bytes.count))
                     if written != kIOReturnSuccess { finish(nil, "could not ask the phone (\(written))") }
                 case .failed(let why):
@@ -187,7 +249,7 @@ final class PhoneRoamingMonitor {
             opener.start()
         }
 
-        _ = done.wait(timeout: .now() + Self.pollBudget)
+        _ = done.wait(timeout: .now() + budget)
         // Hang up on the Bluetooth thread, where the channel lives; the phone
         // is waiting for exactly this to free its socket for the next caller.
         bluetooth.async { [weak self] in
@@ -196,24 +258,6 @@ final class PhoneRoamingMonitor {
             self?.channel = nil
             self?.opener = nil
         }
-
-        let parsed = line.flatMap(RoamingWarningPolicy.parse)
-        if line != nil, parsed == nil { error = "unreadable answer from the phone" }
-        lock.lock()
-        _lastPollAt = Date()
-        _lastLine = line
-        _lastError = error
-        if let parsed { _reading = parsed }
-        let current = _simulated ?? _reading
-        lock.unlock()
-
-        if let parsed {
-            netInfo("📶 roaming (\(reason)): \(RoamingWarningPolicy.gb(parsed.cycleTotal)) of " +
-                        "\(RoamingWarningPolicy.gb(parsed.limit)), today \(RoamingWarningPolicy.gb(parsed.today))" +
-                        "\(parsed.roamingNow ? ", roaming now" : "")\(parsed.low ? " — LOW" : "")")
-        } else {
-            netInfo("📵 roaming poll (\(reason)) failed: \(error ?? "?")")
-        }
-        DispatchQueue.main.async { self.onReading?(current) }
+        return (line, error)
     }
 }

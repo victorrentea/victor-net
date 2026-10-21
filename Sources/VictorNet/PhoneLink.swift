@@ -117,6 +117,9 @@ final class PhoneLink {
     var onSignal: ((PhoneSignal?) -> Void)?
     var onReading: ((RoamingWarningPolicy.Reading) -> Void)?
     var onVodafone: ((VodafoneBalance) -> Void)?
+    /// Off the hotspot, `/config` and `/ussd` go over Bluetooth instead
+    /// (`PhoneRoamingMonitor.request`): path, timeout, main-thread answer.
+    var viaBluetooth: ((String, TimeInterval, @escaping (Data?, String?) -> Void) -> Void)?
 
     private(set) var signal: PhoneSignal?
 
@@ -195,7 +198,8 @@ final class PhoneLink {
     private func get(_ path: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
         guard onHotspot(), let gw = Self.gateway(),
               let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {
-            return done(nil, "only while this Mac is on the phone's hotspot")
+            guard let viaBluetooth else { return done(nil, "only while this Mac is on the phone's hotspot") }
+            return viaBluetooth(path, timeout + 20, done)   // + the page, SDP and channel open
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout

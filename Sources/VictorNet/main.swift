@@ -72,11 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
         phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
+        phone.viaBluetooth = { [weak self] path, budget, done in self?.roaming.request(path, budget: budget, done: done) }
         phone.start()
 
         // No pill on screen for a low allowance (Victor, 2026-10-20: "I don't
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
         roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
+        roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.start()
         hotspot.start()
 
@@ -114,6 +116,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
             return (200, roaming.diagnosticsJSON)
+        case "/test/vodafone/ask":
+            // The menu's "Ask Vodafone for What Is Left", as a click would; read the
+            // outcome in the log (`📶 *123# →`, then `📶 Vodafone says`).
+            DispatchQueue.main.async { self.menu?.askVodafoneNow() }
+            return (200, "{\"ok\":true}")
         case "/test/icon":
             // The current icon, 8× on a light and a dark bar, to look at.
             var path = ""

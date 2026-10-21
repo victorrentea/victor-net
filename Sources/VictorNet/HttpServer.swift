@@ -11,6 +11,7 @@ import Network
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state
 ///   GET /test/roaming/simulate/<pct>   → pretend <pct>% is left (`off` clears)
+///   GET /test/vodafone/ask             → the menu's "Ask Vodafone" (*123#, over Bluetooth off the hotspot)
 ///   GET /test/menu/open?close=4        → open the menu as a click would, closing itself
 final class HttpServer {
     static let port: UInt16 = 55126

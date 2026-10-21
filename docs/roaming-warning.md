@@ -149,3 +149,28 @@ GB, so warnings come early). Reset day 2, matching the bill issued on the 2nd.
 The phone's count **overstates** it: `querySummary` with a null subscriber
 also counts the Maya eSIM's traffic (French, so "roaming" everywhere; it was
 the UK data), and UK roaming isn't part of the SEE allowance anyway.
+
+## Everything over Bluetooth too, from anywhere in range (21 Oct 2026)
+
+"Ask Vodafone" from home on tzutze answered `only while this Mac is on the phone's hotspot` and
+nothing else happened: `/ussd` and `/config` were HTTP-only, and the Bluetooth poll's bare `R`
+never carried the Vodafone SMS, so the 20 Oct balance sat on the phone unused (menu: 0.0 GB left).
+
+The beacon now takes **`R <path>`**, any `StatusServer.kt` route, and answers what HTTP would:
+
+- the 20-min poll asks `R /status`: signal, reading **and** `vodafone`, so a new SMS is applied
+  wherever the Mac is (an old phone ignores the path and answers the bare reading, still parsed);
+- off the hotspot, `PhoneLink.get` hands `/config?…` and `/ussd` to `PhoneRoamingMonitor.request`;
+- after `*123#` the Mac polls again at +20 s and +60 s (the SMS lands ~3–10 s after);
+- **5 s between two Bluetooth exchanges**: a `/config` sent the instant a poll hung up never
+  reached the phone (its socket re-publishes ~2 s later; the SDP cache hands back the dead one);
+- the SMS is marked applied (`Vodafone.appliedReceived`) **only once the phone took the
+  correction**; before, a failed send was never retried.
+
+Verified end to end from home on Ethernet: `GET /test/vodafone/ask` (= the menu row) →
+`*123#` at 10:07:37 → SMS caught by the phone 10:07:46 → Bluetooth poll 10:08:05 →
+`adjustMb=36072` sent 10:08:11 → **11.2 GB left** instead of 0.0.
+
+Seen once, not reproduced: a poll whose `R` the phone did not see within its 1.5 s window, so
+it took the channel for a hotspot request (`connected: Victor Mac`, app to the front). Both
+sightings were in the minute after the phone app was reinstalled.

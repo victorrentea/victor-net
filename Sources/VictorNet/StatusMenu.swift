@@ -415,10 +415,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         guard v.received.timeIntervalSince1970 > applied, let r = roaming.reading, let plan = r.planMb else { return }
         let adjust = VodafonePolicy.adjustMb(v, planMb: plan, usedNowBytes: r.cycleTotal)
         netInfo("📶 Vodafone says \(Double(v.remainingMb) / 1000) GB left (data of \(v.at)) → adjust \(adjust) MB")
-        UserDefaults.standard.set(v.received.timeIntervalSince1970, forKey: Self.appliedKey)
+        guard !applyingVodafone else { return }
+        applyingVodafone = true
         askedVodafoneAt = nil
-        send(["adjustMb": "\(adjust)"], what: "Vodafone's \(Double(v.remainingMb) / 1000) GB")
+        // Marked applied only once the phone took it: a failed send is retried on
+        // the next `/status` that carries the same SMS.
+        send(["adjustMb": "\(adjust)"], what: "Vodafone's \(Double(v.remainingMb) / 1000) GB") { [weak self] ok in
+            self?.applyingVodafone = false
+            if ok { UserDefaults.standard.set(v.received.timeIntervalSince1970, forKey: Self.appliedKey) }
+        }
     }
+    private var applyingVodafone = false
+
+    /// `GET /test/vodafone/ask`.
+    func askVodafoneNow() { askVodafone() }
 
     @objc private func askVodafone() {
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.askedKey)
@@ -426,6 +436,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         netInfo("📶 asking Vodafone (*123#) through the phone")
         phone.askVodafone { answer, error in
             netInfo("📶 *123# → \(answer ?? error ?? "?") — the balance follows by SMS")
+            // The SMS lands ~10 s later. On the hotspot the 5 s `/status` brings it;
+            // off it, only a Bluetooth poll does.
+            for delay in [20.0, 60.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, self.askedVodafoneAt != nil else { return }
+                    self.roaming.pollNow(reason: "Vodafone SMS")
+                }
+            }
         }
     }
 
@@ -434,13 +452,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         send(["guardOff": off ? "1" : "0"], what: off ? "protection off until reset" : "protection on")
     }
 
-    private func send(_ params: [String: String], what: String) {
+    private func send(_ params: [String: String], what: String, done: ((Bool) -> Void)? = nil) {
         phone.configure(params) { reading, error in
             if let error {
                 netError("📶 roaming setting (\(what)) not sent: \(error)")
             } else {
                 netInfo("📶 roaming setting sent: \(what) → \(reading.map { RoamingWarningPolicy.gb($0.remaining) } ?? "?") left")
             }
+            done?(error == nil)
         }
     }
 
