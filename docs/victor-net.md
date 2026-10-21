@@ -68,9 +68,9 @@ Quit                                                ← no ⌘Q: its column wide
   acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
 - **More unfolds in place** (`toggleOthers`; "Other Networks" until 2026-10-21): rows inserted
   below it while the menu stays open, rescanned back to back, gone when the menu closes (or on a
-  second click); 🔒 = secured. A secured network this Mac does not know goes to System Settings
-  › Wi-Fi (macOS's own sheet, Show password, keychain); there is no public API for that sheet,
-  and the app's own password dialog is gone (2026-10-21).
+  second click); 🔒 = secured. A secured network this Mac does not know asks for its password in
+  the app's own dialog: big type, the password **in clear by default**, a "Hide password" box
+  (Victor, 2026-10-21; handing over to System Settings › Wi-Fi was tried and rejected).
 - **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*): on
   the More row's right, a spinner + "searching" while a CoreWLAN scan is in flight, then
   "N in range · Ns ago". More is grey, folded or not. Scans run only while the menu is open,
@@ -80,7 +80,7 @@ Quit                                                ← no ⌘Q: its column wide
 
 - **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
   known/measured networks in range with their numbers, *More* (all in range,
-  strongest first, a secured unknown one handed to System Settings), and
+  strongest first, a password asked only for a secured network this Mac does not know), and
   the Wi-Fi switch (`networksetup -setairportpower`, no admin). Captive portals and hidden
   networks stay with *Wi-Fi Settings…*.
 - **Narrow table**: numbers only, the unit in the header (`↓ MB/s`), "seen" for the last time.
@@ -179,3 +179,7 @@ were dead. Every CoreWLAN read now runs on `NetworkState`'s `readQueue` into a `
 read still hanging is skipped, not queued. `GET /test/state` → `network.wifi_read_age_s` says
 how stale it is. If `airportd` itself is wedged: `sudo killall airportd` (launchd restarts it).
 It started while the menu scanned back to back; not proven to be the cause.
+
+After a join with a password the app checks, 3 s later, that macOS lists the network among its
+known networks (so it auto-joins later, app or no app); if not, it adds it with
+`networksetup -addpreferredwirelessnetworkatindex … WPA2` and logs `🛜 remember`.

@@ -236,6 +236,12 @@ final class NetworkState {
 
     /// Joins a network — a known one with the password the keychain already
     /// holds (`password` nil), as the hotspot fallback does — via `networksetup`.
+    /// Adds a network to macOS's preferred list with its password (keychain), at
+    /// the top, as System Settings would after a join.
+    func remember(_ ssid: String, password: String, done: @escaping (String?) -> Void) {
+        run(["-addpreferredwirelessnetworkatindex", Config.wifiInterface, ssid, "0", "WPA2", password], done: done)
+    }
+
     func join(_ ssid: String, password: String? = nil, done: @escaping (String?) -> Void) {
         run(["-setairportnetwork", Config.wifiInterface, ssid] + (password.map { [$0] } ?? []), done: done)
     }

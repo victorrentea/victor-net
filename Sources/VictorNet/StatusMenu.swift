@@ -303,20 +303,33 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func join(_ ssid: String, password: String?) {
         netInfo("🛜 joining \(ssid)")
-        net.join(ssid, password: password) { error in
-            if let error { Prompt.show("Could not join \(ssid)", error) } else { netInfo("🛜 joined \(ssid)") }
+        net.join(ssid, password: password) { [weak self] error in
+            if let error { return Prompt.show("Could not join \(ssid)", error) }
+            netInfo("🛜 joined \(ssid)")
+            // A new network must stay known to macOS (Known Networks + keychain),
+            // so it auto-joins later with or without this app (Victor, 2026-10-21).
+            // Checked, not assumed: if the join did not remember it, add it.
+            guard let password else { return }
+            self?.net.refresh()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self else { return }
+                if self.net.knownSSIDs().contains(ssid) { return netInfo("🛜 \(ssid) is in macOS's known networks") }
+                netInfo("🛜 \(ssid) not remembered by the join — adding it to the known networks")
+                self.net.remember(ssid, password: password) { error in
+                    netInfo("🛜 remember \(ssid): \(error ?? "ok")")
+                }
+            }
         }
     }
 
-    /// A network this Mac does not know: an open one is joined straight away; a
-    /// secured one goes to macOS's own join (Victor, 2026-10-21: "don't reinvent
-    /// the wheel"): System Settings › Wi-Fi, where a click on it brings the
-    /// system's password sheet, with Show password, saved to the keychain. No
-    /// public API opens that sheet by itself.
+    /// A network this Mac does not know: an open one is joined straight away, a
+    /// secured one asks for its password first (`Prompt.wifiPassword`); macOS
+    /// keeps it in the keychain once joined. System Settings › Wi-Fi was tried
+    /// for one evening (2026-10-21) and rejected: Victor wants the join right here.
     private func joinOther(_ ssid: String, secure: Bool) {
         guard secure else { return join(ssid, password: nil) }
-        netInfo("🛜 \(ssid) is secured — handing over to System Settings › Wi-Fi")
-        openWifiSettings()
+        guard let pw = Prompt.wifiPassword(ssid) else { return }
+        join(ssid, password: pw)
     }
 
     private func wifiSwitchRow() -> NSMenuItem {
@@ -572,6 +585,51 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
 /// Small modal questions. The app has no window, so it is brought forward first.
 enum Prompt {
+    /// The Wi-Fi password, **in clear by default** with a "Hide password" box
+    /// (Victor, 2026-10-21: the other way round from macOS), in big type.
+    static func wifiPassword(_ ssid: String) -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Join “\(ssid)”"
+        alert.informativeText = ""
+        let font = NSFont.systemFont(ofSize: 18)
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 92))
+        let caption = NSTextField(labelWithString: "Password")
+        caption.font = .systemFont(ofSize: 16, weight: .medium)
+        caption.frame = NSRect(x: 0, y: 66, width: 340, height: 22)
+        let plain = NSTextField(frame: NSRect(x: 0, y: 30, width: 340, height: 30))
+        let secret = NSSecureTextField(frame: plain.frame)
+        for f in [plain, secret] { f.font = font; f.placeholderString = "Wi-Fi password" }
+        secret.isHidden = true
+        let hide = NSButton(checkboxWithTitle: "Hide password", target: nil, action: nil)
+        hide.font = .systemFont(ofSize: 15)
+        hide.frame = NSRect(x: 0, y: 0, width: 340, height: 22)
+        let toggler = HideToggler(plain: plain, secret: secret)
+        hide.target = toggler
+        hide.action = #selector(HideToggler.toggle(_:))
+        [caption, plain, secret, hide].forEach(box.addSubview)
+        alert.accessoryView = box
+        alert.addButton(withTitle: "Join")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = plain
+        let ok = alert.runModal() == .alertFirstButtonReturn
+        _ = toggler
+        return ok ? (secret.isHidden ? plain.stringValue : secret.stringValue) : nil
+    }
+
+    /// Swaps the clear field for the secure one, keeping what was typed.
+    private final class HideToggler: NSObject {
+        let plain: NSTextField, secret: NSSecureTextField
+        init(plain: NSTextField, secret: NSSecureTextField) { self.plain = plain; self.secret = secret }
+        @objc func toggle(_ sender: NSButton) {
+            let hide = sender.state == .on
+            if hide { secret.stringValue = plain.stringValue } else { plain.stringValue = secret.stringValue }
+            plain.isHidden = hide
+            secret.isHidden = !hide
+            (hide ? secret : plain).window?.makeFirstResponder(hide ? secret : plain)
+        }
+    }
+
     static func show(_ title: String, _ text: String) {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
