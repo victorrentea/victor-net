@@ -51,7 +51,7 @@ best today, MB/s            ↓     ↑   ping  seen
 <‐‐> Ethernet                                       ← always listed, greyed without a cable
 ✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
   wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
-Other Networks                               ›      ← click: all others unfold below, live
+› More                       ◌ searching             ← click: all others unfold below, live
 ──────────
 📶 Roaming: 22.6 GB left of 60.9 GB                 ← roaming only; total = used + left
     Vodafone, 2 h ago · resets 2 Nov
@@ -68,12 +68,17 @@ Quit                                                ← no ⌘Q: its column wide
 - **Rows are drawn views** (`MenuRows.swift`): fixed-x columns that line up whatever the
   names (tab stops in a title could not), a rounded highlight under the pointer, a click that
   acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
-- **Other Networks unfolds in place** (`toggleOthers`): rows inserted below it while the menu
-  stays open, rescanned every 8 s, gone when the menu closes; 🔒 = password, asked only for
-  a secured network this Mac does not know.
+- **More unfolds in place** (`toggleOthers`; "Other Networks" until 2026-10-21): rows inserted
+  below it while the menu stays open, rescanned every 6 s, gone when the menu closes (or on a
+  second click); 🔒 = password, asked only for a secured network this Mac does not know.
+- **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*): on
+  the More row's right, a spinner + "searching" while a CoreWLAN scan is in flight, then
+  "N in range · Ns ago". Scans run only while the menu is open: one on opening, then every
+  6 s once More is unfolded — never in the background (a scan takes ~5 s and stalls the link).
+  `GET /test/state` → `network.scan`; `GET /test/more-row` draws the row in both states.
 
 - **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
-  known/measured networks in range with their numbers, *Other Networks* (all in range,
+  known/measured networks in range with their numbers, *More* (all in range,
   strongest first, a password asked only for a secured network this Mac does not know), and
   the Wi-Fi switch (`networksetup -setairportpower`, no admin). Captive portals and hidden
   networks stay with *Wi-Fi Settings…*.

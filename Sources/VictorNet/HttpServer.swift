@@ -12,7 +12,8 @@ import Network
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state
 ///   GET /test/roaming/simulate/<pct>   → pretend <pct>% is left (`off` clears)
 ///   GET /test/vodafone/ask             → the menu's "Ask Vodafone" (*123#, over Bluetooth off the hotspot)
-///   GET /test/menu/open?close=4        → open the menu as a click would, closing itself
+///   GET /test/more-row                 → the "More" row (searching / done) drawn to a PNG
+///   GET /test/menu/open?close=4        → open the menu as a click would, closing itself (`more=1` unfolds More)
 final class HttpServer {
     static let port: UInt16 = 55126
 

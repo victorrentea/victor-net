@@ -142,15 +142,46 @@ final class NetworkState {
     }
 
     private let scanQueue = DispatchQueue(label: "ro.victorrentea.victor-net.scan", qos: .utility)
-    private var scanning = false
+    /// A scan is in flight now — the menu's spinner (Victor, 2026-10-21: "prove
+    /// me that you're searching").
+    private(set) var scanning = false
+    /// The last scan that finished: when, how long it took, how many SSIDs it saw.
+    private(set) var lastScan: (at: Date, took: TimeInterval, found: Int, error: String?)?
+    /// Main thread, when a scan starts and when it ends.
+    var onScan: (() -> Void)?
 
     func scanInBackground() {
         guard !scanning else { return }
         scanning = true
+        onScan?()
+        let began = Date()
         scanQueue.async { [weak self] in
-            _ = try? CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.scanForNetworks(withName: nil)
-            DispatchQueue.main.async { self?.scanning = false }
+            var found = 0
+            var error: String?
+            do {
+                let seen = try CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.scanForNetworks(withName: nil) ?? []
+                found = Set(seen.compactMap { $0.ssid }.filter { !$0.isEmpty }).count
+            } catch let e {
+                error = e.localizedDescription
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.scanning = false
+                self.lastScan = (Date(), Date().timeIntervalSince(began), found, error)
+                self.onScan?()
+            }
         }
+    }
+
+    var scanJSON: [String: Any] {
+        var o: [String: Any] = ["scanning": scanning]
+        if let l = lastScan {
+            o["last_scan_ago_s"] = Int(Date().timeIntervalSince(l.at))
+            o["last_scan_took_s"] = (l.took * 10).rounded() / 10
+            o["last_scan_found"] = l.found
+            o["last_scan_error"] = orNull(l.error)
+        }
+        return o
     }
 
     /// Joins a network — a known one with the password the keychain already
@@ -206,6 +237,6 @@ final class NetworkState {
         case .offline: lookName = "offline"
         }
         return ["look": lookName, "ssid": orNull(ssid), "rssi": orNull(rssi),
-                "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot]
+                "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot, "scan": scanJSON]
     }
 }

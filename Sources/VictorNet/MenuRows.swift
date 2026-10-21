@@ -21,7 +21,7 @@ enum MenuRowLayout {
 
 final class MenuRowView: NSView {
     var onClick: (() -> Void)?
-    /// Keep the menu open after the click (e.g. expanding *Other Networks*).
+    /// Keep the menu open after the click (e.g. expanding *More*).
     var keepsMenuOpen = false
     private let enabled: Bool
     private var highlighted = false { didSet { needsDisplay = true; recolor() } }
@@ -79,6 +79,36 @@ final class MenuRowView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    private var statusLabel: NSTextField?
+    private var spinner: NSProgressIndicator?
+
+    /// The row's right corner: a spinning wheel while something runs, a short
+    /// note after it ("14 in range · 3s ago"). The wheel animates on its own
+    /// thread, so it keeps turning while the menu tracks the mouse.
+    func setStatus(_ text: String, spinning: Bool) {
+        if statusLabel == nil {
+            let l = label("", font: .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular),
+                          color: .secondaryLabelColor)
+            l.alignment = .right
+            add(l, x: MenuRowLayout.width - 12 - 150, width: 150)
+            statusLabel = l
+            let s = NSProgressIndicator()
+            s.style = .spinning
+            s.controlSize = .small
+            s.isIndeterminate = true
+            s.usesThreadedAnimation = true
+            s.isDisplayedWhenStopped = false
+            addSubview(s)
+            spinner = s
+        }
+        statusLabel?.stringValue = text
+        if let l = statusLabel, let s = spinner {
+            let w = (text as NSString).size(withAttributes: [.font: l.font as Any]).width
+            s.frame = NSRect(x: MenuRowLayout.width - 12 - w - 20, y: (frame.height - 16) / 2, width: 16, height: 16)
+            if spinning { s.startAnimation(nil) } else { s.stopAnimation(nil) }
+        }
+    }
 
     private func label(_ s: String, font: NSFont, color: NSColor) -> NSTextField {
         let l = NSTextField(labelWithString: s)

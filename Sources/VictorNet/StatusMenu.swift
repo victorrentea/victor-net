@@ -83,10 +83,26 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
+        net.onScan = { [weak self] in self?.updateMoreStatus() }
         net.scanInBackground()
+        // Every second while open: the "More" row's status; with the others
+        // unfolded, their list every 2 s and a fresh scan every 6 s (a scan takes
+        // seconds and briefly stalls the link, so not every second).
+        var tick = 0
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            tick += 1
+            self.updateMoreStatus()
+            guard self.othersExpanded else { return }
+            if tick % 6 == 0 { self.net.scanInBackground() }
+            if tick % 2 == 0 { self.refreshOthers() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        rescanTimer = t
     }
 
     func menuDidClose(_ menu: NSMenu) {
+        net.onScan = nil
         othersExpanded = false
         rescanTimer?.invalidate()
         rescanTimer = nil
@@ -204,39 +220,54 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return items
     }
 
-    /// "Other Networks ›" — a click unfolds every other Wi-Fi in range right below
-    /// it, as macOS does, and they stay until the menu closes, refreshed as new
-    /// scans land (every 8 s while open).
+    /// "› More" — a click unfolds every other Wi-Fi in range right below it, as
+    /// macOS does ("Other Networks"; renamed by Victor, 2026-10-21), and folds them
+    /// back. On its right, proof that it is really looking: a spinner while a scan
+    /// runs, then how many networks it saw and how long ago.
     private func otherNetworksRow() -> NSMenuItem {
-        // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
-        let row = MenuRowView(name: "Other Networks", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
-        row.keepsMenuOpen = true
-        row.onClick = { [weak self] in self?.toggleOthers() }
-        let item = NSMenuItem(view: row)
+        let item = NSMenuItem(view: moreRowView())
         othersAnchor = item
         return item
     }
 
-    /// The click replaces the "Other Networks" row with the networks themselves,
-    /// refreshed every 2 s from the last scan while the menu is open; a fresh
-    /// scan every 6 s (a scan takes seconds and briefly stalls the link, so not
-    /// every second).
-    private func toggleOthers() {
-        guard !othersExpanded, let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) else { return }
-        othersExpanded = true
-        othersIndex = i
-        menu.removeItem(at: i)
-        othersAnchor = nil
-        net.scanInBackground()
-        refreshOthers()
-        var tick = 0
-        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
-            tick += 1
-            if tick % 3 == 0 { self?.net.scanInBackground() }
-            self?.refreshOthers()
+    private func moreRowView() -> MenuRowView {
+        // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
+        let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
+                                                          accessibilityDescription: nil))
+        row.keepsMenuOpen = true
+        row.onClick = { [weak self] in self?.toggleOthers() }
+        moreRow = row
+        updateMoreStatus()
+        return row
+    }
+
+    private weak var moreRow: MenuRowView?
+
+    private func updateMoreStatus() {
+        guard let row = moreRow else { return }
+        if net.scanning {
+            row.setStatus("searching", spinning: true)
+        } else if let l = net.lastScan {
+            let ago = Int(Date().timeIntervalSince(l.at))
+            row.setStatus(l.error != nil ? "scan failed" : "\(l.found) in range · \(ago < 2 ? "now" : "\(ago)s ago")",
+                          spinning: false)
+        } else {
+            row.setStatus("", spinning: false)
         }
-        RunLoop.main.add(t, forMode: .common)
-        rescanTimer = t
+    }
+
+    private func toggleOthers() {
+        guard let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) else { return }
+        othersExpanded.toggle()
+        anchor.view = moreRowView()
+        if othersExpanded {
+            othersIndex = i + 1
+            net.scanInBackground()
+            refreshOthers()
+        } else {
+            otherRows.forEach { menu.removeItem($0) }
+            otherRows = []
+        }
     }
 
     private var othersIndex = 0
@@ -360,10 +391,44 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// `GET /test/menu/open?close=N` — open as a click would, closing itself:
     /// the close is armed before opening, since nothing else reaches the main
     /// thread while the menu tracks.
-    func openForTest(closeAfter seconds: TimeInterval) {
+    func openForTest(closeAfter seconds: TimeInterval, unfoldMore: Bool = false) {
         let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.menu.cancelTracking() }
         RunLoop.main.add(timer, forMode: .common)
+        if unfoldMore {
+            let unfold = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in self?.toggleOthers() }
+            RunLoop.main.add(unfold, forMode: .common)
+        }
         statusItem.button?.performClick(nil)
+    }
+
+    /// `GET /test/more-row` — the "More" row drawn off-screen, searching and done,
+    /// on a light and a dark menu, to look at without opening the menu.
+    func renderMoreRowForTest() -> String? {
+        let w = MenuRowLayout.width, h = MenuRowLayout.height
+        let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: h * 2))
+        for (i, name) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
+            let pane = NSBox(frame: NSRect(x: CGFloat(i) * w, y: 0, width: w, height: h * 2))
+            pane.boxType = .custom
+            pane.borderWidth = 0
+            pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
+            pane.appearance = NSAppearance(named: name)
+            for (k, spinning) in [true, false].enumerated() {
+                let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
+                row.setStatus(spinning ? "searching" : "14 in range · 3s ago", spinning: spinning)
+                row.frame.origin = NSPoint(x: 0, y: CGFloat(1 - k) * h)
+                pane.addSubview(row)
+            }
+            board.addSubview(pane)
+        }
+        let window = NSWindow(contentRect: board.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        window.contentView = board
+        board.layoutSubtreeIfNeeded()
+        guard let rep = board.bitmapImageRepForCachingDisplay(in: board.bounds) else { return nil }
+        board.cacheDisplay(in: board.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
+        let url = Config.directory.appendingPathComponent("more-row-test.png")
+        try? png.write(to: url)
+        return url.path
     }
 
     /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.

@@ -121,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // outcome in the log (`📶 *123# →`, then `📶 Vodafone says`).
             DispatchQueue.main.async { self.menu?.askVodafoneNow() }
             return (200, "{\"ok\":true}")
+        case "/test/more-row":
+            var path = ""
+            onMain { path = self.menu?.renderMoreRowForTest() ?? "" }
+            return (200, HttpServer.json(["png": path]))
         case "/test/icon":
             // The current icon, 8× on a light and a dark bar, to look at.
             var path = ""
@@ -128,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (200, HttpServer.json(["png": path]))
         case "/test/menu/open":
             let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 10)
-            DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs) }
+            DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs, unfoldMore: query["more"] == "1") }
             return (200, "{\"ok\":true}")
         default:
             return (404, "{\"error\":\"not found\"}")
