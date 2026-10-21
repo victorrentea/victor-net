@@ -110,7 +110,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             networkRows().forEach(menu.addItem)
         }
         menu.addItem(otherNetworksRow())
-        menu.addItem(action("Wi-Fi Settings…", #selector(openWifiSettings)))
+        let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
+        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
+        menu.addItem(settings)
 
         // Everything about roaming, together.
         if Config.hasPhone {
@@ -181,7 +183,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var items = [NSMenuItem(view: MenuRowView(name: "", columns: ["best last hour, \(unit.name)", "seen"], header: true))]
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
-            let current = key == traffic.network?.key
+            // ✓ on every network this Mac is on: the route (the cable, say) *and*
+            // the Wi-Fi it is joined to — both are "active" (Victor, 2026-10-21).
+            let joined = ssid != nil && ssid == net.ssid
+            let current = key == traffic.network?.key || joined
             let icon: NSImage?
             if key == "wired" { icon = Icons.wired() }
             else if ssid == Config.hotspotSSID { icon = Icons.phone() }
@@ -189,7 +194,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
                 icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
             }
-            let seen = r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
+            let seen = joined ? "now" : r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
             let row = MenuRowView(name: ssid ?? "Ethernet",
                                   columns: [cell(r), seen],
                                   icon: icon, checked: current, enabled: !current && ssid != nil)
@@ -204,8 +209,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// scans land (every 8 s while open).
     private func otherNetworksRow() -> NSMenuItem {
         // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
-        let row = MenuRowView(name: "Other Networks", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
-                                                                   accessibilityDescription: nil))
+        let row = MenuRowView(name: "Other Networks", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in self?.toggleOthers() }
         let item = NSMenuItem(view: row)
@@ -213,33 +217,36 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// The click replaces the "Other Networks" row with the networks themselves,
+    /// refreshed every 2 s from the last scan while the menu is open; a fresh
+    /// scan every 6 s (a scan takes seconds and briefly stalls the link, so not
+    /// every second).
     private func toggleOthers() {
-        othersExpanded.toggle()
-        if let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) {
-            menu.removeItem(at: i)
-            menu.insertItem(otherNetworksRow(), at: i)
-        }
+        guard !othersExpanded, let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) else { return }
+        othersExpanded = true
+        othersIndex = i
+        menu.removeItem(at: i)
+        othersAnchor = nil
+        net.scanInBackground()
         refreshOthers()
-        if othersExpanded {
-            net.scanInBackground()
-            let t = Timer(timeInterval: 8, repeats: true) { [weak self] _ in
-                self?.net.scanInBackground()
-                self?.refreshOthers()
-            }
-            RunLoop.main.add(t, forMode: .common)
-            rescanTimer = t
-        } else {
-            rescanTimer?.invalidate()
-            rescanTimer = nil
+        var tick = 0
+        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            tick += 1
+            if tick % 3 == 0 { self?.net.scanInBackground() }
+            self?.refreshOthers()
         }
+        RunLoop.main.add(t, forMode: .common)
+        rescanTimer = t
     }
 
+    private var othersIndex = 0
+
     private func refreshOthers() {
+        guard othersExpanded else { return }
         otherRows.forEach { menu.removeItem($0) }
         otherRows = []
-        guard othersExpanded, let anchor = othersAnchor, var at = menu.items.firstIndex(of: anchor) else { return }
         let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
-            .union(net.knownSSIDs())
+            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
         let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
         let rows: [NSMenuItem] = others.isEmpty
             ? [NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off", enabled: false, dimmed: true))]
@@ -250,10 +257,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
                 return NSMenuItem(view: row)
             }
-        for r in rows {
-            at += 1
-            menu.insertItem(r, at: at)
-        }
+        for (k, r) in rows.enumerated() { menu.insertItem(r, at: min(othersIndex + k, menu.items.count)) }
         otherRows = rows
     }
 

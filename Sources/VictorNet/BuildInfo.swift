@@ -1,4 +1,4 @@
 enum BuildInfo {
     // Rewritten by build-app.sh.
-    static let time = "Oct 20, 16:41"
+    static let time = "Oct 21, 09:04"
 }
