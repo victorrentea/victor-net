@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
     private let hotspot = HotspotFallback()
+    private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
     private var roamingData: RoamingDataWatch?
     private var menu: StatusMenu?
     private var http: HttpServer?
@@ -81,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.start()
         hotspot.start()
+        preferredWifi.start()
 
         let watch = RoamingDataWatch(phone: roaming, net: net, location: { [weak self] in self?.hotspot.lastLocationFix() })
         watch.start()
@@ -105,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["traffic"] = self.traffic.stateJSON
                 o["phone"] = self.phone.stateJSON
                 o["roaming"] = self.roaming.diagnosticsJSON
+                o["preferred_wifi"] = self.preferredWifi.stateJSON
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":

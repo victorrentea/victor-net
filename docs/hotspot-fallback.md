@@ -345,6 +345,27 @@ offline.
 The fix is only asked for once we already know there is no internet — a menu-bar
 app sees network changes all day, and a location fix costs radios.
 
+## Back to the home Wi-Fi (`PreferredWifi`, 22 Oct 2026)
+
+The fallback gets the Mac *onto* the hotspot; nothing used to get it *off*. On
+22 Oct 2026 it joined the hotspot 261 m from home — outside the 200 m geofence —
+and the Mac then sat on ~1 MB/s of phone data at home, with the ~15 MB/s home
+Wi-Fi in range. macOS does not leave a working network for a better one, and the
+hotspot is on top of its preferred list anyway (it promotes the last joined).
+
+So `PreferredWifi` does it: `PREFERRED_SSID` in `config.env`, and the menu row
+**Prefer <home> over <hotspot>** (default on). Every 30 s, while on the hotspot:
+
+- a scan at most every 90 s (a scan stalls the link for a few seconds);
+- the home Wi-Fi at −75 dBm or better → `networksetup -setairportnetwork` to it,
+  with the fallback **held** meanwhile, so the seconds between the two networks
+  do not read as "offline" and pull the Mac straight back onto the hotspot;
+- 15 s later the interface is asked (not the command): not on it → retry in
+  5 min; on it but a TCP handshake **over Wi-Fi** fails (the cable would answer
+  otherwise) → back to the hotspot, not again for 15 min.
+
+`/test/state` → `preferred_wifi` shows the switch, the SSID and any backoff.
+
 ## Toggle
 
 **💬 → 🛜 Auto Mobile Hotspot** (top level since 2026-09-25; was 👩🏻‍💻 Extra → 📶 Victor Phone Hotspot Fallback), persisted in `UserDefaults`

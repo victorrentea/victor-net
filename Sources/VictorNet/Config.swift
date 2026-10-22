@@ -6,6 +6,7 @@ import Foundation
 /// ```
 /// PHONE_BT_ADDRESS=a1-b2-c3-d4-e5-f6   # the phone, as System Settings › Bluetooth shows it
 /// HOTSPOT_SSID=my-phone                # the phone's hotspot network
+/// PREFERRED_SSID=my-home               # optional: on the hotspot with this in range, move to it
 /// HOME_COUNTRY=RO                      # ISO code; abroad + on the hotspot = roaming data
 /// HOME_TIMEZONE=Europe/Bucharest
 /// HOME_LAT=…  HOME_LON=…  HOME_RADIUS_M=150   # optional: no hotspot request at home

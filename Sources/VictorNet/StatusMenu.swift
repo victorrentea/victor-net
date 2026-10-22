@@ -374,6 +374,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let allow = action("Allow Claude on Roaming", #selector(toggleSuspend))
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
         menu.addItem(allow)
+        if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
+            let prefer = action("Prefer \(home) over \(Config.hotspotSSID)", #selector(togglePreferred))
+            prefer.image = Icons.wifi(strength: 1)
+            prefer.state = PreferredWifiSettings.isEnabled ? .on : .off
+            menu.addItem(prefer)
+        }
         let start = action("Auto-Start Mobile Hotspot", #selector(toggleHotspot))
         start.image = Icons.hotspot()
         start.state = HotspotFallbackSettings.isEnabled ? .on : .off
@@ -572,6 +578,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func toggleHotspot() {
         HotspotFallbackSettings.isEnabled.toggle()
         netInfo("🛜 Auto Mobile Hotspot \(HotspotFallbackSettings.isEnabled ? "on" : "off")")
+    }
+
+    @objc private func togglePreferred() {
+        PreferredWifiSettings.isEnabled.toggle()
+        netInfo("🛜 Prefer \(Config.values["PREFERRED_SSID"] ?? "") over \(Config.hotspotSSID) \(PreferredWifiSettings.isEnabled ? "on" : "off")")
     }
 
     @objc private func toggleSuspend() {

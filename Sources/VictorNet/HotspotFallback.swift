@@ -226,6 +226,7 @@ final class HotspotFallback {
 
     /// Serialised on `queue`.
     private var lastAttemptAt = Date.distantPast
+    private var heldUntil = Date.distantPast
     private var attemptInFlight = false
     private var pendingEvaluation: DispatchWorkItem?
     private var heartbeatTimer: DispatchSourceTimer?
@@ -334,7 +335,14 @@ final class HotspotFallback {
         }
     }
 
+    /// `PreferredWifi` moving the Mac off the hotspot on purpose: until then, no
+    /// internet is that move in progress, not a reason to join the hotspot back.
+    func hold(for seconds: TimeInterval) {
+        queue.async { self.heldUntil = Date() + seconds }
+    }
+
     private func evaluate(reason: String) {
+        if Date() < heldUntil { return }
         if hasInternet() {
             if lastKnownOnline != true {
                 lastKnownOnline = true
