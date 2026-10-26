@@ -241,7 +241,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func moreRowView() -> MenuRowView {
         // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
         // Grey, folded or not, like a section label (Victor, 2026-10-21); still clickable.
-        let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
+        let row = MenuRowView(name: "More…", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
                                                           accessibilityDescription: nil), dimmed: true)
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in self?.toggleOthers() }
@@ -454,7 +454,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
             pane.appearance = NSAppearance(named: name)
             for (k, spinning) in [true, false].enumerated() {
-                let row = MenuRowView(name: "More", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
+                let row = MenuRowView(name: "More…", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
                 row.setStatus(spinning ? "searching" : "14 in range · 3s ago", spinning: spinning)
                 row.frame.origin = NSPoint(x: 0, y: CGFloat(1 - k) * h)
                 pane.addSubview(row)
