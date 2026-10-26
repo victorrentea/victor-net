@@ -34,12 +34,14 @@ if [ "${SKIP_TESTS:-0}" != "1" ]; then
 fi
 
 if [ "${UNIVERSAL:-0}" = "1" ]; then
-    swift build -c "$BUILD_CONFIG" --arch arm64 --arch x86_64
-    BINARY="$DIR/.build/apple/Products/Release/VictorNet"
+    ARCHS=(--arch arm64 --arch x86_64)
 else
-    swift build -c "$BUILD_CONFIG"
-    BINARY="$DIR/.build/arm64-apple-macosx/$BUILD_CONFIG/VictorNet"
+    ARCHS=()
 fi
+swift build -c "$BUILD_CONFIG" "${ARCHS[@]}"
+# Ask SwiftPM where it put the binary: the Swift Build backend (Swift 6.4) moved it
+# to .build/out/Products/Release, and a hardcoded path silently installed a stale one.
+BINARY="$(swift build -c "$BUILD_CONFIG" "${ARCHS[@]}" --show-bin-path)/VictorNet"
 
 rm -rf "$APP_DIR"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
