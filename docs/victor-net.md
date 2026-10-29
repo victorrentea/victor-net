@@ -196,3 +196,13 @@ every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot
 `R /media…` over Bluetooth elsewhere (a page: the pause lands a few seconds late there).
 The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
 lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
+
+## 🔋 The phone's battery, for the tablet's soundboard (2026-10-29)
+
+The tablet shows the **phone's** charge in its top bar, not its own (Victor: "the tablet's
+battery is stupid"). The phone's `/status` carries `"battery":{"pct":63,"charging":false}`;
+`PhoneBatteryBook` keeps the last one from **whichever answer already arrives** — `PhoneLink`
+every 5 s on the hotspot, `PhoneRoamingMonitor` every 20 min over Bluetooth elsewhere. No
+poll of its own (Victor chose it over a 5-min Bluetooth page), so off the hotspot it can be
+20 min old. `GET /phone/battery` → `{"pct":63,"charging":false,"age_s":120}` (`{"pct":-1}`
+until the phone answers once); Victor Addons reads it and passes it on in its `/ping`.

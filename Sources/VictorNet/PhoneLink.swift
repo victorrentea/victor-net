@@ -117,6 +117,8 @@ final class PhoneLink {
     var onSignal: ((PhoneSignal?) -> Void)?
     var onReading: ((RoamingWarningPolicy.Reading) -> Void)?
     var onVodafone: ((VodafoneBalance) -> Void)?
+    /// Every `/status` body, as it came (`PhoneBatteryBook`). Main thread.
+    var onStatus: ((Data) -> Void)?
     /// Off the hotspot, `/config` and `/ussd` go over Bluetooth instead
     /// (`PhoneRoamingMonitor.request`): path, timeout, main-thread answer.
     var viaBluetooth: ((String, TimeInterval, @escaping (Data?, String?) -> Void) -> Void)?
@@ -167,6 +169,7 @@ final class PhoneLink {
                 }
                 if let reading { self.onReading?(reading) }
                 if let v = PhoneStatusPolicy.vodafone(data) { self.onVodafone?(v) }
+                self.onStatus?(data)
             }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }.resume()

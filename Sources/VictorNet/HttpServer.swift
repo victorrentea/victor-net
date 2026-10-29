@@ -7,6 +7,7 @@ import Network
 /// UI hops to the main run loop.
 ///
 ///   GET /ping                          → {"ok":true,"app":"victor-net","built":…}
+///   GET /phone/battery                 → {"pct":63,"charging":false,"age_s":120} ({"pct":-1} = unknown); read by Victor Addons
 ///   GET /test/state                    → network, icon, traffic, phone link
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state

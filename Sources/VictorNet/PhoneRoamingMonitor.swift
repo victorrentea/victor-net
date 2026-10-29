@@ -68,6 +68,8 @@ final class PhoneRoamingMonitor {
     var onReading: ((RoamingWarningPolicy.Reading?) -> Void)?
     /// Vodafone's last balance SMS, carried by every `/status` (main thread).
     var onVodafone: ((VodafoneBalance) -> Void)?
+    /// Every `/status` body the Bluetooth poll got (`PhoneBatteryBook`). On the poll's queue.
+    var onStatus: ((Data) -> Void)?
 
     var reading: RoamingWarningPolicy.Reading? {
         lock.lock(); defer { lock.unlock() }
@@ -192,6 +194,7 @@ final class PhoneRoamingMonitor {
         let data = line.map { Data($0.utf8) }
         let parsed = data.flatMap { PhoneStatusPolicy.parse($0, now: Date()).1 } ?? line.flatMap(RoamingWarningPolicy.parse)
         let vodafone = data.flatMap(PhoneStatusPolicy.vodafone)
+        if let data { onStatus?(data) }
         if line != nil, parsed == nil { error = "unreadable answer from the phone" }
         lock.lock()
         _lastPollAt = Date()

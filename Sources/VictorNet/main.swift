@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let traffic = TrafficMonitor()
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
+    private let phoneBattery = PhoneBatteryBook()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
@@ -74,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
         phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
+        phone.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
         phone.viaBluetooth = { [weak self] path, budget, done in self?.roaming.request(path, budget: budget, done: done) }
         phone.start()
         mediaPause.start()
@@ -82,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
         roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
+        roaming.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
         roaming.start()
         hotspot.start()
         preferredWifi.start()
@@ -102,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch path {
         case "/ping":
             return (200, HttpServer.json(["ok": true, "app": "victor-net", "built": BuildInfo.time]))
+        case "/phone/battery":
+            // Read by Victor Addons for the tablet's top bar (`PhoneBattery`).
+            return (200, HttpServer.json(phoneBattery.json))
         case "/test/state":
             var o: [String: Any] = [:]
             onMain {
