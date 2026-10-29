@@ -42,7 +42,10 @@ has a larger bandwidth and a lower latency than my hotspot."*
 
 **A snapshot, not a live view** (*"I don't really care about seeing live data. It distracts
 me."*): every number is read when the menu opens and does not move while it is open. No
-charts. The figures sit in **real tables** — an `NSGridView` as the row's view
+charts. **One exception** (Victor, 2026-10-29): when the Mac moves to another network while
+the menu is open — the hotspot comes up, say — the network rows are redrawn in place
+(`refreshNetworksIfChanged`, checked every second), so the ✓ and the new row show up. The
+figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```

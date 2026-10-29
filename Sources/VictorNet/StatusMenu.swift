@@ -95,6 +95,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.updateMoreStatus()
+            self.refreshNetworksIfChanged()
             if !self.net.scanning, Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= 2 {
                 self.net.scanInBackground()
             }
@@ -109,6 +110,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         rescanTimer?.invalidate()
         rescanTimer = nil
         otherRows = []
+        networkItems = []
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -120,13 +122,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // settings. Offline, a greyed "Offline N min" stands where the list was.
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
-        if let since = traffic.offlineSince, Date().timeIntervalSince(since) >= 5 {
-            menu.addItem(NSMenuItem(view: MenuRowView(
-                name: "Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))",
-                icon: Icons.noTraffic(), enabled: false, dimmed: true)))
-        } else {
-            networkRows().forEach(menu.addItem)
-        }
+        networkItems = networkSection()
+        networkItems.forEach(menu.addItem)
         menu.addItem(otherNetworksRow())
         let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
@@ -155,6 +152,42 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     // MARK: - Networks, like macOS's Wi-Fi menu
+
+    /// The rows between the switch and *More*, and which network they were drawn for.
+    private var networkItems: [NSMenuItem] = []
+    private var drawnFor = ""
+
+    private var offlineSince: Date? {
+        traffic.offlineSince.flatMap { Date().timeIntervalSince($0) >= 5 ? $0 : nil }
+    }
+
+    private func networkSection() -> [NSMenuItem] {
+        drawnFor = networkSignature
+        if let since = offlineSince {
+            return [NSMenuItem(view: MenuRowView(
+                name: "Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))",
+                icon: Icons.noTraffic(), enabled: false, dimmed: true))]
+        }
+        return networkRows()
+    }
+
+    private var networkSignature: String {
+        "\(traffic.network?.key ?? "-")|\(net.ssid ?? "-")|\(offlineSince == nil ? "on" : "off")"
+    }
+
+    /// The one exception to the snapshot: when the Mac moves to another network
+    /// while the menu is open (the hotspot comes up, say), the network rows are
+    /// redrawn in place so the ✓ follows (Victor, 2026-10-29: he watched it join
+    /// the hotspot with the menu open and the row never showed up).
+    private func refreshNetworksIfChanged() {
+        guard !networkItems.isEmpty, networkSignature != drawnFor,
+              let at = menu.items.firstIndex(of: networkItems[0]) else { return }
+        netInfo("🛜 network changed while the menu is open (\(drawnFor) → \(networkSignature)): redrawing its rows")
+        networkItems.forEach { menu.removeItem($0) }
+        networkItems = networkSection()
+        for (k, item) in networkItems.enumerated() { menu.insertItem(item, at: at + k) }
+        refreshOthers()
+    }
 
     private var othersExpanded = false
     private var othersAnchor: NSMenuItem?
@@ -285,6 +318,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         guard othersExpanded else { return }
         otherRows.forEach { menu.removeItem($0) }
         otherRows = []
+        if let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) { othersIndex = i + 1 }
         let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
             .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
         let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
