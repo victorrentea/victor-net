@@ -358,7 +358,7 @@ final class HotspotFallback {
         }
         // Asked only once we already know there is no internet: a location fix
         // costs radios and a menu-bar app sees network changes all day.
-        if geofence.isAtHome() {
+        if geofence.isAtHome(wait: true) {
             netInfo("🏠 No internet (\(reason)) — but we are at home, so this stays manual")
             return
         }

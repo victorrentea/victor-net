@@ -29,8 +29,15 @@ final class HomeGeofence: NSObject, CLLocationManagerDelegate {
     private var _last: CLLocation?
     private var _lastAt: Date?
 
-    /// A fix older than this is not trusted to answer "am I home *now*".
-    private static let freshness: TimeInterval = 15 * 60
+    /// A fix *measured* longer ago than this is not trusted to answer "am I home
+    /// *now*". Measured, not received: CoreLocation hands back its cached fix with
+    /// the cached timestamp, and on 29 Oct 2026 a fix from home, stamped on arrival,
+    /// answered "home" in the metro twice, eight and twenty minutes after leaving.
+    /// Two minutes is a walk out of the 200 m radius; the metro has no Wi-Fi to
+    /// position by, so there the fresh fix never comes and the answer is "not home".
+    private static let freshness: TimeInterval = 2 * 60
+    /// How long `isAtHome(wait:)` gives CoreLocation for a fresh fix.
+    static let fixWait: TimeInterval = 10
 
     private let home: CLLocation?
     private let radius: CLLocationDistance
@@ -68,15 +75,32 @@ final class HomeGeofence: NSObject, CLLocationManagerDelegate {
     /// Everything else — no permission, no fix, a stale fix, no home configured
     /// — answers false, so an unanswerable question never strands the Mac
     /// offline.
-    func isAtHome() -> Bool {
+    /// With `wait`, a missing or stale fix is asked for and waited on, up to
+    /// `fixWait` — only off the main thread, where the delegate answers.
+    func isAtHome(wait: Bool = false) -> Bool {
         guard let home else { return false }
-        lock.lock(); let fix = _last; let at = _lastAt; lock.unlock()
-        guard let fix, let at, Date().timeIntervalSince(at) < Self.freshness else {
-            manager.requestLocation()   // ask now, for the next time we are asked
+        var fix = freshFix()
+        if fix == nil {
+            let asked = Date()
+            DispatchQueue.main.async { self.manager.requestLocation() }
+            if wait && !Thread.isMainThread {
+                while fix == nil && Date().timeIntervalSince(asked) < Self.fixWait {
+                    usleep(250_000)
+                    fix = freshFix()
+                }
+            }
+        }
+        guard let fix else {
+            if wait { netInfo("🏠 No location fix from the last \(Int(Self.freshness))s — treating as not-home") }
             return false
         }
-        let d = fix.distance(from: home)
-        return d <= radius
+        return fix.distance(from: home) <= radius
+    }
+
+    private func freshFix() -> CLLocation? {
+        lock.lock(); defer { lock.unlock() }
+        guard let l = _last, Date().timeIntervalSince(l.timestamp) < Self.freshness else { return nil }
+        return l
     }
 
     /// The last fix and when it came, for `RoamingDataWatch`'s country lookup.
@@ -91,12 +115,14 @@ final class HomeGeofence: NSObject, CLLocationManagerDelegate {
     /// changes when you move house would be the wrong trade.
     private func note(_ l: CLLocation) {
         let dist = home.map { String(format: "%.0fm from home", l.distance(from: $0)) } ?? "home not set"
-        netInfo(String(format: "🏠 Location fix: HOME_LAT=%.6f HOME_LON=%.6f (±%.0fm, %@)",
-                           l.coordinate.latitude, l.coordinate.longitude, l.horizontalAccuracy, dist))
+        netInfo(String(format: "🏠 Location fix: HOME_LAT=%.6f HOME_LON=%.6f (±%.0fm, %@, measured %.0fs ago)",
+                           l.coordinate.latitude, l.coordinate.longitude, l.horizontalAccuracy, dist,
+                           Date().timeIntervalSince(l.timestamp)))
     }
 
     func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {
         guard let l = locs.last else { return }
+        // `_lastAt` is when it arrived (for `lastFix`); freshness reads `l.timestamp`.
         lock.lock(); _last = l; _lastAt = Date(); lock.unlock()
         note(l)
     }

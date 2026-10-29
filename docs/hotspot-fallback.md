@@ -345,6 +345,15 @@ offline.
 The fix is only asked for once we already know there is no internet — a menu-bar
 app sees network changes all day, and a location fix costs radios.
 
+**A fix is as old as its measurement, not its arrival (29 Oct 2026).** The fallback stood
+down in the metro — `we are at home, so this stays manual` at 08:51, eight minutes after
+leaving — on a fix that read *20 m from home* with the very same coordinates at 08:43, 08:51
+and 09:02. CoreLocation hands back its cached fix with the cached `timestamp`, and the
+freshness check (15 min) measured from when the fix *arrived*. Now: freshness is 2 min of
+`CLLocation.timestamp`, and with no such fix the fallback asks for one and waits up to 10 s;
+none (no Wi-Fi to position by underground) ⇒ not home ⇒ ask the phone. The log line of a
+fix says how long ago it was measured.
+
 ## Back to the home Wi-Fi (`PreferredWifi`, 22 Oct 2026)
 
 The fallback gets the Mac *onto* the hotspot; nothing used to get it *off*. On
