@@ -195,6 +195,11 @@ final class PhoneLink {
         }
     }
 
+    /// Pause (`hold`) or resume the phone's music — `PhoneMediaPause`. Main thread.
+    func media(hold: Bool, ttl: Int, done: @escaping (Data?, String?) -> Void) {
+        get(hold ? "/media?hold=1&ttl=\(ttl)" : "/media?hold=0", timeout: 2, done: done)
+    }
+
     private func get(_ path: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
         guard onHotspot(), let gw = Self.gateway(),
               let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {

@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let traffic = TrafficMonitor()
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
+    private lazy var mediaPause = PhoneMediaPause(phone: phone)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
     private var roamingData: RoamingDataWatch?
@@ -75,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         phone.viaBluetooth = { [weak self] path, budget, done in self?.roaming.request(path, budget: budget, done: done) }
         phone.start()
+        mediaPause.start()
 
         // No pill on screen for a low allowance (Victor, 2026-10-20: "I don't
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
@@ -108,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["phone"] = self.phone.stateJSON
                 o["roaming"] = self.roaming.diagnosticsJSON
                 o["preferred_wifi"] = self.preferredWifi.stateJSON
+                o["media_pause"] = self.mediaPause.stateJSON
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":

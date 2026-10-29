@@ -183,3 +183,13 @@ It started while the menu scanned back to back; not proven to be the cause.
 After a join with a password the app checks, 3 s later, that macOS lists the network among its
 known networks (so it auto-joins later, app or no app); if not, it adds it with
 `networksetup -addpreferredwirelessnetworkatindex … WPA2` and logs `🛜 remember`.
+
+## 🎵 The phone's music pauses while Walkie Talkie dictates (2026-10-29)
+
+`PhoneMediaPause` listens on Walkie Talkie's own `ws://127.0.0.1:8920` (the `MusicBridge`
+that pauses Chrome tabs) — Walkie is not changed and does not know about it. On
+`{"type":"dictation","active":true}` it sends the phone `GET /media?hold=1&ttl=90`, renewed
+every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot and
+`R /media…` over Bluetooth elsewhere (a page: the pause lands a few seconds late there).
+The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
+lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
