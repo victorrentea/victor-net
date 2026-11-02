@@ -36,6 +36,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var lastAskedAt = Date.distantPast
 
     var onRoamingSuspendToggled: (() -> Void)?
+    /// The menu just opened — offline, that is when to ask the phone for its hotspot.
+    var onOpen: (() -> Void)?
 
     init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor) {
         self.net = net
@@ -83,6 +85,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
+        onOpen?()
         net.onScan = { [weak self] in
             self?.updateMoreStatus()
             if self?.net.scanning == false { self?.refreshOthers() }

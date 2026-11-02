@@ -335,6 +335,21 @@ final class HotspotFallback {
         }
     }
 
+    /// Victor Net's menu opening: the moment someone is looking at the network,
+    /// so offline is asked about *now* — no 4 s grace, no waiting for the next
+    /// path change or the 60 s heartbeat (Victor, 2026-11-02). The same checks
+    /// as any other evaluation apply (switch, home, held); only the cooldown is
+    /// the short one, as on wake, so reopening the menu cannot page the phone
+    /// in a loop.
+    func menuOpened() {
+        queue.async { [weak self] in
+            guard let self, !self.attemptInFlight else { return }
+            self.pendingEvaluation?.cancel()
+            self.pendingEvaluation = nil
+            self.evaluate(reason: "menu open")
+        }
+    }
+
     /// `PreferredWifi` moving the Mac off the hotspot on purpose: until then, no
     /// internet is that move in progress, not a reason to join the hotspot back.
     func hold(for seconds: TimeInterval) {
@@ -363,8 +378,8 @@ final class HotspotFallback {
             return
         }
 
-        // A wake gets the short floor; everything else gets the ordinary one.
-        let floor = reason == "wake" ? Self.wakeCooldown : Self.cooldown
+        // A wake or an opened menu gets the short floor; everything else the ordinary one.
+        let floor = reason == "wake" || reason == "menu open" ? Self.wakeCooldown : Self.cooldown
         let since = Date().timeIntervalSince(lastAttemptAt)
         guard since >= floor else {
             netInfo("📵 No internet (\(reason)) but only \(Int(since))s of \(Int(floor))s since last attempt — holding")
@@ -374,7 +389,7 @@ final class HotspotFallback {
         attemptInFlight = true
         defer { attemptInFlight = false }
 
-        netInfo("📵 No internet after \(Int(Self.grace))s (\(reason)) — asking the phone for its hotspot")
+        netInfo("📵 No internet\(reason == "menu open" ? "" : " after \(Int(Self.grace))s") (\(reason)) — asking the phone for its hotspot")
 
         if let err = openChannel() {
             netError("📵 Hotspot fallback failed — \(err)")

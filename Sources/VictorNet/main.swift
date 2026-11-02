@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
         roaming.start()
         hotspot.start()
+        menu.onOpen = { [weak self] in self?.hotspot.menuOpened() }
         preferredWifi.start()
 
         let watch = RoamingDataWatch(phone: roaming, net: net, location: { [weak self] in self?.hotspot.lastLocationFix() })

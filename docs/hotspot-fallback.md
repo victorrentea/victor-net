@@ -408,6 +408,19 @@ Nothing was going to arrive. So `heartbeat` (60 s) re-evaluates on a clock as
 well as on edges. While online that is one TCP probe a minute; while offline the
 attempts stay bounded by `cooldown` exactly as before.
 
+## Opening the menu asks now (2 Nov 2026)
+
+Victor: *„la deschiderea meniului victor net, dacă nu ai net, trebuie să cauți pe BT
+telefonul … atunci, nu la intervalul de retry/poll obișnuit"*. Opening Victor Net's menu
+is the moment someone is looking at the network, so `StatusMenu.menuWillOpen` →
+`HotspotFallback.menuOpened()` evaluates **immediately**: no 4 s grace, no waiting for
+the next path change or the 60 s heartbeat. Log reason: `menu open`.
+
+Everything else is the automatic path's: online → nothing; the 🛜 switch off, at home,
+or `hold` from `PreferredWifi` → nothing; an attempt in flight → nothing. The cooldown
+is the short one (`wakeCooldown`, 10 s), as on wake, so opening the menu repeatedly
+cannot page the phone in a loop — but neither does the 45 s floor make a click wait.
+
 ## Starting it by hand: 📱 Start Victor Phone Hotspot Now
 
 > **Removed on 2026-09-23** (Victor: *"șterge, rămâne pe auto"*) — the row, `onHotspotNow` and `HotspotFallback.triggerNow`. The automatic fallback is the only path; what follows is history.
