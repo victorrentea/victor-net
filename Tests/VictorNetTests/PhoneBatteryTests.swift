@@ -29,4 +29,24 @@ final class PhoneBatteryTests: XCTestCase {
         XCTAssertEqual(o["charging"] as? Bool, false)
         XCTAssertEqual(o["age_s"] as? Int, 125)
     }
+
+    func testCloudReadingKeepsItsAge() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let b = PhoneBattery.parseCloud(Data(#"{"pct":63,"charging":true,"age_s":120}"#.utf8), now: now)
+        XCTAssertEqual(b, PhoneBattery(pct: 63, charging: true, readAt: Date(timeIntervalSince1970: 880)))
+    }
+
+    func testCloudSaysNothingBeforeThePhoneReported() {
+        XCTAssertNil(PhoneBattery.parseCloud(Data(#"{"pct":-1}"#.utf8), now: Date()))
+    }
+
+    func testTheFreshestReadingWins() {
+        let book = PhoneBatteryBook()
+        let now = Date()
+        book.accept(PhoneBattery(pct: 50, charging: false, readAt: now))
+        book.accept(PhoneBattery(pct: 60, charging: false, readAt: now.addingTimeInterval(-300)))
+        XCTAssertEqual(book.json["pct"] as? Int, 50)
+        book.accept(PhoneBattery(pct: 49, charging: false, readAt: now.addingTimeInterval(1)))
+        XCTAssertEqual(book.json["pct"] as? Int, 49)
+    }
 }

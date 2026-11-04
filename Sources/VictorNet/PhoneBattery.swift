@@ -22,6 +22,15 @@ struct PhoneBattery: Equatable {
         return PhoneBattery(pct: pct, charging: (b["charging"] as? NSNumber)?.boolValue ?? false, readAt: now)
     }
 
+    /// Railway's `{"pct":63,"charging":false,"age_s":120}`; nil from `{"pct":-1}` (never reported).
+    static func parseCloud(_ data: Data, now: Date) -> PhoneBattery? {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let pct = (o["pct"] as? NSNumber)?.intValue, (0...100).contains(pct),
+              let age = (o["age_s"] as? NSNumber)?.doubleValue else { return nil }
+        return PhoneBattery(pct: pct, charging: (o["charging"] as? NSNumber)?.boolValue ?? false,
+                            readAt: now.addingTimeInterval(-age))
+    }
+
     /// `GET /phone/battery`: `{"pct":63,"charging":false,"age_s":120}`, or `{"pct":-1}` when
     /// the phone has not answered since this app started.
     static func json(_ b: PhoneBattery?, now: Date) -> [String: Any] {
@@ -38,7 +47,13 @@ final class PhoneBatteryBook {
 
     func accept(_ data: Data) {
         guard let b = PhoneBattery.parse(data, now: Date()) else { return }
-        lock.lock(); latest = b; lock.unlock()
+        accept(b)
+    }
+
+    /// The freshest wins: Railway's answer can be older than what just came over Wi-Fi.
+    func accept(_ b: PhoneBattery) {
+        lock.lock(); defer { lock.unlock() }
+        if latest.map({ b.readAt >= $0.readAt }) ?? true { latest = b }
     }
 
     var json: [String: Any] {

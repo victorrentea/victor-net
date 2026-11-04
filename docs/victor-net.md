@@ -201,11 +201,17 @@ lets the music go if the resume never arrives. State: `/test/state` → `media_p
 
 The tablet shows the **phone's** charge in its top bar, not its own (Victor: "the tablet's
 battery is stupid"). The phone's `/status` carries `"battery":{"pct":63,"charging":false}`;
-`PhoneBatteryBook` keeps the last one from **whichever answer arrives** — `PhoneLink` every
-5 s on the hotspot, `PhoneLan` every 10 min on the home Wi-Fi, `PhoneRoamingMonitor` every
-20 min over Bluetooth elsewhere. No Bluetooth poll of its own (Victor chose it over a 5-min
+`PhoneBatteryBook` keeps the **freshest** one from whichever answer arrives — `PhoneLink` every
+5 s on the hotspot, `PhoneLan` every 10 min on the home Wi-Fi, `PhoneCloud` every minute from
+Railway, `PhoneRoamingMonitor` every 20 min over Bluetooth elsewhere. No Bluetooth poll of its own (Victor chose it over a 5-min
 page), so off the hotspot and away from home it can be 20 min old, or hours when the phone's
 Bluetooth is out of reach (4 Nov 2026: 17 h).
+
+**`PhoneCloud`** is the one that works from any network: the phone pushes every change of its
+percentage to Railway, plus a keep-alive every 10 min (`BatteryRelay.kt` in
+`victor-phone-addons`; without it a phone lying still would read as stale), and this asks
+`RELAY_URL/api/phone-battery` once a minute, except on the hotspot, where the phone is at hand.
+It needs `RELAY_URL` and `RELAY_TOKEN` (the tablet bridge's token) in `config.env`.
 
 **`PhoneLan`** asks `/status` on the phone's Wi-Fi address, a poll of its own: once in 10 min
 (Victor: no more often), on arrival at most once a minute. The address is found by asking the

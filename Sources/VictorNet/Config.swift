@@ -6,6 +6,8 @@ import Foundation
 /// ```
 /// PHONE_BT_ADDRESS=a1-b2-c3-d4-e5-f6   # the phone, as System Settings › Bluetooth shows it
 /// HOTSPOT_SSID=my-phone                # the phone's hotspot network
+/// RELAY_URL=https://relay.example      # optional: read the phone's battery from there
+/// RELAY_TOKEN=…
 /// PREFERRED_SSID=my-home               # optional: on the hotspot with this in range, move to it
 /// HOME_COUNTRY=RO                      # ISO code; abroad + on the hotspot = roaming data
 /// HOME_TIMEZONE=Europe/Bucharest
@@ -23,6 +25,9 @@ enum Config {
     static let values: [String: String] = load()
 
     static var phoneBluetoothAddress: String { values["PHONE_BT_ADDRESS"] ?? "" }
+    /// Where the phone parks its battery, and the token to read it; empty = never asked.
+    static var relayURL: String { values["RELAY_URL"] ?? "" }
+    static var relayToken: String { values["RELAY_TOKEN"] ?? "" }
     static var hasPhone: Bool { !phoneBluetoothAddress.isEmpty }
     static var hotspotSSID: String { values["HOTSPOT_SSID"] ?? "" }
     static var preferredSSID: String { values["PREFERRED_SSID"] ?? "" }

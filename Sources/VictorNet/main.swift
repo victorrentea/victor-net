@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let roaming = PhoneRoamingMonitor()
     private let phoneBattery = PhoneBatteryBook()
     private let phoneLan = PhoneLan()
+    private let phoneCloud = PhoneCloud()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
@@ -91,6 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
         phoneLan.start()
+        phoneCloud.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        phoneCloud.onReading = { [weak self] b in self?.phoneBattery.accept(b) }
+        phoneCloud.start()
         hotspot.start()
         menu.onOpen = { [weak self] in self?.hotspot.menuOpened() }
         preferredWifi.start()
@@ -121,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["traffic"] = self.traffic.stateJSON
                 o["phone"] = self.phone.stateJSON
                 o["phone_lan"] = self.phoneLan.stateJSON
+                o["phone_cloud"] = self.phoneCloud.stateJSON
                 o["roaming"] = self.roaming.diagnosticsJSON
                 o["preferred_wifi"] = self.preferredWifi.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
