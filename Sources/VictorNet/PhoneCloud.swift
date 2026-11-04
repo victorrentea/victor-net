@@ -47,7 +47,7 @@ final class PhoneCloud {
                     self.lastError = nil
                     self.onReading?(reading)
                 } else {
-                    let why = error?.localizedDescription ?? status.map { "HTTP \($0)" } ?? "no answer"
+                    let why = error?.localizedDescription ?? (status == 200 ? "the phone has not reported yet" : status.map { "HTTP \($0)" }) ?? "no answer"
                     if why != self.lastError { netInfo("🔋 phone battery from the relay: \(why)") }
                     self.lastError = why
                 }
