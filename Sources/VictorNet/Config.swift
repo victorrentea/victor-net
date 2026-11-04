@@ -25,6 +25,7 @@ enum Config {
     static var phoneBluetoothAddress: String { values["PHONE_BT_ADDRESS"] ?? "" }
     static var hasPhone: Bool { !phoneBluetoothAddress.isEmpty }
     static var hotspotSSID: String { values["HOTSPOT_SSID"] ?? "" }
+    static var preferredSSID: String { values["PREFERRED_SSID"] ?? "" }
     static var wifiInterface: String { values["WIFI_INTERFACE"] ?? "en0" }
     static var homeCountry: String { values["HOME_COUNTRY"] ?? Locale.current.region?.identifier ?? "" }
     static var homeTimeZone: String { values["HOME_TIMEZONE"] ?? TimeZone.current.identifier }

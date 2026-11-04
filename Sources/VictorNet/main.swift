@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
     private let phoneBattery = PhoneBatteryBook()
+    private let phoneLan = PhoneLan()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
@@ -86,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
         roaming.start()
+        phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        phoneLan.ssid = { [weak self] in self?.net.ssid }
+        phoneLan.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
+        phoneLan.start()
         hotspot.start()
         menu.onOpen = { [weak self] in self?.hotspot.menuOpened() }
         preferredWifi.start()
@@ -115,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["network"] = self.net.stateJSON
                 o["traffic"] = self.traffic.stateJSON
                 o["phone"] = self.phone.stateJSON
+                o["phone_lan"] = self.phoneLan.stateJSON
                 o["roaming"] = self.roaming.diagnosticsJSON
                 o["preferred_wifi"] = self.preferredWifi.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
