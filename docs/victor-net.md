@@ -55,7 +55,7 @@ best last hour, MB/s        ↓     ↑   ping  seen   ← click = test the spee
 ✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
   wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
 ((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
-› More                       ◌ searching             ← click: all others unfold below, live
+More…                   ◌                      ›   ← submenu: all others in range, live
 ──────────
 ↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
 ✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
@@ -70,16 +70,15 @@ Quit                                                ← no ⌘Q: its column wide
 - **Rows are drawn views** (`MenuRows.swift`): fixed-x columns that line up whatever the
   names (tab stops in a title could not), a rounded highlight under the pointer, a click that
   acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
-- **More unfolds in place** (`toggleOthers`; "Other Networks" until 2026-10-21): rows inserted
-  below it while the menu stays open, rescanned back to back, gone when the menu closes (or on a
-  second click); 🔒 = secured. A secured network this Mac does not know asks for its password in
+- **More is a submenu** ("Other Networks" until 2026-10-21; unfolded inline until 2026-11-05):
+  its rows follow the scans while it is open, redrawn only when the list changed; 🔒 = secured. A secured network this Mac does not know asks for its password in
   the app's own dialog: big type, the password **in clear by default**, a "Hide password" box
   (Victor, 2026-10-21; handing over to System Settings › Wi-Fi was tried and rejected).
 - **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*): on
-  the More row's right, a spinner + "searching" while a CoreWLAN scan is in flight, then
-  "N in range · Ns ago". More is grey, folded or not. Scans run only while the menu is open,
-  back to back (a new one once the last is over, at most every 2 s from its start), folded or
-  not — never in the background (a scan takes ~5 s and briefly stalls the link).
+  the More row's right, a spinner alone while a CoreWLAN scan is in flight, then
+  "N in range · Ns ago". Scans run only while the menu is open,
+  back to back (a new one once the last is over, at most every 2 s from its start), submenu
+  open or not — never in the background (a scan takes ~5 s and briefly stalls the link).
   `GET /test/state` → `network.scan`; `GET /test/more-row` draws the row in both states.
 
 - **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the

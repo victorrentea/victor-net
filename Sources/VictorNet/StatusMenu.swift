@@ -112,10 +112,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         net.onScan = nil
-        othersExpanded = false
         rescanTimer?.invalidate()
         rescanTimer = nil
-        otherRows = []
         networkItems = []
     }
 
@@ -196,9 +194,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         refreshOthers()
     }
 
-    private var othersExpanded = false
-    private var othersAnchor: NSMenuItem?
-    private var otherRows: [NSMenuItem] = []
+    private weak var othersMenu: NSMenu?
+    private var othersDrawn: String?
     private var rescanTimer: Timer?
 
     /// The networks worth comparing — every Wi-Fi in range this Mac knows or has
@@ -268,26 +265,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return items
     }
 
-    /// "› More" — a click unfolds every other Wi-Fi in range right below it, as
-    /// macOS does ("Other Networks"; renamed by Victor, 2026-10-21), and folds them
-    /// back. On its right, proof that it is really looking: a spinner while a scan
-    /// runs, then how many networks it saw and how long ago.
+    /// "More…" — a real submenu with every other Wi-Fi in range (Victor,
+    /// 2026-11-05; it unfolded inline until then), redrawn as the scans come in.
+    /// On its right, proof that it is really looking: a spinner while a scan runs,
+    /// then how many networks it saw and how long ago.
     private func otherNetworksRow() -> NSMenuItem {
-        let item = NSMenuItem(view: moreRowView())
-        othersAnchor = item
-        return item
-    }
-
-    private func moreRowView() -> MenuRowView {
-        // The disclosure chevron up front, where the icons are (Victor, 2026-10-20).
-        // Grey, folded or not, like a section label (Victor, 2026-10-21); still clickable.
-        let row = MenuRowView(name: "More…", icon: NSImage(systemSymbolName: othersExpanded ? "chevron.down" : "chevron.right",
-                                                          accessibilityDescription: nil), dimmed: true)
-        row.keepsMenuOpen = true
-        row.onClick = { [weak self] in self?.toggleOthers() }
+        let row = MenuRowView(name: "More…",
+                              trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
+        row.statusRightInset = MenuRowLayout.chevronInset
         moreRow = row
         updateMoreStatus()
-        return row
+        let item = NSMenuItem(view: row)
+        let others = NSMenu()
+        others.autoenablesItems = false
+        item.submenu = others
+        othersMenu = others
+        othersDrawn = nil
+        refreshOthers()
+        return item
     }
 
     private weak var moreRow: MenuRowView?
@@ -295,7 +290,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func updateMoreStatus() {
         guard let row = moreRow else { return }
         if net.scanning {
-            row.setStatus("searching", spinning: true)
+            row.setStatus("", spinning: true)
         } else if let l = net.lastScan {
             let ago = Int(Date().timeIntervalSince(l.at))
             row.setStatus(l.error != nil ? "scan failed" : "\(l.found) in range · \(ago < 2 ? "now" : "\(ago)s ago")",
@@ -305,21 +300,32 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    private func toggleOthers() {
-        guard let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) else { return }
-        othersExpanded.toggle()
-        anchor.view = moreRowView()
-        if othersExpanded {
-            othersIndex = i + 1
-            net.scanInBackground()
-            refreshOthers()
-        } else {
-            otherRows.forEach { menu.removeItem($0) }
-            otherRows = []
+    /// Redrawn only when the list changed: replacing a row takes the highlight off
+    /// the one under the pointer.
+    private func refreshOthers() {
+        guard let othersMenu else { return }
+        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
+            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
+        let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
+        let drawn = "\(net.wifiPower)|" + others.map {
+            "\($0.ssid)|\(NetworkLookPolicy.strength(rssi: $0.rssi))|\($0.secure)"
+        }.joined(separator: "|")
+        guard drawn != othersDrawn else { return }
+        othersDrawn = drawn
+        netInfo("🛜 More: \(others.count) other networks in range")
+        othersMenu.removeAllItems()
+        if others.isEmpty {
+            othersMenu.addItem(NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off",
+                                                            enabled: false, dimmed: true)))
+        }
+        for n in others {
+            let lock = n.secure ? NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "secured") : nil
+            let row = MenuRowView(name: n.ssid, icon: Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi)),
+                                  trailing: lock)
+            row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
+            othersMenu.addItem(NSMenuItem(view: row))
         }
     }
-
-    private var othersIndex = 0
 
     /// *Start Hotspot*: a click asks the phone now, whatever the automatic
     /// path thinks. Its right corner tells what the automatic path is doing, every
@@ -349,27 +355,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let status = HotspotRowPolicy.status(p, now: Date())
         row.setStatus(status.text, spinning: status.spinning)
         row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }
-    }
-
-    private func refreshOthers() {
-        guard othersExpanded else { return }
-        otherRows.forEach { menu.removeItem($0) }
-        otherRows = []
-        if let anchor = othersAnchor, let i = menu.items.firstIndex(of: anchor) { othersIndex = i + 1 }
-        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
-            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
-        let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
-        let rows: [NSMenuItem] = others.isEmpty
-            ? [NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off", enabled: false, dimmed: true))]
-            : others.map { n in
-                let lock = n.secure ? NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "secured") : nil
-                let row = MenuRowView(name: n.ssid, icon: Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi)),
-                                      trailing: lock)
-                row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
-                return NSMenuItem(view: row)
-            }
-        for (k, r) in rows.enumerated() { menu.insertItem(r, at: min(othersIndex + k, menu.items.count)) }
-        otherRows = rows
     }
 
     private func join(_ ssid: String, password: String?) {
@@ -503,22 +488,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// `GET /test/menu/open?close=N` — open as a click would, closing itself:
     /// the close is armed before opening, since nothing else reaches the main
     /// thread while the menu tracks.
-    func openForTest(closeAfter seconds: TimeInterval, unfoldMore: Bool = false) {
+    func openForTest(closeAfter seconds: TimeInterval) {
         let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in self?.menu.cancelTracking() }
         RunLoop.main.add(timer, forMode: .common)
-        if unfoldMore {
-            let unfold = Timer(timeInterval: 0.5, repeats: false) { [weak self] _ in self?.toggleOthers() }
-            RunLoop.main.add(unfold, forMode: .common)
-        }
         statusItem.button?.performClick(nil)
     }
 
-    /// `GET /test/more-row` — the "More" row drawn off-screen, searching and done,
+    /// `GET /test/more-row` — the rows with a status drawn off-screen, in each state,
     /// on a light and a dark menu, to look at without opening the menu.
     func renderMoreRowForTest() -> String? {
         let w = MenuRowLayout.width, h = MenuRowLayout.height
         let rows: [(name: String, status: String, spinning: Bool)] = [
-            ("More…", "searching", true), ("More…", "14 in range · 3s ago", false),
+            ("More…", "", true), ("More…", "14 in range · 3s ago", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
             ("Start Hotspot", "retrying in 23s", false),
         ]
@@ -531,8 +512,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             pane.appearance = NSAppearance(named: name)
             for (k, r) in rows.enumerated() {
                 let row = r.name == "More…"
-                    ? MenuRowView(name: r.name, icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
+                    ? MenuRowView(name: r.name, trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
                     : MenuRowView(name: r.name, icon: Icons.hotspot())
+                if r.name == "More…" { row.statusRightInset = MenuRowLayout.chevronInset }
                 row.setStatus(r.status, spinning: r.spinning)
                 row.frame.origin = NSPoint(x: 0, y: CGFloat(rows.count - 1 - k) * h)
                 pane.addSubview(row)

@@ -168,8 +168,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onMain { path = self.menu?.renderIconForTest(wired: query["wired"] == "1") ?? "" }
             return (200, HttpServer.json(["png": path]))
         case "/test/menu/open":
-            let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 10)
-            DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs, unfoldMore: query["more"] == "1") }
+            let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 30)
+            DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs) }
             return (200, "{\"ok\":true}")
         default:
             return (404, "{\"error\":\"not found\"}")

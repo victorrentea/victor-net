@@ -214,12 +214,16 @@ final class NetworkState {
                 error = e.localizedDescription
             }
             self?.readWifi()
-            DispatchQueue.main.async {
+            // Through the run loop, not `DispatchQueue.main`: nothing reaches that
+            // while a submenu tracks, so the scan would stay "running" and More's
+            // list would freeze for as long as it is open.
+            RunLoop.main.perform(inModes: [.common]) {
                 guard let self else { return }
                 self.scanning = false
                 self.lastScan = (Date(), Date().timeIntervalSince(began), found, error)
                 self.onScan?()
             }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
         }
     }
 

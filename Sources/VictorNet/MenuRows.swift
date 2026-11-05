@@ -17,11 +17,13 @@ enum MenuRowLayout {
     /// one cell saves the width three would take), then "seen".
     static let columnRights: [CGFloat] = [262, 308]
     static let columnWidths: [CGFloat] = [122, 42]
+    /// A row's status, clear of the chevron of a row that has a submenu.
+    static let chevronInset: CGFloat = 30
 }
 
 final class MenuRowView: NSView {
     var onClick: (() -> Void)?
-    /// Keep the menu open after the click (e.g. expanding *More*).
+    /// Keep the menu open after the click (e.g. *Start Hotspot*, to watch it run).
     var keepsMenuOpen = false
     private let enabled: Bool
     private var highlighted = false { didSet { needsDisplay = true; recolor() } }
@@ -83,6 +85,7 @@ final class MenuRowView: NSView {
 
     private var statusLabel: NSTextField?
     private var spinner: NSProgressIndicator?
+    var statusRightInset: CGFloat = 12
 
     /// The row's right corner: a spinning wheel while something runs, a short
     /// note after it ("14 in range · 3s ago"). The wheel animates on its own
@@ -92,7 +95,7 @@ final class MenuRowView: NSView {
             let l = label("", font: .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular),
                           color: .secondaryLabelColor)
             l.alignment = .right
-            add(l, x: MenuRowLayout.width - 12 - 150, width: 150)
+            add(l, x: MenuRowLayout.width - statusRightInset - 150, width: 150)
             statusLabel = l
             let s = NSProgressIndicator()
             s.style = .spinning
@@ -106,7 +109,7 @@ final class MenuRowView: NSView {
         statusLabel?.stringValue = text
         if let l = statusLabel, let s = spinner {
             let w = (text as NSString).size(withAttributes: [.font: l.font as Any]).width
-            s.frame = NSRect(x: MenuRowLayout.width - 12 - w - 20, y: (frame.height - 16) / 2, width: 16, height: 16)
+            s.frame = NSRect(x: MenuRowLayout.width - statusRightInset - w - 20, y: (frame.height - 16) / 2, width: 16, height: 16)
             if spinning { s.startAnimation(nil) } else { s.stopAnimation(nil) }
         }
     }
@@ -145,7 +148,10 @@ final class MenuRowView: NSView {
             onClick()
         } else {
             highlighted = false
-            enclosingMenuItem?.menu?.cancelTracking()
+            // From a submenu too: closes the whole menu, not just that level.
+            var menu = enclosingMenuItem?.menu
+            while let parent = menu?.supermenu { menu = parent }
+            menu?.cancelTracking()
             DispatchQueue.main.async(execute: onClick)
         }
     }
