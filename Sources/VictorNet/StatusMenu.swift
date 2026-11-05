@@ -130,9 +130,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         networkItems.forEach(menu.addItem)
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
+
+        // What this Mac does about networks on its own, under its settings.
+        menu.addItem(.separator())
         let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
         menu.addItem(settings)
+        if Config.hasPhone { addAutoJoinRows() }
 
         // Everything about roaming, together.
         if Config.hasPhone {
@@ -430,6 +434,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let allow = action("Allow Claude on Roaming", #selector(toggleSuspend))
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
         menu.addItem(allow)
+        if let r = roaming.reading {
+            let stop = action("Auto-Stop Hotspot on Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
+            stop.image = Icons.hotspotOff()
+            stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
+            stop.state = r.guardOff ? .off : .on
+            menu.addItem(stop)
+        }
+    }
+
+    /// The two rows that pick a network by themselves, roaming or not.
+    private func addAutoJoinRows() {
         if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
             let prefer = action("Prefer \(home) over \(Config.hotspotSSID)", #selector(togglePreferred))
             prefer.image = Icons.wifi(strength: 1)
@@ -440,13 +455,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         start.image = Icons.hotspot()
         start.state = HotspotFallbackSettings.isEnabled ? .on : .off
         menu.addItem(start)
-        if let r = roaming.reading {
-            let stop = action("Auto-Stop Hotspot on Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
-            stop.image = Icons.hotspotOff()
-            stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
-            stop.state = r.guardOff ? .off : .on
-            menu.addItem(stop)
-        }
     }
 
     private func roamingRow(_ title: String) {

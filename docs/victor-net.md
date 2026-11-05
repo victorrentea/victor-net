@@ -57,13 +57,15 @@ best last hour, MB/s        ↓     ↑   ping  seen   ← click = test the spee
 ((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
 More…                   ◌                      ›   ← submenu: all others in range, live
 ──────────
-↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
-✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
-  ⏸️ Pause Claude on roaming
+⚙ Wi-Fi Settings…
+✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot                          ← Victor's hotspot glyph, drawn
 ──────────
+↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
+✓ Allow Claude on Roaming
+✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
+──────────
 ⚡ Test speed (downloads 10 MB)
-Wi-Fi Settings…
 Quit                                                ← no ⌘Q: its column widened the menu
 ```
 
