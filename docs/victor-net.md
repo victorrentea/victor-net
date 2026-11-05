@@ -54,12 +54,13 @@ best last hour, MB/s        ↓     ↑   ping  seen   ← click = test the spee
 <‐‐> Ethernet                                       ← always listed, greyed without a cable
 ✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
   wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
+((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
 › More                       ◌ searching             ← click: all others unfold below, live
 ──────────
 ↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
-✓ 🔒 Auto-stop hotspot at 1.0 GB left
+✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
   ⏸️ Pause Claude on roaming
-✓ ((o)) Auto-start Mobile Hotspot                   ← Victor's hotspot glyph, drawn
+✓ ((o)) Auto-Start Hotspot                          ← Victor's hotspot glyph, drawn
 ──────────
 ⚡ Test speed (downloads 10 MB)
 Wi-Fi Settings…

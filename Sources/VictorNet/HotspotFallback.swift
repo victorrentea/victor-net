@@ -128,6 +128,9 @@ final class HotspotFallback {
     /// which from the outside is the feature being broken for a minute and a
     /// half with no hotspot and no explanation.
     private static let cooldown: TimeInterval = 45
+    /// Breath after a failed attempt that outlasted `cooldown`, before the phone
+    /// is paged again.
+    private static let retryPause: TimeInterval = 15
     /// A wake is a new room, a new lid-open, a new situation — the exact moment
     /// this feature exists for — so it is not held back by the ordinary floor.
     /// It still gets a small one, because a single wake emits a burst of path
@@ -229,6 +232,9 @@ final class HotspotFallback {
     private var heldUntil = Date.distantPast
     private var attemptInFlight = false
     private var pendingEvaluation: DispatchWorkItem?
+    /// The next automatic attempt, armed once one fails or is held back, so the
+    /// menu's countdown is the real schedule and not a guess at the heartbeat.
+    private var retryWork: DispatchWorkItem?
     private var heartbeatTimer: DispatchSourceTimer?
     /// Transition-only logging: a path change that leaves us online is the
     /// overwhelmingly common case and must not write a line every time.
@@ -246,6 +252,24 @@ final class HotspotFallback {
     /// plus a retry is up to 20 seconds, and the menu bar (and the `/test/*`
     /// HTTP handler, which runs there) must not be held that long.
     private let bluetooth = RunLoopThread(name: "ro.victorrentea.victor-net.bluetooth")
+    private let progressLock = NSLock()
+    private var currentProgress = HotspotProgress()
+    /// `GET /test/hotspot/offline`: until then the probe answers "no internet".
+    private var simulatedOfflineUntil = Date.distantPast
+
+    /// Any thread: the menu reads this while an attempt blocks `queue`.
+    var progress: HotspotProgress { progressLock.withLock { currentProgress } }
+
+    var stateJSON: [String: Any] {
+        let p = progress
+        return ["status": HotspotRowPolicy.status(p, now: Date()).text, "offline": p.offline,
+                "retry_in_s": orNull(p.nextRetryAt.map { HotspotRowPolicy.seconds(until: $0, now: Date()) }),
+                "last_failure": orNull(p.lastFailure)]
+    }
+
+    private func publish(_ change: (inout HotspotProgress) -> Void) {
+        progressLock.withLock { change(&currentProgress) }
+    }
 
     /// The geofence's last location fix — shared rather than a second
     /// `CLLocationManager`, which would ask for the same permission twice.
@@ -273,7 +297,10 @@ final class HotspotFallback {
         // until macOS happens to mention a path change, which it need not ever do.
         let ticker = DispatchSource.makeTimerSource(queue: queue)
         ticker.schedule(deadline: .now() + Self.heartbeat, repeating: Self.heartbeat)
-        ticker.setEventHandler { [weak self] in self?.scheduleEvaluation(reason: "heartbeat") }
+        ticker.setEventHandler { [weak self] in
+            guard let self, self.retryWork == nil else { return }
+            self.scheduleEvaluation(reason: "heartbeat")
+        }
         ticker.resume()
         heartbeatTimer = ticker
 
@@ -350,6 +377,36 @@ final class HotspotFallback {
         }
     }
 
+    /// The menu's *Start Hotspot*: the whole chain now, signal and join,
+    /// past every guard — the probe, the switch, home, the cooldown. Those keep
+    /// the automatic path polite; a click is not the automatic path. Ignored
+    /// while an attempt runs (the row shows it).
+    func startNow() {
+        guard !HotspotRowPolicy.busy(progress) else { return }
+        // Shown at once; `attempt` corrects the deadline once it runs on `queue`.
+        publish { $0.phase = .askingPhone(deadline: Date() + Self.channelOpenBudget) }
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.pendingEvaluation?.cancel()
+            self.pendingEvaluation = nil
+            self.heldUntil = .distantPast
+            netInfo("🛜 Start Hotspot — asking the phone now")
+            self.attempt(forced: true)
+            self.publish { $0.phase = .idle }
+        }
+    }
+
+    /// `GET /test/hotspot/offline` — the probe says "no internet" for `seconds`,
+    /// and the fallback evaluates now: the attempt, its failure and the countdown
+    /// run for real without cutting the link this Mac is working on.
+    func simulateOffline(seconds: TimeInterval) {
+        queue.async { [weak self] in
+            self?.simulatedOfflineUntil = Date() + seconds
+            netInfo("🛜 /test/hotspot/offline — no internet for \(Int(seconds))s")
+        }
+        menuOpened()
+    }
+
     /// `PreferredWifi` moving the Mac off the hotspot on purpose: until then, no
     /// internet is that move in progress, not a reason to join the hotspot back.
     func hold(for seconds: TimeInterval) {
@@ -358,45 +415,105 @@ final class HotspotFallback {
 
     private func evaluate(reason: String) {
         if Date() < heldUntil { return }
+        publish { $0.phase = .checking }
+        defer { publish { $0.phase = .idle } }
         if hasInternet() {
             if lastKnownOnline != true {
                 lastKnownOnline = true
                 netInfo("📶 Online (\(reason)) — hotspot not needed")
             }
+            markOnline()
             return
         }
         lastKnownOnline = false
+        publish { $0.offline = true }
 
         guard HotspotFallbackSettings.isEnabled else {
             netInfo("📵 No internet (\(reason)) — but the hotspot fallback is switched off in the menu")
+            cancelRetry()
             return
         }
         // Asked only once we already know there is no internet: a location fix
         // costs radios and a menu-bar app sees network changes all day.
         if geofence.isAtHome(wait: true) {
             netInfo("🏠 No internet (\(reason)) — but we are at home, so this stays manual")
+            cancelRetry()
             return
         }
 
-        // A wake or an opened menu gets the short floor; everything else the ordinary one.
-        let floor = reason == "wake" || reason == "menu open" ? Self.wakeCooldown : Self.cooldown
+        // A wake or an opened menu gets the short floor, an armed retry already
+        // kept its distance, everything else the ordinary one.
+        let floor = reason == "wake" || reason == "menu open" ? Self.wakeCooldown
+            : reason == "retry" ? 0 : Self.cooldown
         let since = Date().timeIntervalSince(lastAttemptAt)
         guard since >= floor else {
             netInfo("📵 No internet (\(reason)) but only \(Int(since))s of \(Int(floor))s since last attempt — holding")
+            if retryWork == nil { armRetry(at: lastAttemptAt + floor) }
             return
         }
+
+        netInfo("📵 No internet\(reason == "menu open" ? "" : " after \(Int(Self.grace))s") (\(reason)) — asking the phone for its hotspot")
+        attempt(forced: false)
+    }
+
+    /// One run of the chain. `forced` is the menu's click: the Mac may well be
+    /// online on another network, so internet alone does not end it — being on
+    /// the hotspot does.
+    private func attempt(forced: Bool) {
+        cancelRetry()
         lastAttemptAt = Date()
         attemptInFlight = true
         defer { attemptInFlight = false }
 
-        netInfo("📵 No internet\(reason == "menu open" ? "" : " after \(Int(Self.grace))s") (\(reason)) — asking the phone for its hotspot")
-
-        if let err = openChannel() {
-            netError("📵 Hotspot fallback failed — \(err)")
-            return
+        let settle = channel != nil ? Self.reopenSettle : 0
+        publish {
+            $0.lastFailure = nil
+            $0.phase = .askingPhone(deadline: Date() + Self.channelOpenBudget + settle)
         }
-        if waitForInternet(seconds: Self.waitAfterPlainConnect, stage: "rfcomm") { return }
-        netError("📵 Hotspot fallback failed — channel is open but no internet followed")
+        if let err = openChannel() { return attemptFailed(err) }
+        publish { $0.phase = .joining(deadline: Date() + TimeInterval(Self.waitAfterPlainConnect)) }
+        if waitForInternet(seconds: Self.waitAfterPlainConnect, stage: forced ? "menu" : "rfcomm", forced: forced) {
+            return markOnline()
+        }
+        attemptFailed("channel is open but no internet followed")
+    }
+
+    private func attemptFailed(_ why: String) {
+        netError("📵 Hotspot fallback failed — \(why)")
+        publish { $0.lastFailure = why }
+        // A click on a network that works, or with the automatic path off, has
+        // nothing to retry on its own.
+        guard lastKnownOnline == false, HotspotFallbackSettings.isEnabled, !geofence.isAtHome() else { return }
+        armRetry(at: HotspotRowPolicy.nextAttempt(lastStart: lastAttemptAt, ended: Date(),
+                                                  cooldown: Self.cooldown, pause: Self.retryPause))
+    }
+
+    private func markOnline() {
+        cancelRetry()
+        publish {
+            $0.offline = false
+            $0.lastFailure = nil
+        }
+    }
+
+    private func armRetry(at date: Date) {
+        retryWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.retryWork = nil
+            self.publish { $0.nextRetryAt = nil }
+            self.evaluate(reason: "retry")
+        }
+        retryWork = work
+        publish { $0.nextRetryAt = date }
+        // Wall clock: a countdown that ran out during sleep fires on wake.
+        queue.asyncAfter(wallDeadline: .now() + max(0, date.timeIntervalSinceNow), execute: work)
+    }
+
+    private func cancelRetry() {
+        retryWork?.cancel()
+        retryWork = nil
+        publish { $0.nextRetryAt = nil }
     }
 
     /// Polls once a second, and from the 6th second on also *asks* to join the
@@ -441,7 +558,7 @@ final class HotspotFallback {
     /// after the signal, and the Mac sat there not asking to join it for another
     /// **25 s** — three quarters of the whole recovery, spent waiting on a
     /// counter that was lying about what it counted.
-    private func waitForInternet(seconds: Int, stage: String) -> Bool {
+    private func waitForInternet(seconds: Int, stage: String, forced: Bool) -> Bool {
         let began = Date()
         var lastJoinError: String?
         var nextJoinAt: TimeInterval = Self.firstJoinAfter
@@ -449,7 +566,9 @@ final class HotspotFallback {
 
         while elapsed() < Double(seconds) {
             Thread.sleep(forTimeInterval: 1)
-            if hasInternet() {
+            // nil: CoreWLAN cannot say, so internet is the only evidence left.
+            let arrived = !forced || (Self.currentSSID() ?? Self.hotspotSSID) == Self.hotspotSSID
+            if arrived, hasInternet() {
                 lastKnownOnline = true
                 netInfo("📶 Online after \(Int(elapsed()))s (\(stage))")
                 return true
@@ -578,6 +697,7 @@ final class HotspotFallback {
     /// refuse one handshake and answer the next. So `probeConfirmations`
     /// failures in a row are required, `probeGap` apart.
     private func hasInternet() -> Bool {
+        if Date() < simulatedOfflineUntil { return false }
         for attempt in 1...Self.probeConfirmations {
             if probeOnce() { return true }
             if attempt < Self.probeConfirmations { Thread.sleep(forTimeInterval: Self.probeGap) }

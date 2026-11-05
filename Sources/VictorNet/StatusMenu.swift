@@ -4,7 +4,7 @@ import AppKit
 /// native tick — one ticked row makes AppKit reserve a check column for the
 /// whole menu and nudges every row's emoji to the right.
 enum HotspotMenu {
-    static func title(enabled: Bool) -> String { "🛜 Auto-start Mobile Hotspot" + (enabled ? "  ✓" : "") }
+    static func title(enabled: Bool) -> String { "🛜 Auto-Start Hotspot" + (enabled ? "  ✓" : "") }
 }
 
 enum RoamingSuspendMenu {
@@ -32,6 +32,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let traffic: TrafficMonitor
     private let phone: PhoneLink
     private let roaming: PhoneRoamingMonitor
+    private let hotspot: HotspotFallback
     private var hotspotCounter = InterfaceByteCounter()
     private var lastAskedAt = Date.distantPast
 
@@ -39,11 +40,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// The menu just opened — offline, that is when to ask the phone for its hotspot.
     var onOpen: (() -> Void)?
 
-    init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor) {
+    init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor, hotspot: HotspotFallback) {
         self.net = net
         self.traffic = traffic
         self.phone = phone
         self.roaming = roaming
+        self.hotspot = hotspot
         super.init()
         statusItem.autosaveName = "victorNet"
         menu.delegate = self
@@ -98,6 +100,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.updateMoreStatus()
+            self.updateHotspotRow()
             self.refreshNetworksIfChanged()
             if !self.net.scanning, Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= 2 {
                 self.net.scanInBackground()
@@ -127,6 +130,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         networkItems = networkSection()
         networkItems.forEach(menu.addItem)
+        if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
         let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
@@ -317,6 +321,36 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private var othersIndex = 0
 
+    /// *Start Hotspot*: a click asks the phone now, whatever the automatic
+    /// path thinks. Its right corner tells what the automatic path is doing, every
+    /// second: the attempt running, or how long until the next one (Victor,
+    /// 2026-11-05). The menu stays open, to watch it.
+    private func startHotspotRow() -> NSMenuItem {
+        let row = MenuRowView(name: "Start Hotspot", icon: Icons.hotspot())
+        row.keepsMenuOpen = true
+        row.onClick = { [weak self] in
+            self?.hotspot.startNow()
+            self?.updateHotspotRow()
+        }
+        let item = NSMenuItem(view: row)
+        hotspotRow = row
+        hotspotItem = item
+        updateHotspotRow()
+        return item
+    }
+
+    private weak var hotspotRow: MenuRowView?
+    private weak var hotspotItem: NSMenuItem?
+
+    private func updateHotspotRow() {
+        guard let row = hotspotRow, let item = hotspotItem else { return }
+        let p = hotspot.progress
+        item.isHidden = !HotspotRowPolicy.visible(p, onHotspot: net.onHotspot)
+        let status = HotspotRowPolicy.status(p, now: Date())
+        row.setStatus(status.text, spinning: status.spinning)
+        row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }
+    }
+
     private func refreshOthers() {
         guard othersExpanded else { return }
         otherRows.forEach { menu.removeItem($0) }
@@ -417,14 +451,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             prefer.state = PreferredWifiSettings.isEnabled ? .on : .off
             menu.addItem(prefer)
         }
-        let start = action("Auto-Start Mobile Hotspot", #selector(toggleHotspot))
+        let start = action("Auto-Start Hotspot", #selector(toggleHotspot))
         start.image = Icons.hotspot()
         start.state = HotspotFallbackSettings.isEnabled ? .on : .off
         menu.addItem(start)
         if let r = roaming.reading {
-            let stop = action("Auto-Stop Mobile Hotspot Below \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB"
-                              + (r.guardOff ? " (off until reset)" : ""), #selector(toggleGuard))
+            let stop = action("Auto-Stop Hotspot on Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
             stop.image = Icons.hotspotOff()
+            stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
             stop.state = r.guardOff ? .off : .on
             menu.addItem(stop)
         }
@@ -483,17 +517,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// on a light and a dark menu, to look at without opening the menu.
     func renderMoreRowForTest() -> String? {
         let w = MenuRowLayout.width, h = MenuRowLayout.height
-        let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: h * 2))
+        let rows: [(name: String, status: String, spinning: Bool)] = [
+            ("More…", "searching", true), ("More…", "14 in range · 3s ago", false),
+            ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
+            ("Start Hotspot", "retrying in 23s", false),
+        ]
+        let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: h * CGFloat(rows.count)))
         for (i, name) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
-            let pane = NSBox(frame: NSRect(x: CGFloat(i) * w, y: 0, width: w, height: h * 2))
+            let pane = NSBox(frame: NSRect(x: CGFloat(i) * w, y: 0, width: w, height: board.frame.height))
             pane.boxType = .custom
             pane.borderWidth = 0
             pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
             pane.appearance = NSAppearance(named: name)
-            for (k, spinning) in [true, false].enumerated() {
-                let row = MenuRowView(name: "More…", icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
-                row.setStatus(spinning ? "searching" : "14 in range · 3s ago", spinning: spinning)
-                row.frame.origin = NSPoint(x: 0, y: CGFloat(1 - k) * h)
+            for (k, r) in rows.enumerated() {
+                let row = r.name == "More…"
+                    ? MenuRowView(name: r.name, icon: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil), dimmed: true)
+                    : MenuRowView(name: r.name, icon: Icons.hotspot())
+                row.setStatus(r.status, spinning: r.spinning)
+                row.frame.origin = NSPoint(x: 0, y: CGFloat(rows.count - 1 - k) * h)
                 pane.addSubview(row)
             }
             board.addSubview(pane)

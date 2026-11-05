@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
 
         net.refresh()
-        let menu = StatusMenu(net: net, traffic: traffic, phone: phone, roaming: roaming)
+        let menu = StatusMenu(net: net, traffic: traffic, phone: phone, roaming: roaming, hotspot: hotspot)
         self.menu = menu
 
         traffic.currentNetwork = { [weak self] in self?.net.network }
@@ -128,11 +128,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["phone_cloud"] = self.phoneCloud.stateJSON
                 o["roaming"] = self.roaming.diagnosticsJSON
                 o["preferred_wifi"] = self.preferredWifi.stateJSON
+                o["hotspot"] = self.hotspot.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":
             return (200, hotspot.forceAttemptJSON())
+        case "/test/hotspot/start":
+            // The menu's "Start Hotspot", as a click would.
+            hotspot.startNow()
+            return (200, HttpServer.json(hotspot.stateJSON))
+        case "/test/hotspot/offline":
+            hotspot.simulateOffline(seconds: min(max(Double(query["s"] ?? "") ?? 80, 1), 300))
+            return (200, "{\"ok\":true}")
         case "/test/roaming":
             roaming.pollNow()
             return (200, roaming.diagnosticsJSON)

@@ -125,7 +125,7 @@ enum Icons {
         return image
     }
 
-    /// The hotspot glyph struck through — "Auto-Stop Mobile Hotspot".
+    /// The hotspot glyph struck through — "Auto-Stop Hotspot on Roaming".
     static func hotspotOff() -> NSImage? {
         guard let base = hotspot() else { return nil }
         let image = NSImage(size: base.size, flipped: false) { r in

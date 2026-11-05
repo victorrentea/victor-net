@@ -432,9 +432,39 @@ or `hold` from `PreferredWifi` → nothing; an attempt in flight → nothing. Th
 is the short one (`wakeCooldown`, 10 s), as on wake, so opening the menu repeatedly
 cannot page the phone in a loop — but neither does the 45 s floor make a click wait.
 
+## Start Hotspot, with the countdown (5 Nov 2026)
+
+Victor: *„să-mi permită din meniu să forțeze o conectare prin Bluetooth la telefon și
+inițierea hotspotului … să am un countdown: retrying to open hotspot"*. A row under the
+networks, hidden only on a working hotspot. Its right corner is the automatic path's state,
+refreshed every second with the menu open:
+
+| right corner | meaning |
+|---|---|
+| ◌ `asking phone 38s` | page + SDP + channel open, what is left of the 40 s budget |
+| ◌ `joining 47s` | signal delivered; waiting for the hotspot, what is left of the 60 s |
+| ◌ `checking` | offline, the probe is running (~9 s) |
+| `retrying in 23s` | offline, the next automatic attempt |
+| nothing | online, or offline with no attempt coming (🛜 off, at home) |
+
+A click runs the whole chain now (`HotspotFallback.startNow`) past every guard: probe, switch,
+home, cooldown. It works online too, so internet alone does not end it: the Mac has to be on
+the hotspot. The menu stays open. Why the last attempt failed is the row's tooltip. At home,
+**Prefer <home>** still takes the Mac back within ~90 s; untick it to stay on the hotspot.
+
+**The countdown is the schedule, not a guess at it.** The next attempt used to be whatever the
+60 s heartbeat produced: a heartbeat firing during an attempt waited in the queue and ran right
+after it. Now a failed or held-back attempt arms `retryWork` at
+`max(start + 45 s, end + 15 s)` and the heartbeat stands aside while one is armed. A network
+change, a wake or the menu opening can still attempt earlier, which cancels it.
+
+`GET /test/hotspot/start` = the click; `GET /test/hotspot/offline?s=80` makes the probe say "no
+internet", so attempt, failure and countdown run without cutting the link; progress is in
+`/test/state` → `hotspot`.
+
 ## Starting it by hand: 📱 Start Victor Phone Hotspot Now
 
-> **Removed on 2026-09-23** (Victor: *"șterge, rămâne pe auto"*) — the row, `onHotspotNow` and `HotspotFallback.triggerNow`. The automatic fallback is the only path; what follows is history.
+> **Removed on 2026-09-23** (Victor: *"șterge, rămâne pe auto"*) — the row, `onHotspotNow` and `HotspotFallback.triggerNow`. **Back on 2026-11-05 in Victor Net's menu**, see above; what follows is history.
 
 **💬 → 👩🏻‍💻 Extra → 📱 Start Victor Phone Hotspot Now**, right under the toggle.
 
