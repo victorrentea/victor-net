@@ -60,12 +60,13 @@ More…                   ◌                      ›   ← submenu: all others
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot                          ← Victor's hotspot glyph, drawn
+⚡ Test speed (downloads 10 MB)
 ──────────
 ↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
 ✓ Allow Claude on Roaming
 ✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
-⚡ Test speed (downloads 10 MB)
+Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu
 ```
 

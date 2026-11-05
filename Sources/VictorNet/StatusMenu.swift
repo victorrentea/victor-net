@@ -131,12 +131,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
 
-        // What this Mac does about networks on its own, under its settings.
+        // Everything about the network that is not roaming, under its settings.
         menu.addItem(.separator())
         let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
         menu.addItem(settings)
         if Config.hasPhone { addAutoJoinRows() }
+        menu.addItem(action(speedTitle(), #selector(speedTestAction)))
 
         // Everything about roaming, together.
         if Config.hasPhone {
@@ -145,7 +146,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(action(speedTitle(), #selector(speedTestAction)))
         menu.addItem(info("Built \(BuildInfo.time)"))
         // No ⌘Q shown: its column made the whole menu wider for nothing.
         menu.addItem(action("Quit", #selector(quitAction)))
