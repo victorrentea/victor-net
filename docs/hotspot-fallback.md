@@ -129,6 +129,17 @@ The fix is in `HotspotFallback.ChannelOpener` (since 25 Sep 2026 `PhoneChannelOp
 - on refusal, the SDP query is re-run and the open retried **once** with whatever
   channel the phone is on now.
 
+**A refusal is not always reported.** On 5 Nov 2026 the phone moved from channel
+11 while the Mac kept the link up, so every SDP query was answered from the cache.
+The phone's log refused each open (`PORT_ParNegInd: port not found, dlci=22`, and
+DLCI is channel × 2), yet `rfcommChannelOpenComplete` never fired: 58 hotspot
+requests over 4 hours ended as "the phone never answered the channel open", with
+no retry. Disconnecting the link by hand cured it in one poll. So an open now gets
+8 s, and silence is treated as a refusal: drop the link, re-read the record, retry.
+`GET /test/roaming/stale/<n>` stages it, with the link warm and a channel nobody
+listens on. The phone's "last contact" counts Bluetooth only, so it goes quiet here
+while the hotspot's HTTP traffic carries on.
+
 **IOBluetooth's callbacks need a run loop**, and they are delivered on the run
 loop of the thread that *started* the operation. `HotspotFallback`'s work queue
 is a `DispatchQueue` and has none — which is why the callbacks could not have

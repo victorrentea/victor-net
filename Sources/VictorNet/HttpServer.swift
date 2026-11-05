@@ -11,6 +11,7 @@ import Network
 ///   GET /test/state                    → network, icon, traffic, phone link
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state
+///   GET /test/roaming/stale/<n>        → the same, but open channel <n> first, as a stale SDP cache would
 ///   GET /test/roaming/simulate/<pct>   → pretend <pct>% is left (`off` clears)
 ///   GET /test/vodafone/ask             → the menu's "Ask Vodafone" (*123#, over Bluetooth off the hotspot)
 ///   GET /test/more-row                 → the "More" row (searching / done) drawn to a PNG

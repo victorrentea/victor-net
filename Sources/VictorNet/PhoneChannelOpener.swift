@@ -32,6 +32,27 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
     /// the phone is genuinely unreachable.
     private static let sdpTimeout: TimeInterval = 15
 
+    /// How long an open gets to report back, either way. It answers in 0.2 s
+    /// when the channel is right. When it is wrong and the link is up, macOS may
+    /// never call `rfcommChannelOpenComplete` at all: 5 Nov 2026, 58 hotspot
+    /// requests sent to channel 11 while the phone had moved on, each refused
+    /// on the phone and each silent here until the 40 s budget ran out.
+    private static let openTimeout: TimeInterval = 8
+
+    /// `GET /test/roaming/stale/<n>`: the next open uses this channel instead of
+    /// the record's, which is the only way to stage a stale SDP cache on demand.
+    private static let staleLock = NSLock()
+    private static var staleChannel: BluetoothRFCOMMChannelID?
+    static func useStaleChannelOnce(_ id: BluetoothRFCOMMChannelID) {
+        staleLock.lock(); defer { staleLock.unlock() }
+        staleChannel = id
+    }
+    private static func takeStaleChannel() -> BluetoothRFCOMMChannelID? {
+        staleLock.lock(); defer { staleLock.unlock() }
+        defer { staleChannel = nil }
+        return staleChannel
+    }
+
     private let device: IOBluetoothDevice
     private let service: IOBluetoothSDPUUID
     /// For the log and the error texts only ("SPP", "roaming status").
@@ -47,6 +68,7 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
     /// stop trusting a channel number that has gone stale.
     private var triesLeft = 2
     private var sdpWatchdog: Timer?
+    private var openWatchdog: Timer?
 
     init(device: IOBluetoothDevice, service: IOBluetoothSDPUUID, serviceName: String,
          report: @escaping (Outcome) -> Void) {
@@ -61,6 +83,8 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
     private func finish(_ outcome: Outcome) {
         sdpWatchdog?.invalidate()
         sdpWatchdog = nil
+        openWatchdog?.invalidate()
+        openWatchdog = nil
         let r = report
         report = nil
         r?(outcome)
@@ -122,17 +146,40 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
         guard rec.getRFCOMMChannelID(&chID) == kIOReturnSuccess, chID != 0 else {
             return finish(.failed("the \(serviceName) record carries no RFCOMM channel number"))
         }
-        channelID = chID
+        channelID = Self.takeStaleChannel() ?? chID
 
         var ch: IOBluetoothRFCOMMChannel?
-        let r = self.device.openRFCOMMChannelAsync(&ch, withChannelID: chID, delegate: self)
+        let r = self.device.openRFCOMMChannelAsync(&ch, withChannelID: channelID, delegate: self)
         guard r == kIOReturnSuccess, let ch else {
-            return finish(.failed("openRFCOMMChannelAsync failed on channel \(chID) (\(r))"))
+            return finish(.failed("openRFCOMMChannelAsync failed on channel \(channelID) (\(r))"))
         }
         channel = ch
+        openWatchdog = Timer.scheduledTimer(withTimeInterval: Self.openTimeout, repeats: false) { [weak self] _ in
+            self?.openNeverAnswered()
+        }
+    }
+
+    /// Same cure as a refusal, for the refusal macOS never reports.
+    private func openNeverAnswered() {
+        netInfo("📵 channel \(channelID) never answered in \(Int(Self.openTimeout))s — dropping the link to re-read the phone's SDP record")
+        // Cleared first: closing it may deliver a late verdict, which must not retry too.
+        let abandoned = channel
+        channel = nil
+        abandoned?.close()
+        dropLinkAndRequery()
+    }
+
+    private func dropLinkAndRequery() {
+        channel = nil
+        device.closeConnection()
+        querySDP()
     }
 
     func rfcommChannelOpenComplete(_ ch: IOBluetoothRFCOMMChannel!, status: IOReturn) {
+        // A verdict on a channel the watchdog already gave up on.
+        guard let ch, ch === channel else { return }
+        openWatchdog?.invalidate()
+        openWatchdog = nil
         guard status == kIOReturnSuccess else {
             // Re-querying on its own would not help: with the link up, macOS
             // answers an SDP query out of its own cache in 0.0 s — the same
@@ -140,11 +187,8 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
             // link has to go down and come back for the record to be fetched
             // from the phone again.
             netInfo("📵 channel \(channelID) refused (\(status)) — dropping the link to re-read the phone's SDP record")
-            channel = nil
-            device.closeConnection()
-            return querySDP()
+            return dropLinkAndRequery()
         }
-        guard let ch else { return finish(.failed("channel opened with no channel object")) }
         finish(.opened(ch, channelID))
     }
 

@@ -136,6 +136,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "/test/roaming":
             roaming.pollNow()
             return (200, roaming.diagnosticsJSON)
+        case let p where p.hasPrefix("/test/roaming/stale/"):
+            guard let ch = UInt8(p.dropFirst("/test/roaming/stale/".count)) else { return (400, "channel number") }
+            PhoneChannelOpener.useStaleChannelOnce(ch)
+            roaming.pollNow()
+            return (200, roaming.diagnosticsJSON)
         case let p where p.hasPrefix("/test/roaming/simulate/"):
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
