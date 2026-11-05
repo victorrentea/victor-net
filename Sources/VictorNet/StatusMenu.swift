@@ -137,7 +137,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
         menu.addItem(settings)
         if Config.hasPhone { addAutoJoinRows() }
-        menu.addItem(action(speedTitle(), #selector(speedTestAction)))
+        let speed = action(speedTitle(), #selector(speedTestAction))
+        speed.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "Speed test")
+        menu.addItem(speed)
 
         // Everything about roaming, together.
         if Config.hasPhone {
@@ -152,12 +154,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func speedTitle() -> String {
-        if traffic.speedTestRunning { return "⚡ Testing speed…" }
+        if traffic.speedTestRunning { return "Testing speed…" }
         let mb = traffic.network?.kind == "hotspot" ? 10 : 25
         if let key = traffic.network?.key, let r = traffic.book.records[key], let s = r.speedDown, let at = r.speedAt {
-            return "⚡ Test speed (\(mb) MB) — last \(TrafficPolicy.mbps(s)), \(NetworkBookPolicy.ago(at, now: Date()))"
+            return "Test speed (\(mb) MB) — last \(TrafficPolicy.mbps(s)), \(NetworkBookPolicy.ago(at, now: Date()))"
         }
-        return "⚡ Test speed (downloads \(mb) MB)"
+        return "Test speed (downloads \(mb) MB)"
     }
 
     // MARK: - Networks, like macOS's Wi-Fi menu
