@@ -17,8 +17,7 @@ enum MenuRowLayout {
     /// one cell saves the width three would take), then "seen".
     static let columnRights: [CGFloat] = [262, 308]
     static let columnWidths: [CGFloat] = [122, 42]
-    /// A row's status, clear of the chevron of a row that has a submenu.
-    static let chevronInset: CGFloat = 30
+    static let statusRightInset: CGFloat = 12
 }
 
 final class MenuRowView: NSView {
@@ -66,7 +65,9 @@ final class MenuRowView: NSView {
                           : .monospacedDigitSystemFont(ofSize: size - 1, weight: .regular),
                           color: header ? base : .secondaryLabelColor)
             c.alignment = .right
-            add(c, x: MenuRowLayout.columnRights[i] - MenuRowLayout.columnWidths[i], width: MenuRowLayout.columnWidths[i])
+            // A header has no name: its first column may run over that space.
+            let width = header && i == 0 ? MenuRowLayout.columnRights[0] - MenuRowLayout.checkX : MenuRowLayout.columnWidths[i]
+            add(c, x: MenuRowLayout.columnRights[i] - width, width: width)
         }
         if let trailing {
             let v = NSImageView(image: trailing)
@@ -85,17 +86,23 @@ final class MenuRowView: NSView {
 
     private var statusLabel: NSTextField?
     private var spinner: NSProgressIndicator?
-    var statusRightInset: CGFloat = 12
+    /// The status stands in the icon's place, before the name ("5 More…"),
+    /// instead of the right corner. Set before the first `setStatus`.
+    var statusBeforeName = false
 
-    /// The row's right corner: a spinning wheel while something runs, a short
-    /// note after it ("14 in range · 3s ago"). The wheel animates on its own
-    /// thread, so it keeps turning while the menu tracks the mouse.
+    /// A spinning wheel while something runs, a short note after it. The wheel
+    /// animates on its own thread, so it keeps turning while the menu tracks the mouse.
     func setStatus(_ text: String, spinning: Bool) {
         if statusLabel == nil {
-            let l = label("", font: .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular),
-                          color: .secondaryLabelColor)
-            l.alignment = .right
-            add(l, x: MenuRowLayout.width - statusRightInset - 150, width: 150)
+            let l = label("", font: .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - (statusBeforeName ? 0 : 1), weight: .regular),
+                          color: statusBeforeName ? .labelColor : .secondaryLabelColor)
+            if statusBeforeName {
+                l.alignment = .center
+                add(l, x: MenuRowLayout.iconX - 4, width: 26)
+            } else {
+                l.alignment = .right
+                add(l, x: MenuRowLayout.width - MenuRowLayout.statusRightInset - 150, width: 150)
+            }
             statusLabel = l
             let s = NSProgressIndicator()
             s.style = .spinning
@@ -109,7 +116,8 @@ final class MenuRowView: NSView {
         statusLabel?.stringValue = text
         if let l = statusLabel, let s = spinner {
             let w = (text as NSString).size(withAttributes: [.font: l.font as Any]).width
-            s.frame = NSRect(x: MenuRowLayout.width - statusRightInset - w - 20, y: (frame.height - 16) / 2, width: 16, height: 16)
+            let x = statusBeforeName ? MenuRowLayout.iconX + 1 : MenuRowLayout.width - MenuRowLayout.statusRightInset - w - 20
+            s.frame = NSRect(x: x, y: (frame.height - 16) / 2, width: 16, height: 16)
             if spinning { s.startAnimation(nil) } else { s.stopAnimation(nil) }
         }
     }

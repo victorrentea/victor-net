@@ -50,21 +50,21 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 
 ```
 Wi-Fi                                    [ON]       ← macOS's first line: a real switch
-best last hour, MB/s        ↓     ↑   ping  seen   ← click = test the speed now
-<‐‐> Ethernet                                       ← always listed, greyed without a cable
-✓ 📱 victor                7.3   1.2    87  now     ← ✓ = in use, phone glyph for the hotspot
-  wifi Hotel-Guest         3.1   0.4    38  35 min  ← Wi-Fi arcs at its strength; click = join
+       best MB/s over last hour              seen   ← click = test the speed now
+✓ 📱 victor            ↓7.3 / ↑1.2 / 87 ms  now     ← ✓ = in use, phone glyph for the hotspot
+  wifi tzutze          ↓3.1 / ↑0.4 / 38 ms  2 h     ← today, out of range: greyed, not clickable
+  wifi Hotel-Guest     ↓3.1 / ↑0.4 / 38 ms  3 days  ← Wi-Fi arcs at its strength; click = join
 ((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
-More…                   ◌                      ›   ← submenu: all others in range, live
+5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
 ──────────
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot                          ← Victor's hotspot glyph, drawn
 ⚡ Test speed (downloads 10 MB)
 ──────────
-↺ Roaming: 22.6/60.9 GB left until 2 Nov           ← click = ask Vodafone (*123#, via the phone)
-✓ Allow Claude on Roaming
-✓ 🔒 Auto-Stop Hotspot on Roaming < 1 GB              ← only while roaming: the phone decides, see roaming-warning.md
+↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)
+✓ Allow Claude on ✈️ Roaming
+✓ 🔒 Auto-Stop Hotspot on ✈️ Roaming < 1 GB           ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
 Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu
@@ -77,9 +77,10 @@ Quit                                                ← no ⌘Q: its column wide
   its rows follow the scans while it is open, redrawn only when the list changed; 🔒 = secured. A secured network this Mac does not know asks for its password in
   the app's own dialog: big type, the password **in clear by default**, a "Hide password" box
   (Victor, 2026-10-21; handing over to System Settings › Wi-Fi was tried and rejected).
-- **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*): on
-  the More row's right, a spinner alone while a CoreWLAN scan is in flight, then
-  "N in range · Ns ago". Scans run only while the menu is open,
+- **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*):
+  before "More…", a spinner alone while a CoreWLAN scan is in flight, then in the same spot
+  the number of networks in that submenu ("5 More…"), or ⚠︎ if the scan failed; nothing on the
+  right but the chevron (Victor, 2026-11-06). Scans run only while the menu is open,
   back to back (a new one once the last is over, at most every 2 s from its start), submenu
   open or not — never in the background (a scan takes ~5 s and briefly stalls the link).
   `GET /test/state` → `network.scan`; `GET /test/more-row` draws the row in both states.
@@ -98,13 +99,14 @@ Quit                                                ← no ⌘Q: its column wide
   Android's `SignalStrength.level` said 3 (AOSP's LTE thresholds are −98/−108/−118).
 
 - **No Wired / Wi-Fi / Phone status rows** (Victor: the icon and the ✓ already say it).
-- **One row per network, clickable** (`networkRows`): every Wi-Fi **in range** (the last
-  scan, `cachedScanResults`; a fresh scan starts in the background each time the menu opens)
-  that this Mac knows (*Known networks*) or has measured, plus **Ethernet, always**, which
-  reads `not connected` when unplugged. ✓ = the one in use; a click on another **joins it**
-  (`networksetup -setairportnetwork`, password from the keychain). Out of range = off the
-  list, but its numbers stay in the book and return with it. Rows, not a grid view, because
-  a grid row cannot be clicked: the columns are right-aligned tab stops.
+- **One row per network, clickable** (`networkRows`, order in `NetworkBookPolicy.listed`): the
+  one in use, then **every network this Mac was on today**, latest first (Victor, 2026-11-06),
+  then every Wi-Fi **in range** (the last scan, `cachedScanResults`; a fresh scan starts in the
+  background each time the menu opens) that this Mac knows (*Known networks*) or has measured.
+  ✓ = the one in use; a click on another **joins it** (`networksetup -setairportnetwork`,
+  password from the keychain). Today's out of range, Ethernet unplugged included, stays greyed
+  and not clickable; older ones go off the list, but their numbers stay in the book and return
+  with them. Rows, not a grid view, because a grid row cannot be clicked.
 - **The cable glyph** is `< ‐ ‐ >` — open angle brackets and two dashes (after filled, then
   hollow triangles were turned down) — the same in the menu bar and, tinted green / yellow /
   grey, on the Ethernet row.

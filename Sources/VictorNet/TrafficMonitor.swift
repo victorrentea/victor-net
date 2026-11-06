@@ -102,6 +102,26 @@ enum NetworkBookPolicy {
         if s < 2 * 86_400 { return "\(s / 3600) h ago" }
         return "\(s / 86_400) days ago"
     }
+
+    /// The menu's list: the network in use, then the ones this Mac was on today,
+    /// in range or not, latest first (Victor, 2026-11-06), then the other Wi-Fis
+    /// in range, best download first. Yesterday's out of range = off the list.
+    static func listed(_ records: [String: NetworkRecord], current: String?, reachable: Set<String>,
+                       now: Date, calendar: Calendar = .current) -> [(key: String, value: NetworkRecord)] {
+        func today(_ r: NetworkRecord) -> Bool { calendar.isDate(r.lastSeen, inSameDayAs: now) }
+        func inRange(_ key: String) -> Bool { key.hasPrefix("wifi:") && reachable.contains(String(key.dropFirst(5))) }
+        return records.filter { key, r in key == current || today(r) || inRange(key) }
+            .map { (key: $0.key, value: $0.value) }
+            .sorted { a, b in
+                if a.key == current || b.key == current { return a.key == current }
+                switch (today(a.value), today(b.value)) {
+                case (true, false): return true
+                case (false, true): return false
+                case (true, true): return a.value.lastSeen > b.value.lastSeen
+                case (false, false): return (a.value.maxDown, b.key) > (b.value.maxDown, a.key)
+                }
+            }
+    }
 }
 
 final class NetworkBook {

@@ -204,9 +204,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var othersDrawn: String?
     private var rescanTimer: Timer?
 
-    /// The networks worth comparing — every Wi-Fi in range this Mac knows or has
-    /// measured, plus Ethernet, always — with the day's best numbers. ✓ = in use;
-    /// a click on another joins it. Out of range = off the list, numbers kept.
+    /// The networks worth comparing — the one in use, those of today, every Wi-Fi
+    /// in range this Mac knows or has measured — with their best numbers. ✓ = in
+    /// use; a click on another joins it. Out of range: greyed if it was today,
+    /// off the list otherwise, numbers kept.
     private func networkRows() -> [NSMenuItem] {
         let now = Date()
         let reachable = net.reachableSSIDs()
@@ -224,12 +225,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             records["wifi:\(ssid)"] = NetworkRecord(name: ssid, kind: ssid == Config.hotspotSSID ? "hotspot" : "wifi",
                                                     lastSeen: .distantPast)
         }
-        let shown = records.filter { key, _ in
-            key == traffic.network?.key || (key.hasPrefix("wifi:") && reachable.contains(String(key.dropFirst(5))))
-        }.sorted { a, b in
-            a.key == traffic.network?.key ? true : b.key == traffic.network?.key ? false
-                : (a.value.maxDown, b.key) > (b.value.maxDown, a.key)
-        }
+        let shown = NetworkBookPolicy.listed(records, current: traffic.network?.key, reachable: reachable, now: now)
         // One unit for the whole list, so the column reads straight down: KB/s
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
         let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
@@ -239,11 +235,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
-        // The header labels the numbers, not the line: "best last hour" sits
-        // over the cell it describes. No Ethernet row without a cable.
+        // The header labels the numbers, not the line: "best … over last hour"
+        // sits over the cell it describes.
         // A click on it measures the current network now (Victor, 2026-10-21: the
         // best of the last hour is not always what he wants to see).
-        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "\(unit.name), best last hour", "seen"],
+        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "best \(unit.name) over last hour", "seen"],
                                  header: true)
         header.toolTip = "Click to test the speed of this network now"
         header.onClick = { [weak self] in self?.speedTestAction() }
@@ -254,6 +250,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // the Wi-Fi it is joined to — both are "active" (Victor, 2026-10-21).
             let joined = ssid != nil && ssid == net.ssid
             let current = key == traffic.network?.key || joined
+            let inRange = ssid.map(reachable.contains) ?? false
             let icon: NSImage?
             if key == "wired" { icon = Icons.wired() }
             else if ssid == Config.hotspotSSID { icon = Icons.phone() }
@@ -264,8 +261,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let seen = joined ? "now" : r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
             let row = MenuRowView(name: ssid ?? "Ethernet",
                                   columns: [cell(r), seen],
-                                  icon: icon, checked: current, enabled: !current && ssid != nil)
-            if !current, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
+                                  icon: icon, checked: current, enabled: !current && inRange, dimmed: !current && !inRange)
+            if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
             items.append(NSMenuItem(view: row))
         }
         return items
@@ -273,12 +270,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// "More…" — a real submenu with every other Wi-Fi in range (Victor,
     /// 2026-11-05; it unfolded inline until then), redrawn as the scans come in.
-    /// On its right, proof that it is really looking: a spinner while a scan runs,
-    /// then how many networks it saw and how long ago.
+    /// Before the name, proof that it is really looking: a spinner while a scan
+    /// runs, then the networks in that submenu in the same spot — "5 More…"
+    /// (Victor, 2026-11-06: nothing on the right, no "in range", no "now").
     private func otherNetworksRow() -> NSMenuItem {
         let row = MenuRowView(name: "More…",
                               trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
-        row.statusRightInset = MenuRowLayout.chevronInset
+        row.statusBeforeName = true
         moreRow = row
         updateMoreStatus()
         let item = NSMenuItem(view: row)
@@ -295,24 +293,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func updateMoreStatus() {
         guard let row = moreRow else { return }
+        let failure = net.scanning ? nil : net.lastScan?.error
+        row.toolTip = failure.map { "Scan failed: \($0)" }
         if net.scanning {
             row.setStatus("", spinning: true)
         } else if let l = net.lastScan {
-            let ago = Int(Date().timeIntervalSince(l.at))
-            row.setStatus(l.error != nil ? "scan failed" : "\(l.found) in range · \(ago < 2 ? "now" : "\(ago)s ago")",
-                          spinning: false)
+            row.setStatus(l.error != nil ? "⚠︎" : "\(otherNetworks().count)", spinning: false)
         } else {
             row.setStatus("", spinning: false)
         }
+    }
+
+    /// In range and not already in the list above.
+    private func otherNetworks() -> [(ssid: String, rssi: Int, secure: Bool)] {
+        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
+            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
+        return net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
     }
 
     /// Redrawn only when the list changed: replacing a row takes the highlight off
     /// the one under the pointer.
     private func refreshOthers() {
         guard let othersMenu else { return }
-        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
-            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
-        let others = net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
+        let others = otherNetworks()
         let drawn = "\(net.wifiPower)|" + others.map {
             "\($0.ssid)|\(NetworkLookPolicy.strength(rssi: $0.rssi))|\($0.secure)"
         }.joined(separator: "|")
@@ -417,8 +420,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let day = DateFormatter()
         day.dateFormat = "d MMM"
         if let r = roaming.reading {
-            // One line, no emoji: "Roaming: 22.6/60.9 GB left until 2 Nov" — the
-            // total is what this cycle allowed in all, used + left.
+            // One line: "✈️ Roaming: 22.6/60.9 GB left until 2 Nov" — the total is
+            // what this cycle allowed in all, used + left. ✈️ before every "Roaming"
+            // (Victor, 2026-11-06), so the group reads as one.
             let left = roamingLeft ?? r.remaining
             // +12 h: the reset is midnight in the phone's time zone, which may
             // still be the day before in this Mac's.
@@ -428,16 +432,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // from before a restart) says when it is from.
             let age = Date().timeIntervalSince(r.readAt)
             let asOf = age > 30 * 60 ? " · \(NetworkBookPolicy.ago(r.readAt, now: Date()))" : ""
-            roamingRow("Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
+            roamingRow("✈️ Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
         } else {
-            roamingRow("Roaming: the phone has not answered yet")
+            roamingRow("✈️ Roaming: the phone has not answered yet")
         }
         // Said the positive way, ticked by default.
-        let allow = action("Allow Claude on Roaming", #selector(toggleSuspend))
+        let allow = action("Allow Claude on ✈️ Roaming", #selector(toggleSuspend))
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
         menu.addItem(allow)
         if let r = roaming.reading {
-            let stop = action("Auto-Stop Hotspot on Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
+            let stop = action("Auto-Stop Hotspot on ✈️ Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
             stop.image = Icons.hotspotOff()
             stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
             stop.state = r.guardOff ? .off : .on
@@ -509,7 +513,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func renderMoreRowForTest() -> String? {
         let w = MenuRowLayout.width, h = MenuRowLayout.height
         let rows: [(name: String, status: String, spinning: Bool)] = [
-            ("More…", "", true), ("More…", "14 in range · 3s ago", false),
+            ("More…", "", true), ("More…", "5", false), ("More…", "14", false), ("More…", "⚠︎", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
             ("Start Hotspot", "retrying in 23s", false),
         ]
@@ -524,7 +528,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let row = r.name == "More…"
                     ? MenuRowView(name: r.name, trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
                     : MenuRowView(name: r.name, icon: Icons.hotspot())
-                if r.name == "More…" { row.statusRightInset = MenuRowLayout.chevronInset }
+                row.statusBeforeName = r.name == "More…"
                 row.setStatus(r.status, spinning: r.spinning)
                 row.frame.origin = NSPoint(x: 0, y: CGFloat(rows.count - 1 - k) * h)
                 pane.addSubview(row)

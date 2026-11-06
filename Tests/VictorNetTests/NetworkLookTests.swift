@@ -107,6 +107,29 @@ final class RateHistoryTests: XCTestCase {
         XCTAssertEqual(NetworkBookPolicy.line(r, now: now),
                        "📱 phone — ↓ max 8.4 MB/s · ↑ max 1.1 MB/s · ⚡ 21.0 MB/s · 38 ms · 2 h ago")
     }
+
+    func testTheListIsCurrentThenTodayLatestFirstThenTheRestInRange() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 6, hour: 12))!
+        func record(_ ago: TimeInterval, down: Double = 0) -> NetworkRecord {
+            NetworkRecord(name: "", kind: "wifi", maxDown: down, lastSeen: now - ago)
+        }
+        let records = [
+            "wifi:current": record(0),
+            "wifi:today-earlier": record(4 * 3600),
+            "wifi:today-later": record(3600),
+            "wired": record(2 * 3600),
+            "wifi:old-slow-in-range": record(3 * 86_400, down: 1),
+            "wifi:old-fast-in-range": record(3 * 86_400, down: 9),
+            "wifi:yesterday-away": record(13 * 3600),
+        ]
+        let keys = NetworkBookPolicy.listed(records, current: "wifi:current",
+                                            reachable: ["old-slow-in-range", "old-fast-in-range"],
+                                            now: now, calendar: cal).map(\.key)
+        XCTAssertEqual(keys, ["wifi:current", "wifi:today-later", "wired", "wifi:today-earlier",
+                              "wifi:old-fast-in-range", "wifi:old-slow-in-range"])
+    }
 }
 
 /// The badge beside the phone's bars, and reading Vodafone's *123# answer.
