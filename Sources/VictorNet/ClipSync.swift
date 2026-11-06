@@ -92,6 +92,9 @@ final class ClipSync {
     private var changedAt: Date?
     private var lastSynced: String?
     private var after = -1
+    /// The first answer only says where the mailbox stands: what it holds predates this run,
+    /// and a restart must not paste an old clip over whatever the clipboard has now.
+    private var primed = false
     private var seen: [String] = []
     private var lastSent: (Date, String)?
     private var lastReceived: Date?
@@ -175,7 +178,7 @@ final class ClipSync {
     // MARK: - The phone → this Mac
 
     private func poll() {
-        guard let url = URL(string: "\(Config.relayURL)/api/clip/mac?after=\(after)&wait=\(Self.waitS)") else { return }
+        guard let url = URL(string: "\(Config.relayURL)/api/clip/mac?after=\(after)&wait=\(primed ? Self.waitS : 0)") else { return }
         var request = URLRequest(url: url)
         request.setValue(Config.relayToken, forHTTPHeaderField: "X-Bridge-Token")
         session.dataTask(with: request) { [weak self] data, response, _ in
@@ -193,7 +196,8 @@ final class ClipSync {
             return
         }
         after = answer["seq"] as? Int ?? after
-        if let sealed = answer["ciphertext"] as? String, let key,
+        defer { primed = true }
+        if primed, let sealed = answer["ciphertext"] as? String, let key,
            let clip = ClipCrypto.open(sealed, key: key),
            ClipPolicy.believable(clip, now: Date(), seen: seen) {
             seen = Array((seen + [clip.id]).suffix(64))
