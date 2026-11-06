@@ -57,6 +57,7 @@ final class MenuRowView: NSView {
             : MenuRowLayout.columnRights[0] - MenuRowLayout.columnWidths[0] - 4
         let n = label(name, font: header ? .systemFont(ofSize: size, weight: .medium)
                       : .systemFont(ofSize: size, weight: bold ? .semibold : .regular), color: base)
+        nameLabel = n
         n.lineBreakMode = .byTruncatingTail
         add(n, x: header ? MenuRowLayout.checkX : MenuRowLayout.nameX, width: nameEnd - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
         for (i, text) in columns.enumerated() where i < MenuRowLayout.columnRights.count {
@@ -92,6 +93,9 @@ final class MenuRowView: NSView {
 
     /// A spinning wheel while something runs, a short note after it. The wheel
     /// animates on its own thread, so it keeps turning while the menu tracks the mouse.
+    private var nameLabel: NSTextField?
+    func setName(_ name: String) { nameLabel?.stringValue = name }
+
     func setStatus(_ text: String, spinning: Bool) {
         if statusLabel == nil {
             let l = label("", font: .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - (statusBeforeName ? 0 : 1), weight: .regular),

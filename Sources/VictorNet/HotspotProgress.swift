@@ -40,6 +40,13 @@ enum HotspotRowPolicy {
         !onHotspot || p.offline || p.phase != .idle
     }
 
+    /// The phone's hotspot is on, as far as this Mac can tell: it is on it, or sees it in a
+    /// scan. Nothing else says so. A scan keeps the name a few seconds after a stop, so
+    /// `stoppedRecently` turns the row back at once.
+    static func showsStop(_ p: HotspotProgress, onHotspot: Bool, inScan: Bool, stoppedRecently: Bool) -> Bool {
+        p.phase == .idle && !stoppedRecently && (onHotspot || inScan)
+    }
+
     /// Nothing to click while an attempt runs: the row just shows it.
     static func busy(_ p: HotspotProgress) -> Bool { p.phase != .idle }
 

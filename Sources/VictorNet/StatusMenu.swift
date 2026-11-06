@@ -89,7 +89,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             look = .hotspot(level: level, weakWifi: weak,
                             alert: RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date()))
         }
-        button.image = look == .offline ? (net.wifiPower ? Icons.wifiIdle() : Icons.wifiOff()) : Icons.image(for: look)
+        // Connected but with nothing behind it must not look connected (Victor, 2026-11-06).
+        let noInternet = offlineSince != nil || hotspot.progress.offline
+        if look == .offline, !net.wifiPower {
+            button.image = Icons.wifiOff()
+        } else if noInternet {
+            button.image = Icons.wifiNoInternet()
+        } else {
+            button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look)
+        }
         button.title = ""
     }
 
@@ -354,8 +362,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let row = MenuRowView(name: "Start Hotspot", icon: Icons.hotspot())
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in
-            self?.hotspot.startNow()
-            self?.updateHotspotRow()
+            guard let self else { return }
+            if self.hotspotShowsStop { self.stopHotspot() } else { self.hotspot.startNow() }
+            self.updateHotspotRow()
         }
         let item = NSMenuItem(view: row)
         hotspotRow = row
@@ -364,13 +373,37 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
+    private var hotspotShowsStop: Bool {
+        HotspotRowPolicy.showsStop(
+            hotspot.progress, onHotspot: net.onHotspot,
+            inScan: net.scanResults().contains { $0.ssid == Config.hotspotSSID },
+            stoppedRecently: Date().timeIntervalSince(hotspotStoppedAt) < Self.scanOutlivesStop)
+    }
+
+    /// Also `GET /test/hotspot/stop`.
+    func stopHotspot() {
+        hotspotStoppedAt = Date()
+        // Off the hotspot with no other network is "offline": the fallback must not answer by
+        // starting it right back.
+        hotspot.hold(for: Self.holdAfterStop)
+        netInfo("🛜 Stop Hotspot — asking the phone")
+        phone.stopHotspot { _, error in
+            if let error { netInfo("🛜 Stop Hotspot: \(error)") }
+        }
+    }
+
+    private static let scanOutlivesStop: TimeInterval = 20
+    private static let holdAfterStop: TimeInterval = 120
+    private var hotspotStoppedAt = Date.distantPast
     private weak var hotspotRow: MenuRowView?
     private weak var hotspotItem: NSMenuItem?
 
     private func updateHotspotRow() {
         guard let row = hotspotRow, let item = hotspotItem else { return }
         let p = hotspot.progress
-        item.isHidden = !HotspotRowPolicy.visible(p, onHotspot: net.onHotspot)
+        let stop = hotspotShowsStop
+        item.isHidden = !stop && !HotspotRowPolicy.visible(p, onHotspot: net.onHotspot)
+        row.setName(stop ? "Stop Hotspot" : "Start Hotspot")
         let status = HotspotRowPolicy.status(p, now: Date())
         row.setStatus(status.text, spinning: status.spinning)
         row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }

@@ -114,6 +114,12 @@ enum Icons {
 
     /// Wi-Fi on but joined to nothing: the full symbol, greyed, a size larger —
     /// macOS's "not connected".
+    static func wifiNoInternet() -> NSImage? {
+        NSImage(systemSymbolName: "wifi.exclamationmark", accessibilityDescription: "No internet")?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold)
+                .applying(.init(paletteColors: [.systemRed])))
+    }
+
     static func wifiIdle() -> NSImage? {
         guard let arcs = NSImage(systemSymbolName: "wifi", variableValue: 1, accessibilityDescription: "Wi-Fi")?
             .withSymbolConfiguration(.init(pointSize: 15, weight: .regular)) else { return nil }

@@ -203,6 +203,11 @@ final class PhoneLink {
         get(hold ? "/media?hold=1&ttl=\(ttl)" : "/media?hold=0", timeout: 2, done: done)
     }
 
+    /// Stops the phone's hotspot; on it, the answer may be lost with the link. Main thread.
+    func stopHotspot(done: @escaping (Data?, String?) -> Void) {
+        get("/hotspot/off", timeout: 3, done: done)
+    }
+
     /// One sealed clip for the phone — `ClipSync`. Main thread.
     func clip(_ sealed: String, done: @escaping (Data?, String?) -> Void) {
         get("/clip?c=\(sealed)", timeout: 3, done: done)

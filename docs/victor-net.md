@@ -57,6 +57,7 @@ Wi-Fi                                    [ON]       ← macOS's first line: a re
 ((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
 5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
 ──────────
+(Start Hotspot, or Stop Hotspot while the Mac is on it or sees it in a scan: `/hotspot/off` on the phone)
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn

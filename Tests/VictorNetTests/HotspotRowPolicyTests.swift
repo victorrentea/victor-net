@@ -36,6 +36,21 @@ final class HotspotRowPolicyTests: XCTestCase {
         XCTAssertEqual(text(HotspotProgress(phase: .checking, offline: true)), "checking")
     }
 
+    func testStopWhenTheHotspotIsSeenOrInUse() {
+        let idle = HotspotProgress()
+        XCTAssertTrue(HotspotRowPolicy.showsStop(idle, onHotspot: true, inScan: false, stoppedRecently: false))
+        XCTAssertTrue(HotspotRowPolicy.showsStop(idle, onHotspot: false, inScan: true, stoppedRecently: false))
+        XCTAssertFalse(HotspotRowPolicy.showsStop(idle, onHotspot: false, inScan: false, stoppedRecently: false))
+    }
+
+    func testStartAgainRightAfterAStopAndDuringAnAttempt() {
+        let idle = HotspotProgress()
+        XCTAssertFalse(HotspotRowPolicy.showsStop(idle, onHotspot: false, inScan: true, stoppedRecently: true))
+        var asking = HotspotProgress()
+        asking.phase = .askingPhone(deadline: Date())
+        XCTAssertFalse(HotspotRowPolicy.showsStop(asking, onHotspot: false, inScan: true, stoppedRecently: false))
+    }
+
     func testHiddenOnlyOnAWorkingHotspot() {
         XCTAssertFalse(HotspotRowPolicy.visible(HotspotProgress(), onHotspot: true))
         XCTAssertTrue(HotspotRowPolicy.visible(HotspotProgress(), onHotspot: false))

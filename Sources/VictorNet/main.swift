@@ -147,6 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The menu's "Start Hotspot", as a click would.
             hotspot.startNow()
             return (200, HttpServer.json(hotspot.stateJSON))
+        case "/test/hotspot/stop":
+            // The menu's "Stop Hotspot", as a click would.
+            onMain { self.menu?.stopHotspot() }
+            return (200, "{\"ok\":true}")
         case "/test/hotspot/offline":
             hotspot.simulateOffline(seconds: min(max(Double(query["s"] ?? "") ?? 80, 1), 300))
             return (200, "{\"ok\":true}")
