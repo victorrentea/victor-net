@@ -30,8 +30,9 @@ most of the rest is the page.
 ```
 Mac has no internet
   → HotspotFallback opens an RFCOMM channel to the phone
-  → victor-phone-addons accepts it and brings its activity to the front
-  → Samsung "Modes and Routines" routine "Hotspot via app" fires on "App opened"
+  → victor-phone-addons accepts it and starts the manual routine "Mac Hotspot On"
+    through Modes and Routines' shortcut trampoline (since 2026-11-06, no screen
+    jumps forward; "App opened" below is how it worked before)
   → Mobile Hotspot on
   → the Mac is told explicitly to join 'victor'
 ```

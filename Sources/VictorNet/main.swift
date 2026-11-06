@@ -180,6 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var path = ""
             onMain { path = self.menu?.renderIconForTest(wired: query["wired"] == "1") ?? "" }
             return (200, HttpServer.json(["png": path]))
+        case "/test/menu/rows":
+            var rows: [String] = []
+            onMain { rows = self.menu?.rowsForTest() ?? [] }
+            return (200, HttpServer.json(["rows": rows]))
         case "/test/menu/open":
             let secs = min(max(Double(query["close"] ?? "") ?? 3, 0.5), 30)
             DispatchQueue.main.async { self.menu?.openForTest(closeAfter: secs) }

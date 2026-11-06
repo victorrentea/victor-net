@@ -510,6 +510,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         statusItem.button?.performClick(nil)
     }
 
+    /// `GET /test/menu/rows` — the rows' titles, built as if opened, without opening anything.
+    func rowsForTest() -> [String] {
+        menuNeedsUpdate(menu)
+        return menu.items.map(\.title)
+    }
+
     /// `GET /test/more-row` — the rows with a status drawn off-screen, in each state,
     /// on a light and a dark menu, to look at without opening the menu.
     func renderMoreRowForTest() -> String? {
