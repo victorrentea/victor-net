@@ -189,9 +189,15 @@ read still hanging is skipped, not queued. `GET /test/state` → `network.wifi_r
 how stale it is. If `airportd` itself is wedged: `sudo killall airportd` (launchd restarts it).
 It started while the menu scanned back to back; not proven to be the cause.
 
-After a join with a password the app checks, 3 s later, that macOS lists the network among its
-known networks (so it auto-joins later, app or no app); if not, it adds it with
-`networksetup -addpreferredwirelessnetworkatindex … WPA2` and logs `🛜 remember`.
+After a join with a password the app stores it 3 s later with
+`networksetup -addpreferredwirelessnetworkatindex … WPA2` (logged as `🛜 remember`), so it
+auto-joins later, app or no app.
+
+A known network can still fail with `-3900 tmpErr`: macOS's own Wi-Fi menu can join it, but
+`airportd` gives `networksetup` no password (`Missing password for upper auth 8`,
+`hasPassword=0`), drops the current network, and auto-join returns to the top of the list. Seen
+2026-11-06 going from the hotspot back to the home Wi-Fi. A click on such a row asks for the
+password once (`JoinFailure`).
 
 ## 🎵 The phone's music pauses while Walkie Talkie dictates (2026-10-29)
 

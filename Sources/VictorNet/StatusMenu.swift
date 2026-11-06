@@ -11,6 +11,14 @@ enum RoamingSuspendMenu {
     static func title(enabled: Bool) -> String { "⏸️ Pause Claude on roaming data" + (enabled ? "  ✓" : "") }
 }
 
+enum JoinFailure {
+    /// `networksetup`'s tmpErr with no password given. It can also mean a join raced by
+    /// auto-join, so the worst case is one needless password dialog.
+    static func lacksPassword(_ error: String, typedOne: Bool) -> Bool {
+        !typedOne && error.contains("-3900")
+    }
+}
+
 /// The one status item. **The menu bar shows the route and whether to worry,
 /// nothing else** (Victor, 2026-10-20): the phone's bars on its hotspot, with
 /// ⚠ under 5 GB of roaming left or a red ✕ once it is gone; the GB themselves
@@ -371,7 +379,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func join(_ ssid: String, password: String?) {
         netInfo("🛜 joining \(ssid)")
         net.join(ssid, password: password) { [weak self] error in
-            if let error { return Prompt.show("Could not join \(ssid)", error) }
+            if let error {
+                // macOS lists the network but gives `networksetup` no password for it
+                // (airportd: "Missing password", tmpErr): only the first time, the
+                // password typed here lands where the next join finds it.
+                if JoinFailure.lacksPassword(error, typedOne: password != nil), let pw = Prompt.wifiPassword(ssid) {
+                    self?.join(ssid, password: pw)
+                    return
+                }
+                return Prompt.show("Could not join \(ssid)", error)
+            }
             netInfo("🛜 joined \(ssid)")
             // A new network must stay known to macOS (Known Networks + keychain),
             // so it auto-joins later with or without this app (Victor, 2026-10-21).
@@ -380,8 +397,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             self?.net.refresh()
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let self else { return }
-                if self.net.knownSSIDs().contains(ssid) { return netInfo("🛜 \(ssid) is in macOS's known networks") }
-                netInfo("🛜 \(ssid) not remembered by the join — adding it to the known networks")
+                netInfo("🛜 storing \(ssid) in the known networks")
                 self.net.remember(ssid, password: password) { error in
                     netInfo("🛜 remember \(ssid): \(error ?? "ok")")
                 }
