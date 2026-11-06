@@ -475,7 +475,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             prefer.state = PreferredWifiSettings.isEnabled ? .on : .off
             menu.addItem(prefer)
         }
-        let start = action("Auto-Start Hotspot", #selector(toggleHotspot))
+        let start = action("Auto-Start Hotspot on no Internet", #selector(toggleHotspot))
         start.image = Icons.hotspot()
         start.state = HotspotFallbackSettings.isEnabled ? .on : .off
         menu.addItem(start)

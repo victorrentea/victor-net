@@ -59,7 +59,7 @@ Wi-Fi                                    [ON]       ← macOS's first line: a re
 ──────────
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
-✓ ((o)) Auto-Start Hotspot                          ← Victor's hotspot glyph, drawn
+✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
 ⚡ Test speed (downloads 10 MB)
 ──────────
 ↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)
