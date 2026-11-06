@@ -147,6 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The menu's "Start Hotspot", as a click would.
             hotspot.startNow()
             return (200, HttpServer.json(hotspot.stateJSON))
+        case "/test/hotspot/row":
+            var row: [String: Any] = [:]
+            onMain { row = self.menu?.hotspotRowForTest() ?? [:] }
+            return (200, HttpServer.json(row))
         case "/test/hotspot/stop":
             // The menu's "Stop Hotspot", as a click would.
             onMain { self.menu?.stopHotspot() }

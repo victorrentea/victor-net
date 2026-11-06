@@ -208,6 +208,12 @@ final class NetworkState {
             var found = 0
             var error: String?
             do {
+                // Asked by name too: a hotspot just switched on took ~20 s to show in a
+                // plain scan, with the row still saying "Start Hotspot".
+                if !Config.hotspotSSID.isEmpty {
+                    _ = try? CWWiFiClient.shared().interface(withName: Config.wifiInterface)?
+                        .scanForNetworks(withName: Config.hotspotSSID)
+                }
                 let seen = try CWWiFiClient.shared().interface(withName: Config.wifiInterface)?.scanForNetworks(withName: nil) ?? []
                 found = Set(seen.compactMap { $0.ssid }.filter { !$0.isEmpty }).count
             } catch let e {

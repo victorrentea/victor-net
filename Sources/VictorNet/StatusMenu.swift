@@ -380,12 +380,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             stoppedRecently: Date().timeIntervalSince(hotspotStoppedAt) < Self.scanOutlivesStop)
     }
 
+    /// `GET /test/hotspot/row` — what the row would say; scans, as an open menu does.
+    func hotspotRowForTest() -> [String: Any] {
+        net.scanInBackground()
+        return ["stop": hotspotShowsStop, "in_scan": net.scanResults().contains { $0.ssid == Config.hotspotSSID },
+                "on_hotspot": net.onHotspot, "networks": net.scanResults().count]
+    }
+
     /// Also `GET /test/hotspot/stop`.
     func stopHotspot(retrying: Bool = true) {
         hotspotStoppedAt = Date()
         // Off the hotspot with no other network is "offline": the fallback must not answer by
         // starting it right back.
         hotspot.hold(for: Self.holdAfterStop)
+        hotspot.releaseChannel()
         netInfo("🛜 Stop Hotspot — asking the phone")
         phone.stopHotspot { [weak self] _, error in
             guard let error else { return }
@@ -396,7 +404,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    private static let scanOutlivesStop: TimeInterval = 20
+    /// Measured: 40–50 s until a scan drops a stopped hotspot.
+    private static let scanOutlivesStop: TimeInterval = 60
     private static let holdAfterStop: TimeInterval = 120
     private var hotspotStoppedAt = Date.distantPast
     private weak var hotspotRow: MenuRowView?

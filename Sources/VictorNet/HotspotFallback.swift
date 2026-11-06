@@ -413,6 +413,12 @@ final class HotspotFallback {
         queue.async { self.heldUntil = Date() + seconds }
     }
 
+    /// The phone serves one channel at a time, so the one that started the hotspot would
+    /// make the next question wait, or fail. It has already said all it had to say.
+    func releaseChannel() {
+        queue.async { self.closeChannel() }
+    }
+
     private func evaluate(reason: String) {
         if Date() < heldUntil { return }
         publish { $0.phase = .checking }
