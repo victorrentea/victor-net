@@ -63,8 +63,8 @@ Wi-Fi                                    [ON]       ← macOS's first line: a re
 ⚡ Test speed (downloads 10 MB)
 ──────────
 ↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)
-✓ Allow Claude on ✈️ Roaming
-✓ 🔒 Auto-Stop Hotspot on ✈️ Roaming < 1 GB           ← only while roaming: the phone decides, see roaming-warning.md
+✓ ✈️ Roaming: Allow Claude
+✓ 🔒 ✈️ Roaming: Auto-Stop Hotspot < 1 GB             ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
 Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu

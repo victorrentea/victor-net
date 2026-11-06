@@ -421,8 +421,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         day.dateFormat = "d MMM"
         if let r = roaming.reading {
             // One line: "✈️ Roaming: 22.6/60.9 GB left until 2 Nov" — the total is
-            // what this cycle allowed in all, used + left. ✈️ before every "Roaming"
-            // (Victor, 2026-11-06), so the group reads as one.
+            // what this cycle allowed in all, used + left. Every row of the group starts
+            // with "✈️ Roaming" (Victor, 2026-11-06), so it reads as one.
             let left = roamingLeft ?? r.remaining
             // +12 h: the reset is midnight in the phone's time zone, which may
             // still be the day before in this Mac's.
@@ -437,11 +437,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             roamingRow("✈️ Roaming: the phone has not answered yet")
         }
         // Said the positive way, ticked by default.
-        let allow = action("Allow Claude on ✈️ Roaming", #selector(toggleSuspend))
+        let allow = action("✈️ Roaming: Allow Claude", #selector(toggleSuspend))
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
         menu.addItem(allow)
         if let r = roaming.reading {
-            let stop = action("Auto-Stop Hotspot on ✈️ Roaming < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
+            let stop = action("✈️ Roaming: Auto-Stop Hotspot < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
             stop.image = Icons.hotspotOff()
             stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
             stop.state = r.guardOff ? .off : .on
