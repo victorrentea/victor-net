@@ -381,14 +381,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// Also `GET /test/hotspot/stop`.
-    func stopHotspot() {
+    func stopHotspot(retrying: Bool = true) {
         hotspotStoppedAt = Date()
         // Off the hotspot with no other network is "offline": the fallback must not answer by
         // starting it right back.
         hotspot.hold(for: Self.holdAfterStop)
         netInfo("🛜 Stop Hotspot — asking the phone")
-        phone.stopHotspot { _, error in
-            if let error { netInfo("🛜 Stop Hotspot: \(error)") }
+        phone.stopHotspot { [weak self] _, error in
+            guard let error else { return }
+            netInfo("🛜 Stop Hotspot: \(error)")
+            // The Bluetooth channel can still be held by the one that started it.
+            guard retrying else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.stopHotspot(retrying: false) }
         }
     }
 
