@@ -56,6 +56,11 @@ final class PhoneBatteryBook {
         if latest.map({ b.readAt >= $0.readAt }) ?? true { latest = b }
     }
 
+    var current: PhoneBattery? {
+        lock.lock(); defer { lock.unlock() }
+        return latest
+    }
+
     var json: [String: Any] {
         lock.lock(); defer { lock.unlock() }
         return PhoneBattery.json(latest, now: Date())

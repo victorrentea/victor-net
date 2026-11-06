@@ -202,6 +202,12 @@ every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot
 The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
 lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
 
+## 🔋 The phone's battery in the menu bar (2026-11-06)
+
+`PhoneBatteryBar`: an item of its own, there only at 30% or less, unplugged, read in the last two
+hours. A battery shaped like the Mac's, no number; its red charge blinks once a second and is as
+wide as the charge left. `GET /test/phone-battery/simulate/<pct>` shows it (`off` clears).
+
 ## 🔋 The phone's battery, for the tablet's soundboard (2026-10-29)
 
 The tablet shows the **phone's** charge in its top bar, not its own (Victor: "the tablet's

@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phone = PhoneLink()
     private let roaming = PhoneRoamingMonitor()
     private let phoneBattery = PhoneBatteryBook()
+    private let phoneBatteryBar = PhoneBatteryBar()
     private let phoneLan = PhoneLan()
     private let phoneCloud = PhoneCloud()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
@@ -96,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneCloud.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneCloud.onReading = { [weak self] b in self?.phoneBattery.accept(b) }
         phoneCloud.start()
+        phoneBatteryBar.reading = { [weak self] in self?.phoneBattery.current }
+        phoneBatteryBar.start()
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.start()
@@ -134,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["hotspot"] = self.hotspot.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
                 o["clip"] = self.clipSync.stateJSON
+                o["phone_battery_bar"] = self.phoneBatteryBar.stateJSON
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":
@@ -153,6 +157,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             PhoneChannelOpener.useStaleChannelOnce(ch)
             roaming.pollNow()
             return (200, roaming.diagnosticsJSON)
+        case let p where p.hasPrefix("/test/phone-battery/simulate/"):
+            let pct = Int(p.dropFirst("/test/phone-battery/simulate/".count))
+            onMain { self.phoneBatteryBar.simulate(pct) }
+            return (200, HttpServer.json(["simulated": orNull(pct)]))
         case let p where p.hasPrefix("/test/roaming/simulate/"):
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }

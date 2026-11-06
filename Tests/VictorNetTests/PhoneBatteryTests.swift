@@ -50,3 +50,29 @@ final class PhoneBatteryTests: XCTestCase {
         XCTAssertEqual(book.json["pct"] as? Int, 49)
     }
 }
+
+/// 🔋 The menu bar's phone: only while it runs low and nobody is charging it.
+final class PhoneLowBatteryTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+    private func b(_ pct: Int, charging: Bool = false, age: TimeInterval = 0) -> PhoneBattery {
+        PhoneBattery(pct: pct, charging: charging, readAt: now.addingTimeInterval(-age))
+    }
+
+    func testShowsAtThirtyAndBelow() {
+        XCTAssertEqual(PhoneLowBattery.showing(b(30), now: now), 30)
+        XCTAssertEqual(PhoneLowBattery.showing(b(4), now: now), 4)
+    }
+
+    func testHidesAboveThirty() {
+        XCTAssertNil(PhoneLowBattery.showing(b(31), now: now))
+    }
+
+    func testHidesWhileCharging() {
+        XCTAssertNil(PhoneLowBattery.showing(b(12, charging: true), now: now))
+    }
+
+    func testHidesAnUnknownOrOldReading() {
+        XCTAssertNil(PhoneLowBattery.showing(nil, now: now))
+        XCTAssertNil(PhoneLowBattery.showing(b(12, age: PhoneLowBattery.maxAge), now: now))
+    }
+}

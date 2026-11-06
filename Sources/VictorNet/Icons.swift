@@ -251,3 +251,31 @@ enum Icons {
         return image
     }
 }
+
+extension Icons {
+    /// A battery shaped like the Mac's own, no number: the outline stays quiet in the bar's
+    /// colour, and only the red charge inside blinks, as wide as the charge left.
+    static func lowPhoneBattery(pct: Int, bright: Bool) -> NSImage {
+        let image = NSImage(size: NSSize(width: 28, height: barHeight), flipped: false) { rect in
+            let body = NSRect(x: 0.5, y: 2.5, width: 24, height: 11)
+            NSColor.labelColor.withAlphaComponent(0.55).setStroke()
+            let outline = NSBezierPath(roundedRect: body, xRadius: 3.5, yRadius: 3.5)
+            outline.lineWidth = 1
+            outline.stroke()
+            NSColor.labelColor.withAlphaComponent(0.55).setFill()
+            let nub = NSBezierPath()
+            nub.appendArc(withCenter: NSPoint(x: body.maxX + 1.2, y: rect.midY), radius: 2, startAngle: -90, endAngle: 90)
+            nub.close()
+            nub.fill()
+
+            let inner = body.insetBy(dx: 2, dy: 2)
+            let charge = NSRect(x: inner.minX, y: inner.minY,
+                                width: max(2.5, inner.width * CGFloat(pct) / 100), height: inner.height)
+            NSColor.systemRed.withAlphaComponent(bright ? 1 : 0.2).setFill()
+            NSBezierPath(roundedRect: charge, xRadius: 1.5, yRadius: 1.5).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+}
