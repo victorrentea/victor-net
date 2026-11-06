@@ -253,26 +253,26 @@ enum Icons {
 }
 
 extension Icons {
-    /// A battery shaped like the Mac's own, no number: the outline stays quiet in the bar's
+    /// A battery shaped like the Mac's own, no number: the outline stays still in the bar's
     /// colour, and only the red charge inside blinks, as wide as the charge left.
     static func lowPhoneBattery(pct: Int, bright: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 28, height: barHeight), flipped: false) { rect in
-            let body = NSRect(x: 0.5, y: 2.5, width: 24, height: 11)
-            NSColor.labelColor.withAlphaComponent(0.55).setStroke()
-            let outline = NSBezierPath(roundedRect: body, xRadius: 3.5, yRadius: 3.5)
+            let body = NSRect(x: 0.5, y: 3.75, width: 24, height: 8.5)
+            NSColor.labelColor.setStroke()
+            let outline = NSBezierPath(roundedRect: body, xRadius: 3, yRadius: 3)
             outline.lineWidth = 1
             outline.stroke()
-            NSColor.labelColor.withAlphaComponent(0.55).setFill()
+            NSColor.labelColor.setFill()
             let nub = NSBezierPath()
-            nub.appendArc(withCenter: NSPoint(x: body.maxX + 1.2, y: rect.midY), radius: 2, startAngle: -90, endAngle: 90)
+            nub.appendArc(withCenter: NSPoint(x: body.maxX + 1.2, y: rect.midY), radius: 1.6, startAngle: -90, endAngle: 90)
             nub.close()
             nub.fill()
 
-            let inner = body.insetBy(dx: 2, dy: 2)
+            let inner = body.insetBy(dx: 1.75, dy: 1.75)
             let charge = NSRect(x: inner.minX, y: inner.minY,
                                 width: max(2.5, inner.width * CGFloat(pct) / 100), height: inner.height)
             NSColor.systemRed.withAlphaComponent(bright ? 1 : 0.2).setFill()
-            NSBezierPath(roundedRect: charge, xRadius: 1.5, yRadius: 1.5).fill()
+            NSBezierPath(roundedRect: charge, xRadius: 1.25, yRadius: 1.25).fill()
             return true
         }
         image.isTemplate = false
