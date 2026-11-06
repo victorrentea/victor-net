@@ -12,6 +12,7 @@ Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123
 |---|---|
 | [docs/victor-net.md](docs/victor-net.md) | the icon, `PhoneLink` (signal every 5 s over the hotspot), the menu: 5 s average + 10-min best, latency probe, ⚡ speed test, other networks, busiest apps |
 | [docs/hotspot-fallback.md](docs/hotspot-fallback.md) | 🛜 asking the phone for its hotspot when offline (Bluetooth as the trigger, the Samsung routine, the home geofence) |
+| [docs/clipboard.md](docs/clipboard.md) | 📋 the clipboard shared with the phone: the three ways, the mailbox, `CLIP_KEY` |
 | [docs/roaming-warning.md](docs/roaming-warning.md) | 📶 roaming allowance: the phone's reading, the reserve, the meter, ⏸ Pause Claude (`~/.victor-net/roaming-data.json`, read by `~/.claude/hooks/roaming-gate.sh`) |
 
 - **Build**: `swift build && swift test`

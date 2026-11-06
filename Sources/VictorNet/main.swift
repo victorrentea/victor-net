@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phoneLan = PhoneLan()
     private let phoneCloud = PhoneCloud()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
+    private lazy var clipSync = ClipSync(phone: phone)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
     private var roamingData: RoamingDataWatch?
@@ -95,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneCloud.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneCloud.onReading = { [weak self] b in self?.phoneBattery.accept(b) }
         phoneCloud.start()
+        clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        clipSync.start()
         hotspot.start()
         menu.onOpen = { [weak self] in self?.hotspot.menuOpened() }
         preferredWifi.start()
@@ -130,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["preferred_wifi"] = self.preferredWifi.stateJSON
                 o["hotspot"] = self.hotspot.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
+                o["clip"] = self.clipSync.stateJSON
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":

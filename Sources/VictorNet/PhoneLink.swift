@@ -203,6 +203,11 @@ final class PhoneLink {
         get(hold ? "/media?hold=1&ttl=\(ttl)" : "/media?hold=0", timeout: 2, done: done)
     }
 
+    /// One sealed clip for the phone — `ClipSync`. Main thread.
+    func clip(_ sealed: String, done: @escaping (Data?, String?) -> Void) {
+        get("/clip?c=\(sealed)", timeout: 3, done: done)
+    }
+
     private func get(_ path: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
         guard onHotspot(), let gw = Self.gateway(),
               let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {

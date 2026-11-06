@@ -8,6 +8,7 @@ import Foundation
 /// HOTSPOT_SSID=my-phone                # the phone's hotspot network
 /// RELAY_URL=https://relay.example      # optional: read the phone's battery from there
 /// RELAY_TOKEN=…
+/// CLIP_KEY=…                          # optional: 64 hex digits, the clipboard shared with the phone
 /// PREFERRED_SSID=my-home               # optional: on the hotspot with this in range, move to it
 /// HOME_COUNTRY=RO                      # ISO code; abroad + on the hotspot = roaming data
 /// HOME_TIMEZONE=Europe/Bucharest
@@ -28,6 +29,8 @@ enum Config {
     /// Where the phone parks its battery, and the token to read it; empty = never asked.
     static var relayURL: String { values["RELAY_URL"] ?? "" }
     static var relayToken: String { values["RELAY_TOKEN"] ?? "" }
+    /// 64 hex digits, shared with the phone: seals the clipboard (`ClipSync`); empty = off.
+    static var clipKey: String { values["CLIP_KEY"] ?? "" }
     static var hasPhone: Bool { !phoneBluetoothAddress.isEmpty }
     static var hotspotSSID: String { values["HOTSPOT_SSID"] ?? "" }
     static var preferredSSID: String { values["PREFERRED_SSID"] ?? "" }
