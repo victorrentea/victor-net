@@ -37,6 +37,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var lastAskedAt = Date.distantPast
 
     var onRoamingSuspendToggled: (() -> Void)?
+    var phoneBattery: (() -> PhoneBattery?)?
     /// The menu just opened — offline, that is when to ask the phone for its hotspot.
     var onOpen: (() -> Void)?
 
@@ -148,6 +149,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        if Config.hasPhone, let battery = phoneBattery?() { menu.addItem(info(battery.menuTitle(now: Date()))) }
         menu.addItem(info("Built \(BuildInfo.time)"))
         // No ⌘Q shown: its column made the whole menu wider for nothing.
         menu.addItem(action("Quit", #selector(quitAction)))

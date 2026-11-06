@@ -22,6 +22,13 @@ struct PhoneBattery: Equatable {
         return PhoneBattery(pct: pct, charging: (b["charging"] as? NSNumber)?.boolValue ?? false, readAt: now)
     }
 
+    /// The menu's row: "🔋 Phone: 63%", ⚡ while charging. Like the roaming row, a
+    /// reading over 30 min old says when it is from.
+    func menuTitle(now: Date) -> String {
+        let old = now.timeIntervalSince(readAt) > 30 * 60
+        return "🔋 Phone: \(pct)%\(charging ? " ⚡" : "")\(old ? " · \(NetworkBookPolicy.ago(readAt, now: now))" : "")"
+    }
+
     /// Railway's `{"pct":63,"charging":false,"age_s":120}`; nil from `{"pct":-1}` (never reported).
     static func parseCloud(_ data: Data, now: Date) -> PhoneBattery? {
         guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],

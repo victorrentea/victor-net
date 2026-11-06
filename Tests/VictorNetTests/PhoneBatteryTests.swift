@@ -71,6 +71,13 @@ final class PhoneLowBatteryTests: XCTestCase {
         XCTAssertNil(PhoneLowBattery.showing(b(12, charging: true), now: now))
     }
 
+    func testTheMenuRowSaysChargingAndAnOldReadingsAge() {
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now).menuTitle(now: now), "🔋 Phone: 63%")
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: true, readAt: now).menuTitle(now: now), "🔋 Phone: 63% ⚡")
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now - 2 * 3600).menuTitle(now: now),
+                       "🔋 Phone: 63% · 2 h ago")
+    }
+
     func testHidesAnUnknownOrOldReading() {
         XCTAssertNil(PhoneLowBattery.showing(nil, now: now))
         XCTAssertNil(PhoneLowBattery.showing(b(12, age: PhoneLowBattery.maxAge), now: now))

@@ -66,6 +66,7 @@ Wi-Fi                                    [ON]       ← macOS's first line: a re
 ✓ ✈️ Roaming: Allow Claude
 ✓ 🔒 ✈️ Roaming: Auto-Stop Hotspot < 1 GB             ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
+🔋 Phone: 63% ⚡                                    ← greyed; ⚡ = charging, over 30 min old says when; no row before a first reading
 Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu
 ```

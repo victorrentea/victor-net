@@ -98,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneCloud.onReading = { [weak self] b in self?.phoneBattery.accept(b) }
         phoneCloud.start()
         phoneBatteryBar.reading = { [weak self] in self?.phoneBattery.current }
+        menu.phoneBattery = { [weak self] in self?.phoneBattery.current }
         phoneBatteryBar.start()
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
