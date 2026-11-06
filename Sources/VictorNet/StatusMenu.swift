@@ -414,8 +414,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         net.join(ssid, password: password) { [weak self] error in
             if let error {
                 // macOS lists the network but gives `networksetup` no password for it
-                // (airportd: "Missing password", tmpErr): only the first time, the
-                // password typed here lands where the next join finds it.
+                // (airportd: "Missing password", tmpErr): asked once, then `WifiPasswords`.
                 if JoinFailure.lacksPassword(error, typedOne: password != nil), let pw = Prompt.wifiPassword(ssid) {
                     self?.join(ssid, password: pw)
                     return
@@ -427,6 +426,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // so it auto-joins later with or without this app (Victor, 2026-10-21).
             // Checked, not assumed: if the join did not remember it, add it.
             guard let password else { return }
+            WifiPasswords.store(password, for: ssid)
             self?.net.refresh()
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
                 guard let self else { return }

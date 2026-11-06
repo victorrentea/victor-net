@@ -247,6 +247,7 @@ final class NetworkState {
     }
 
     func join(_ ssid: String, password: String? = nil, done: @escaping (String?) -> Void) {
+        let password = password ?? WifiPasswords.password(for: ssid)
         run(["-setairportnetwork", Config.wifiInterface, ssid] + (password.map { [$0] } ?? []), done: done)
     }
 
