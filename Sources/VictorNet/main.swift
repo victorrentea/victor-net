@@ -91,11 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
         roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
-        roaming.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
+        roaming.onStatus = { [weak self] data in
+            self?.phoneBattery.accept(data)
+            self?.clipSync.status(data)
+        }
         roaming.start()
         phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneLan.ssid = { [weak self] in self?.net.ssid }
-        phoneLan.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
+        phoneLan.onStatus = { [weak self] data in
+            self?.phoneBattery.accept(data)
+            self?.clipSync.status(data)
+        }
         phoneLan.start()
         phoneCloud.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneCloud.onReading = { [weak self] b in self?.phoneBattery.accept(b) }
@@ -150,6 +156,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The menu's "Start Hotspot", as a click would.
             hotspot.startNow()
             return (200, HttpServer.json(hotspot.stateJSON))
+        case "/test/files/ignore":
+            let secs = min(max(Double(query["s"] ?? "") ?? 60, 0), 900)
+            onMain { self.clipSync.inbox.ignore(onlyDirect: query["direct"] == "1", for: secs) }
+            return (200, HttpServer.json(clipSync.inbox.stateJSON))
         case "/test/hotspot/row":
             var row: [String: Any] = [:]
             onMain { row = self.menu?.hotspotRowForTest() ?? [:] }

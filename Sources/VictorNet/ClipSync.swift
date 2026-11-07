@@ -85,7 +85,7 @@ final class ClipSync {
     private static let retry: TimeInterval = 15
 
     private let phone: PhoneLink
-    private let inbox = FileInbox()
+    let inbox = FileInbox()
     private let key: SymmetricKey?
     private let pasteboard = NSPasteboard.general
     private lazy var session: URLSession = {
@@ -219,12 +219,11 @@ final class ClipSync {
     private func take(_ sealed: String) {
         guard let key, let clip = ClipCrypto.open(sealed, key: key),
               ClipPolicy.believable(clip, now: Date(), seen: seen) else { return }
+        // A file offer is not marked seen: `/status` repeats it every 5 s, which is the retry
+        // after a failed download. `FileInbox` itself skips a file it has or is fetching.
+        if let files = clip.files { return inbox.accept(files, ips: clip.ips ?? [], relay: clip.relay ?? false) }
         seen = Array((seen + [clip.id]).suffix(64))
-        if let files = clip.files {
-            inbox.accept(files, ips: clip.ips ?? [], relay: clip.relay ?? false)
-        } else {
-            write(clip.text)
-        }
+        write(clip.text)
     }
 
     private func write(_ text: String) {

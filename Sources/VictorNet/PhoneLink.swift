@@ -213,7 +213,10 @@ final class PhoneLink {
         get("/clip?c=\(sealed)", timeout: 3, done: done)
     }
 
-    private func get(_ path: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
+    private static let signingKey = ClipCrypto.key(hex: Config.clipKey)
+
+    private func get(_ unsigned: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
+        let path = PhoneAuth.sign(unsigned, key: Self.signingKey)
         guard onHotspot(), let gw = Self.gateway(),
               let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {
             guard let viaBluetooth else { return done(nil, "only while this Mac is on the phone's hotspot") }

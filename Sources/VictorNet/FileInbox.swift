@@ -98,20 +98,45 @@ final class FileInbox {
     }()
     private var last: (Date, String)?
     private var lastError: String?
-    /// The direct way and Railway can both offer a file: the first one that lands wins.
-    private var taken: [String] = []
+    /// Fetching or fetched: the direct way, Railway and the 5 s `/status` all offer the same file.
+    private var claimed: [String] = []
+    private let lock = NSLock()
+    /// `GET /test/files/ignore?direct=1&s=` — pretend the phone is out of reach: only Railway
+    /// offers (`direct=1`), or nothing at all, which leaves the file to the phone.
+    private var ignoreUntil = Date.distantPast
+    private var ignoreOnlyDirect = false
 
     var stateJSON: [String: Any] {
         ["last_ago_s": orNull(last.map { Int(Date().timeIntervalSince($0.0)) }),
-         "last_name": orNull(last?.1), "last_error": orNull(lastError)]
+         "last_name": orNull(last?.1), "last_error": orNull(lastError),
+         "ignoring_s": max(0, Int(ignoreUntil.timeIntervalSinceNow)), "ignoring_only_direct": ignoreOnlyDirect]
+    }
+
+    func ignore(onlyDirect: Bool, for seconds: TimeInterval) {
+        ignoreOnlyDirect = onlyDirect
+        ignoreUntil = Date() + seconds
     }
 
     /// Main thread.
     func accept(_ files: [FileOffer], ips: [String], relay: Bool) {
-        for file in files where !taken.contains(file.id) {
+        if Date() < ignoreUntil, !ignoreOnlyDirect || !relay { return }
+        for file in files where claim(file.id) {
             netInfo("📥 \(file.size) bytes offered by the phone\(relay ? ", on Railway" : "")")
             if relay { fromRelay(file) } else { download(file, from: ips) }
         }
+    }
+
+    private func claim(_ id: String) -> Bool {
+        lock.withLock {
+            guard !claimed.contains(id) else { return false }
+            claimed = Array((claimed + [id]).suffix(128))
+            return true
+        }
+    }
+
+    /// Failed: the next offer may try again.
+    private func release(_ id: String) {
+        lock.withLock { claimed.removeAll { $0 == id } }
     }
 
     private func fromRelay(_ file: FileOffer) {
@@ -121,7 +146,8 @@ final class FileInbox {
         session.downloadTask(with: request) { [weak self] temp, response, error in
             guard let self else { return }
             guard let temp, (response as? HTTPURLResponse)?.statusCode == 200, self.store(temp, file, key) else {
-                return netInfo("📥 Railway: \(error?.localizedDescription ?? "no usable answer")")
+                self.release(file.id)
+                return netInfo("📥 Railway: \(error.map { "\(($0 as NSError).code)" } ?? "no usable answer")")
             }
             var done = URLRequest(url: url)
             done.httpMethod = "DELETE"
@@ -133,25 +159,35 @@ final class FileInbox {
     private func download(_ file: FileOffer, from ips: [String]) {
         guard let ip = ips.first, let key = ClipCrypto.key(hex: file.key),
               let url = URL(string: "http://\(ip):\(Config.phoneStatusPort)/file?id=\(file.id)") else {
+            release(file.id)
             lastError = "no way to the phone"
             return netInfo("📥 no way to the phone for an offered file")
         }
         session.downloadTask(with: url) { [weak self] temp, response, error in
             guard let self else { return }
             if let temp, (response as? HTTPURLResponse)?.statusCode == 200, self.store(temp, file, key) {
-                self.session.dataTask(with: URL(string: "http://\(ip):\(Config.phoneStatusPort)/file/done?id=\(file.id)")!).resume()
+                let done = PhoneAuth.sign("/file/done?id=\(file.id)", key: Self.signingKey)
+                self.session.dataTask(with: URL(string: "http://\(ip):\(Config.phoneStatusPort)\(done)")!).resume()
                 return
             }
-            netInfo("📥 \(ip): \(error?.localizedDescription ?? "no usable answer")")
+            netInfo("📥 \(ip): \(error.map { "\(($0 as NSError).code)" } ?? "no usable answer")")
             RunLoop.main.perform(inModes: [.common]) { self.download(file, from: Array(ips.dropFirst())) }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }.resume()
     }
 
+    private static let signingKey = ClipCrypto.key(hex: Config.clipKey)
+
+    /// Concealed, like a text clip: clipboard managers do not keep it, and a screenshot can
+    /// hold a code or a bank balance.
     private static func putOnClipboard(_ image: Data) {
-        guard let picture = NSImage(data: image) else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.writeObjects([picture])
+        guard let tiff = NSImage(data: image)?.tiffRepresentation else { return }
+        let png = image.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.declareTypes((png ? [.png] : []) + [.tiff, NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")], owner: nil)
+        if png { pb.setData(image, forType: .png) }
+        pb.setData(tiff, forType: .tiff)
     }
 
     private func store(_ temp: URL, _ file: FileOffer, _ key: SymmetricKey) -> Bool {
@@ -160,8 +196,6 @@ final class FileInbox {
         defer { try? fm.removeItem(at: plain) }
         do {
             try FileFrames.decrypt(temp, to: plain, key: key, expectedSize: file.size)
-            guard !taken.contains(file.id) else { return true }
-            taken = Array((taken + [file.id]).suffix(64))
             if file.clipboard == true {
                 let image = try Data(contentsOf: plain)
                 RunLoop.main.perform(inModes: [.common]) { Self.putOnClipboard(image) }
@@ -177,8 +211,9 @@ final class FileInbox {
             netInfo("📥 saved in Downloads, \(file.size) bytes")
             return true
         } catch {
-            lastError = "\(error)"
-            netInfo("📥 not saved: \(error)")
+            // The code only: a description can carry the file's name into the log.
+            lastError = "\((error as NSError).domain) \((error as NSError).code)"
+            netInfo("📥 not saved: \(lastError ?? "")")
             return false
         }
     }
