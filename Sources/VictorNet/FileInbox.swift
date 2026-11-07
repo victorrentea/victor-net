@@ -86,8 +86,8 @@ enum FileInboxPolicy {
 ///
 /// This Mac opens no port, so it pulls: `ClipSync` hands over a sealed offer, and the file comes
 /// from the phone's `/file` on any address the offer lists, which works on any network the two
-/// share. With none, the phone puts it on Railway and offers it again. Not taken in time, the
-/// phone keeps it in its own Downloads.
+/// share. With none, the phone puts it on Railway and offers it again. Not taken in 3 min, the
+/// phone deletes it and asks for another Share.
 final class FileInbox {
     private let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral

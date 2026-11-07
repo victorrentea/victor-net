@@ -35,8 +35,9 @@ here (`FileInbox`). Every screenshot taken on the phone lands on this clipboard,
    hotspot, so it also works with no internet. The file comes from `:55126/file` in encrypted frames
    (`FileFrames`), on any network the two share.
 2. **Railway.** Not taken after 15 s, the phone uploads the same frames to `/api/file/{id}`
-   (`file_relay.py` in `training-assistant`: memory only, 15 min, 40 MB) and offers it again.
-3. **The phone keeps it.** Not taken in 3 min, or 15 on Railway, it goes to the phone's Downloads
-   and a notification says so. A screenshot is simply dropped: it is in the gallery anyway.
+   (`file_relay.py` in `training-assistant`: memory only, 15 min at most, 40 MB) and offers it again.
+3. **Or it gives up.** Not taken in 3 min, the file is deleted, from Railway too, and a notification
+   says to share it again (Victor, 2026-11-07: nothing lands in the phone's Downloads). A screenshot
+   goes silently: it is in the gallery anyway. Files a killed app left behind go the same way.
 
 Not over Bluetooth: too slow for files, and the two ways above cover the real cases.
