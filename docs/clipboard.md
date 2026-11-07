@@ -19,7 +19,24 @@
   only with the app in front, so any restart turned it off silently.
 - **Each clip carries an id and a time**, so the two ways of delivery cannot apply it twice and an
   old ciphertext cannot be replayed.
-- **Text only**, no images or files. **No Bluetooth phone → Mac**: this Mac
-  publishes no RFCOMM service, and the phone's own second service never worked (see
+- **The clipboard itself is text only**; files have their own way, below. **No Bluetooth phone →
+  Mac**: this Mac publishes no RFCOMM service, and the phone's own second service never worked (see
   `victor-phone-addons/CLAUDE.md`).
 - `GET /test/state` → `clip`: what went, by which way, and when. Never the text.
+
+## 📥 Files and screenshots, phone → Mac
+
+Share → **Mac Downloads** on the phone (`ShareToMac`, `FileOutbox.kt`) puts a file in `~/Downloads`
+here (`FileInbox`). Every screenshot taken on the phone lands on this clipboard, unasked
+(`ScreenshotWatch`, needs `READ_MEDIA_IMAGES`).
+
+1. **Direct.** This Mac opens no port, so it pulls. A sealed offer (name, size, a key for that file,
+   the phone's addresses) arrives through the mailbox and in `/status`, read every 5 s on the
+   hotspot, so it also works with no internet. The file comes from `:55126/file` in encrypted frames
+   (`FileFrames`), on any network the two share.
+2. **Railway.** Not taken after 15 s, the phone uploads the same frames to `/api/file/{id}`
+   (`file_relay.py` in `training-assistant`: memory only, 15 min, 40 MB) and offers it again.
+3. **The phone keeps it.** Not taken in 3 min, or 15 on Railway, it goes to the phone's Downloads
+   and a notification says so. A screenshot is simply dropped: it is in the gallery anyway.
+
+Not over Bluetooth: too slow for files, and the two ways above cover the real cases.

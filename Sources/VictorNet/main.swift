@@ -79,7 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
         phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
-        phone.onStatus = { [weak self] data in self?.phoneBattery.accept(data) }
+        phone.onStatus = { [weak self] data in
+            self?.phoneBattery.accept(data)
+            self?.clipSync.status(data)
+        }
         phone.viaBluetooth = { [weak self] path, budget, done in self?.roaming.request(path, budget: budget, done: done) }
         phone.start()
         mediaPause.start()

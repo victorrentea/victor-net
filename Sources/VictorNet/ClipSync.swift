@@ -9,6 +9,12 @@ struct ClipEnvelope: Codable, Equatable {
     let ts: Int64
     let from: String
     let text: String
+    /// Set instead of `text` when the phone offers files (`FileInbox`).
+    var files: [FileOffer]? = nil
+    /// Where the phone can be reached for them.
+    var ips: [String]? = nil
+    /// The files wait on Railway instead: the phone found no shorter way.
+    var relay: Bool? = nil
 }
 
 /// AES-256-GCM: nonce + ciphertext + tag, as base64url without padding.
@@ -79,6 +85,7 @@ final class ClipSync {
     private static let retry: TimeInterval = 15
 
     private let phone: PhoneLink
+    private let inbox = FileInbox()
     private let key: SymmetricKey?
     private let pasteboard = NSPasteboard.general
     private lazy var session: URLSession = {
@@ -112,7 +119,8 @@ final class ClipSync {
          "last_sent_ago_s": orNull(lastSent.map { Int(Date().timeIntervalSince($0.0)) }),
          "last_sent_via": orNull(lastSent?.1),
          "last_received_ago_s": orNull(lastReceived.map { Int(Date().timeIntervalSince($0)) }),
-         "last_error": orNull(lastError)]
+         "last_error": orNull(lastError),
+         "files": inbox.stateJSON]
     }
 
     func start() {
@@ -197,13 +205,26 @@ final class ClipSync {
         }
         after = answer["seq"] as? Int ?? after
         defer { primed = true }
-        if primed, let sealed = answer["ciphertext"] as? String, let key,
-           let clip = ClipCrypto.open(sealed, key: key),
-           ClipPolicy.believable(clip, now: Date(), seen: seen) {
-            seen = Array((seen + [clip.id]).suffix(64))
+        if primed, let sealed = answer["ciphertext"] as? String { take(sealed) }
+        poll()
+    }
+
+    /// `/status` shows the phone's file offers too: on its hotspot there may be no mailbox.
+    func status(_ data: Data) {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let offers = o["files"] as? [String] else { return }
+        offers.forEach(take)
+    }
+
+    private func take(_ sealed: String) {
+        guard let key, let clip = ClipCrypto.open(sealed, key: key),
+              ClipPolicy.believable(clip, now: Date(), seen: seen) else { return }
+        seen = Array((seen + [clip.id]).suffix(64))
+        if let files = clip.files {
+            inbox.accept(files, ips: clip.ips ?? [], relay: clip.relay ?? false)
+        } else {
             write(clip.text)
         }
-        poll()
     }
 
     private func write(_ text: String) {
