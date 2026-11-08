@@ -165,6 +165,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The menu's "Start Hotspot", as a click would.
             hotspot.startNow()
             return (200, HttpServer.json(hotspot.stateJSON))
+        case "/test/clip/toast":
+            // The toast a clip from the phone shows, without touching the clipboard.
+            let text = query["text"] ?? "https://victorrentea.ro/"
+            var png: Data?
+            onMain {
+                self.clipSync.toast.show(text)
+                if let out = query["png"] { png = self.clipSync.toast.png(); try? png?.write(to: URL(fileURLWithPath: out)) }
+            }
+            return (200, HttpServer.json(["ok": true, "png_bytes": png?.count ?? 0]))
         case "/test/files/ignore":
             let secs = min(max(Double(query["s"] ?? "") ?? 60, 0), 900)
             onMain { self.clipSync.inbox.ignore(onlyDirect: query["direct"] == "1", for: secs) }

@@ -86,6 +86,7 @@ final class ClipSync {
 
     private let phone: PhoneLink
     let inbox = FileInbox()
+    let toast = ClipToast()
     private let key: SymmetricKey?
     private let pasteboard = NSPasteboard.general
     private lazy var session: URLSession = {
@@ -120,6 +121,8 @@ final class ClipSync {
          "last_sent_via": orNull(lastSent?.1),
          "last_received_ago_s": orNull(lastReceived.map { Int(Date().timeIntervalSince($0)) }),
          "last_error": orNull(lastError),
+         "toast_ago_s": orNull(toast.lastShown.map { Int(Date().timeIntervalSince($0.0)) }),
+         "toast_link": orNull(toast.lastShown?.1),
          "files": inbox.stateJSON]
     }
 
@@ -233,5 +236,6 @@ final class ClipSync {
         changeCount = pasteboard.changeCount
         lastSynced = text
         lastReceived = Date()
+        toast.show(text)
     }
 }

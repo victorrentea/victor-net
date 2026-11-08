@@ -22,6 +22,12 @@
 - **The clipboard itself is text only**; files have their own way, below. **No Bluetooth phone →
   Mac**: this Mac publishes no RFCOMM service, and the phone's own second service never worked (see
   `victor-phone-addons/CLAUDE.md`).
+- **A toast says it arrived** (`ClipToast`, Emma 2026-11-08): top-right of the screen under the
+  pointer, 4 s, kept up while hovered, a click dismisses it. A clip that is only a web address
+  (`http(s)://…`, `www.…`) gets "Open in Browser" and 9 s. A panel of our own, not a system
+  notification: no permission, never steals the focus. The preview is one line, and a card number
+  shows only its last four digits, since the screen may be shared. `GET /test/clip/toast?text=…`
+  shows one without touching the clipboard (`&png=<path>` also draws it to a file).
 - `GET /test/state` → `clip`: what went, by which way, and when. Never the text.
 
 ## 📥 Files and screenshots, phone → Mac
