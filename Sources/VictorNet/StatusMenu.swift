@@ -314,6 +314,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                     sims.append(NSMenuItem(view: stop))
                 } else {
                     hotspotControl(row, stops: false)
+                    if !joined { sims = expectedSimRows(cell: cell) }
                 }
                 frame(row, sims.compactMap { $0.view as? MenuRowView })
             } else if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
@@ -441,6 +442,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         for (row, ssid) in wifiRows {
             guard let level = ssid == net.ssid ? net.rssi : rssi[ssid] else { continue }
             row.setIcon(Icons.wifi(strength: NetworkLookPolicy.strength(rssi: level)) ?? NSImage())
+        }
+    }
+
+    /// What each SIM gave this Mac where it is now (`SimLog`), by the SIM's own name.
+    var simHere: (() -> [String: SimSpot])?
+
+    /// With the hotspot off: what each SIM gave here before, in grey, so the place can be judged
+    /// before starting it (Victor, 2026-11-08). Nothing recorded here = no rows.
+    private func expectedSimRows(cell: (NetworkRecord, String) -> String) -> [NSMenuItem] {
+        let here = simHere?() ?? [:]
+        let known = net.phoneSignal?.sims ?? []
+        let now = Date()
+        return here.keys.sorted().compactMap { name in
+            guard let spot = here[name] else { return nil }
+            var r = NetworkRecord(name: name, kind: "sim", lastSeen: spot.lastSeen)
+            r.maxDown = spot.maxDown ?? 0
+            r.maxUp = spot.maxUp ?? 0
+            r.latencyMs = SimLogPolicy.median(spot.latency)
+            let label = spot.label ?? known.first { $0.name == name }.map(SimSignalPolicy.label) ?? name
+            let row = MenuRowView(name: label, columns: [cell(r, NetworkBookPolicy.since(spot.lastSeen, now: now))],
+                                  icon: Icons.cellular(level: nil), enabled: false, indent: 16, staleNumbers: true)
+            row.toolTip = "Measured here before, through the hotspot on this SIM"
+            return NSMenuItem(view: row)
         }
     }
 
@@ -708,6 +732,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                cell: { r, seen in "\(TrafficPolicy.rate(r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })
             out.append(MenuRowView(name: "Stop Hotspot", icon: Icons.hotspotOff(), indent: 16))
             frame(head, Array(out.suffix(4)).compactMap { $0 as? MenuRowView })
+            // Off: what each SIM gave here before, in grey.
+            let off = MenuRowView(name: "victor", icon: Icons.hotspot())
+            off.setStatus("Start Hotspot", spinning: false)
+            out.append(off)
+            for (name, cellText) in [("Orange", "2.1↓MB/s\u{2009}⋅\u{2009}0.9↑MB/s\u{2009}⋅\u{2009}36↕︎ms\u{2009}⋅\u{2009}3 days"),
+                                     ("Vodafone", "1.3↓MB/s\u{2009}⋅\u{2009}0.4↑MB/s\u{2009}⋅\u{2009}53↕︎ms\u{2009}⋅\u{2009}3 days")] {
+                out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil), enabled: false,
+                                       indent: 16, staleNumbers: true))
+            }
+            frame(off, Array(out.suffix(2)).compactMap { $0 as? MenuRowView })
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
                                    icon: Icons.wifi(strength: 2)))
             out.append(MenuRowView(name: "tzutze", columns: [samples[1]],

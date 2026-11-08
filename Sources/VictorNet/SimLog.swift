@@ -11,6 +11,11 @@ struct SimSpot: Codable, Equatable {
     var speed: Double?
     var speedAt: Date?
     var lastSeen: Date = .distantPast
+    /// Best 5 s average seen here on this SIM, bytes/s. Optional: older files lack them.
+    var maxDown: Double?
+    var maxUp: Double?
+    /// How the menu names it ("Orange"), kept for when the phone is not around to say.
+    var label: String?
 }
 
 /// The decisions behind `SimLog`, with no clock, file or network of their own.
@@ -93,6 +98,10 @@ final class SimLog {
         spot.latency = Array((spot.latency + [ms]).suffix(SimLogPolicy.keepSamples))
         if let sinr = signal()?.sinr { spot.sinr = Array((spot.sinr + [Double(sinr)]).suffix(SimLogPolicy.keepSamples)) }
         spot.lastSeen = now
+        // The traffic window restarts on a SIM switch, so its best belongs to this SIM.
+        spot.maxDown = max(spot.maxDown ?? 0, traffic.down.maxAverage ?? 0)
+        spot.maxUp = max(spot.maxUp ?? 0, traffic.up.maxAverage ?? 0)
+        if let s = signal()?.sims.first(where: { $0.name == sim }) { spot.label = SimSignalPolicy.label(s) }
         spots[here, default: [:]][sim] = spot
         unsaved += 1
         if unsaved >= 12 { save() }
