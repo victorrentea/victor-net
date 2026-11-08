@@ -141,9 +141,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // Networks, the way macOS lists them: the switch, the ones worth
         // comparing (✓ = in use, click = join), everything else in range, the
         // settings. Offline, a greyed "Offline N min" stands where the list was.
+        // The network rows first: their numbers set the menu's width, which the switch row uses.
+        MenuRowLayout.cellWidth = 0
+        networkItems = networkSection()
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
-        networkItems = networkSection()
         networkItems.forEach(menu.addItem)
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
@@ -248,9 +250,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // Each number with its unit, the arrow before the unit (Victor, 2026-11-08):
         // "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" — the header that labelled them is gone.
         func cell(_ r: NetworkRecord) -> String {
-            "\(rate(r.maxDown))↓\(unit.name) ⋅ \(rate(r.maxUp))↑\(unit.name) ⋅ "
+            // Thin spaces around the dot: the full ones cost the menu 14 pt.
+            "\(rate(r.maxDown))↓\(unit.name)\u{2009}⋅\u{2009}\(rate(r.maxUp))↑\(unit.name)\u{2009}⋅\u{2009}"
                 + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + "↕︎ms"
         }
+        // Only grows: rows redrawn while the menu is open keep the width it opened with.
+        MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, shown.map { MenuRowView.cellWidth(cell($0.value)) }.max() ?? 0)
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
         var items: [NSMenuItem] = []
@@ -578,18 +583,23 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// sample ones, and the rows with a status, drawn off-screen in each state on a
     /// light and a dark menu, to look at without opening the menu.
     func renderMoreRowForTest() -> String? {
-        let w = MenuRowLayout.width
         let rows: [(name: String, status: String, spinning: Bool)] = [
             ("More…", "", true), ("More…", "5", false), ("More…", "14", false), ("More…", "⚠︎", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
             ("Start Hotspot", "retrying in 23s", false),
         ]
+        // Sized as the menu would be, with the sample cells counted in.
+        let samples = ["290↓KB/s\u{2009}⋅\u{2009}120↑KB/s\u{2009}⋅\u{2009}145↕︎ms",
+                       "12.9↓MB/s\u{2009}⋅\u{2009}12.5↑MB/s\u{2009}⋅\u{2009}—↕︎ms"]
+        MenuRowLayout.cellWidth = 0
+        _ = networkRows()
+        MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, samples.map(MenuRowView.cellWidth).max() ?? 0)
         func views() -> [NSView] {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
-            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: ["290↓KB/s ⋅ 120↑KB/s ⋅ 145↕︎ms", "3 days"],
+            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0], "3 days"],
                                    icon: Icons.wifi(strength: 2)))
-            out.append(MenuRowView(name: "tzutze", columns: ["12.9↓MB/s ⋅ 12.5↑MB/s ⋅ —↕︎ms", "2 h"],
+            out.append(MenuRowView(name: "tzutze", columns: [samples[1], "2 h"],
                                    icon: Icons.wifi(strength: 3), dimmed: true))
             for r in rows {
                 let row = r.name == "More…"
@@ -601,6 +611,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             }
             return out
         }
+        let w = MenuRowLayout.width
         let panes = [views(), views()]
         let height = panes.map { $0.reduce(0) { $0 + $1.frame.height } }.max() ?? 0
         let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: height))

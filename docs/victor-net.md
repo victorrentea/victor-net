@@ -73,8 +73,9 @@ Quit                                                ← no ⌘Q: its column wide
 
 - **Rows are drawn views** (`MenuRows.swift`): fixed-x columns that line up whatever the
   names (tab stops in a title could not), a rounded highlight under the pointer, a click that
-  acts — none of which AppKit gives a view-backed item. 400 pt wide: the numbers carry their
-  units since 2026-11-08, so the cell needs 200 pt.
+  acts — none of which AppKit gives a view-backed item. 320 pt wide like the native menu, wider
+  only as far as the widest number cell shown needs (`MenuRowLayout.cellWidth`, measured at
+  every open; the numbers carry their units since 2026-11-08). Thin spaces around the `⋅`.
 - **More is a submenu** ("Other Networks" until 2026-10-21; unfolded inline until 2026-11-05):
   its rows follow the scans while it is open, redrawn only when the list changed; 🔒 = secured. A secured network this Mac does not know asks for its password in
   the app's own dialog: big type, the password **in clear by default**, a "Hide password" box

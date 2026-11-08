@@ -7,16 +7,21 @@ import AppKit
 /// pointer, a click that acts. A view-backed `NSMenuItem` gets none of that
 /// from AppKit, so it is here.
 enum MenuRowLayout {
-    /// The whole menu's width — as narrow as the numbers allow.
-    static let width: CGFloat = 400
+    /// The whole menu's width: 320 like the native one, wider only as far as the
+    /// network cells shown need (Victor, 2026-11-08: 400 fixed was too wide).
+    static var width: CGFloat { max(320, nameX + nameMin + 4 + cellWidth + 4 + seenWidth + 12) }
     static let height: CGFloat = 22
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
-    /// Two columns, right-aligned: "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" in one cell —
-    /// each number with its unit, no header over them (Victor, 2026-11-08) — then "seen".
-    static let columnRights: [CGFloat] = [342, 388]
-    static let columnWidths: [CGFloat] = [200, 42]
+    static let nameMin: CGFloat = 80
+    static let seenWidth: CGFloat = 42
+    /// The widest "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" cell of the list being drawn —
+    /// each number with its unit, no header over them (Victor, 2026-11-08).
+    static var cellWidth: CGFloat = 130
+    /// Two columns, right-aligned: that cell, then "seen".
+    static var columnRights: [CGFloat] { [width - 12 - seenWidth - 4, width - 12] }
+    static var columnWidths: [CGFloat] { [cellWidth, seenWidth] }
     static let statusRightInset: CGFloat = 12
 }
 
@@ -148,6 +153,12 @@ final class MenuRowView: NSView {
     }
 
     static let arrows: Set<Character> = ["↓", "↑", "↕︎", "↕"]
+
+    /// How wide a number cell is drawn, to size `MenuRowLayout.cellWidth`.
+    static func cellWidth(_ text: String) -> CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize - 1, weight: .regular)
+        return ceil(greenArrows(text, font: font, color: .labelColor, arrows: .labelColor).size().width) + 4
+    }
 
     /// "2.9↓MB/s": the arrows in `arrows` colour, the unit after them a size smaller.
     static func greenArrows(_ text: String, font: NSFont, color: NSColor, arrows arrowColor: NSColor) -> NSAttributedString {
