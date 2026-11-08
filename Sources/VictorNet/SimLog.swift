@@ -38,16 +38,6 @@ enum SimLogPolicy {
         !roaming && stableFor >= settle && recentDown < busyBytesPerSecond && spot?.speedAt == nil
     }
 
-    /// `📶 Here: • yoxo 36 ms ⋅ 2.10 MB/s   Vic 53 ms ⋅ —`, the SIM in use first and dotted.
-    static func row(_ here: [String: SimSpot], current: String?) -> String? {
-        let sims = here.keys.sorted { a, b in a == current ? true : b == current ? false : a < b }
-        let cells: [String] = sims.compactMap { sim in
-            guard let spot = here[sim], let ms = median(spot.latency) else { return nil }
-            let speed = spot.speed.map { TrafficPolicy.rate($0) } ?? "—"
-            return (sim == current ? "• " : "") + "\(sim) \(Int(ms.rounded())) ms ⋅ \(speed)"
-        }
-        return cells.isEmpty ? nil : "📶 Here: " + cells.joined(separator: "   ")
-    }
 }
 
 /// 📶 Which of the phone's two SIMs serves this Mac better, place by place (Victor, 2026-11-08:
@@ -120,11 +110,8 @@ final class SimLog {
         }
     }
 
-    /// The menu's line for the place this Mac is in, nil off the hotspot or with nothing yet.
-    var row: String? {
-        guard let sim = currentSim, let here = spots[place] else { return nil }
-        return SimLogPolicy.row(here, current: sim)
-    }
+    /// What each SIM gave this Mac where it is now.
+    var here: [String: SimSpot] { spots[place] ?? [:] }
 
     var stateJSON: [String: Any] {
         ["place": place, "sim": orNull(currentSim),

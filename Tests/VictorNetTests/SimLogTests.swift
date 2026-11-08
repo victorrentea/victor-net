@@ -29,20 +29,14 @@ final class SimLogTests: XCTestCase {
         XCTAssertFalse(SimLogPolicy.shouldTestSpeed(nil, stableFor: SimLogPolicy.settle, recentDown: 0, roaming: true))
     }
 
-    func testTheRowPutsTheSimInUseFirst() {
-        var yoxo = SimSpot(); yoxo.latency = [30, 36, 40]; yoxo.speed = 2_100_000
-        var vic = SimSpot(); vic.latency = [53]
-        let row = SimLogPolicy.row(["yoxo": yoxo, "Vic": vic], current: "Vic")
-        XCTAssertEqual(row, "📶 Here: • Vic 53 ms ⋅ —   yoxo 36 ms ⋅ \(TrafficPolicy.rate(2_100_000))")
-        XCTAssertNil(SimLogPolicy.row([:], current: "Vic"))
-    }
-
-    func testBothSimsSignalDataFirst() {
+    func testSimRowsDataFirstWithBarsAndLatency() {
         let sims = SimSignal.parse([["name": "Vic", "data": false, "network": "LTE", "rsrp": -98, "sinr": 14],
-                                    ["name": "yoxo", "data": true, "network": "LTE", "rsrp": -97, "sinr": -5],
-                                    ["name": "far", "data": false]])
-        XCTAssertEqual(SimSignalPolicy.row(sims), "📡 • yoxo LTE -5 dB poor   Vic LTE 14 dB good   far no signal")
-        XCTAssertNil(SimSignalPolicy.row([]))
+                                    ["name": "yoxo", "data": true, "network": "LTE", "rsrp": -85, "sinr": -5],
+                                    ["name": "far", "data": false, "level": 0]])
+        XCTAssertEqual(SimSignalPolicy.ordered(sims).map(\.name), ["yoxo", "Vic", "far"])
+        XCTAssertEqual(sims.map(\.level), [3, 4, 0])
+        XCTAssertEqual(SimSignalPolicy.cell(sims[1], latencyMs: 36.4), "LTE\u{2009}⋅\u{2009}-5 dB poor\u{2009}⋅\u{2009}36↕︎ms")
+        XCTAssertEqual(SimSignalPolicy.cell(sims[2], latencyMs: nil), "no signal")
     }
 
     func testSinrWords() {

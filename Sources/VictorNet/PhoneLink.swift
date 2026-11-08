@@ -58,6 +58,8 @@ struct PhoneSignal: Equatable {
 struct SimSignal: Equatable {
     let name: String
     let isData: Bool
+    /// 0…4, on the phone's own status-bar scale when RSRP is known.
+    let level: Int
     let network: String?
     let rsrp: Int?
     let sinr: Int?
@@ -65,6 +67,8 @@ struct SimSignal: Equatable {
     static func parse(_ list: Any?) -> [SimSignal] {
         (list as? [[String: Any]] ?? []).map {
             SimSignal(name: $0["name"] as? String ?? "?", isData: $0["data"] as? Bool ?? false,
+                      level: ($0["rsrp"] as? NSNumber).map { PhoneStatusPolicy.bars(dbm: $0.intValue) }
+                          ?? max(0, min(4, ($0["level"] as? NSNumber)?.intValue ?? 0)),
                       network: $0["network"] as? String, rsrp: ($0["rsrp"] as? NSNumber)?.intValue,
                       sinr: ($0["sinr"] as? NSNumber)?.intValue)
         }
@@ -83,16 +87,21 @@ enum SimSignalPolicy {
         }
     }
 
-    /// `📡 • yoxo LTE −5 dB poor   Vic LTE 12 dB good` — the data SIM first and dotted.
-    static func row(_ sims: [SimSignal]) -> String? {
-        guard !sims.isEmpty else { return nil }
-        let cells = sims.sorted { $0.isData && !$1.isData }.map { s -> String in
-            var parts = [(s.isData ? "• " : "") + s.name]
-            if let n = s.network { parts.append(n) }
-            if let q = s.sinr { parts.append("\(q) dB \(quality(sinr: q))") } else if let r = s.rsrp { parts.append("\(r) dBm") } else { parts.append("no signal") }
-            return parts.joined(separator: " ")
-        }
-        return "📡 " + cells.joined(separator: "   ")
+    /// The data SIM first, then the others by name.
+    static func ordered(_ sims: [SimSignal]) -> [SimSignal] {
+        sims.sorted { a, b in a.isData != b.isData ? a.isData : a.name < b.name }
+    }
+
+    /// The SIM's row under the hotspot: `LTE ⋅ -5 dB poor ⋅ 36↕︎ms`, the latency being this
+    /// SIM's median here (`SimLog`), when there is one.
+    static func cell(_ s: SimSignal, latencyMs: Double?) -> String {
+        var parts: [String] = []
+        if let n = s.network { parts.append(n) }
+        if let q = s.sinr { parts.append("\(q) dB \(quality(sinr: q))") }
+        else if let r = s.rsrp { parts.append("\(r) dBm") }
+        else { parts.append("no signal") }
+        if let ms = latencyMs { parts.append("\(Int(ms.rounded()))↕︎ms") }
+        return parts.joined(separator: "\u{2009}⋅\u{2009}")
     }
 }
 

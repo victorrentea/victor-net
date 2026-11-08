@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         simLog.location = { [weak self] in self?.hotspot.lastLocationFix() }
         simLog.roaming = { [weak self] in self?.roaming.reading?.roamingNow ?? true }
         traffic.onLatency = { [weak self] ms in self?.simLog.latency(ms) }
-        menu.simRow = { [weak self] in self?.simLog.row }
+        menu.simHere = { [weak self] in self?.simLog.here ?? [:] }
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.start()

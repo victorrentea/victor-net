@@ -49,8 +49,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// The menu just opened — offline, that is when to ask the phone for its hotspot.
     var onOpen: (() -> Void)?
 
-    /// `SimLog`'s line for this place, both SIMs side by side.
-    var simRow: (() -> String?)?
+    /// `SimLog`'s numbers for this place, by SIM name.
+    var simHere: (() -> [String: SimSpot])?
 
     init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor, hotspot: HotspotFallback) {
         self.net = net
@@ -150,9 +150,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
         networkItems.forEach(menu.addItem)
-        if net.onHotspot, let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter,
-           let both = SimSignalPolicy.row(s.sims) { menu.addItem(info(both)) }
-        if let sims = simRow?() { menu.addItem(info(sims)) }
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
 
@@ -292,8 +289,26 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 : (current ? "Best over the last hour" : "Best over the last hour spent on it")
                 + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
+            if joined, ssid == Config.hotspotSSID { items += simRows() }
         }
         return items
+    }
+
+    /// Under the hotspot while it is in use: the phone's SIMs, in the same bars as the menu bar,
+    /// ✓ on the one carrying the data (Victor, 2026-11-08). The switch stays his, on the phone.
+    private func simRows() -> [NSMenuItem] {
+        guard let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter else { return [] }
+        return simRowViews(s.sims, here: simHere?() ?? [:]).map { NSMenuItem(view: $0) }
+    }
+
+    private func simRowViews(_ sims: [SimSignal], here: [String: SimSpot]) -> [MenuRowView] {
+        SimSignalPolicy.ordered(sims).map { sim in
+            let row = MenuRowView(name: sim.name,
+                                  columns: [SimSignalPolicy.cell(sim, latencyMs: here[sim.name].flatMap { SimLogPolicy.median($0.latency) })],
+                                  icon: Icons.cellular(level: sim.level), checked: sim.isData, enabled: false, indent: 16)
+            row.toolTip = "SINR: past 20 dB excellent, 13 good, 0 fair, below poor. ↕︎ = this SIM's median latency here."
+            return row
+        }
     }
 
     /// "More…" — a real submenu with every other Wi-Fi in range (Victor,
@@ -606,6 +621,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         func views() -> [NSView] {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
+            out.append(MenuRowView(name: "victor", columns: [samples[1]], icon: Icons.phone(), checked: true))
+            var spot = SimSpot(); spot.latency = [36]
+            out += simRowViews([SimSignal(name: "yoxo", isData: true, level: 3, network: "LTE", rsrp: -97, sinr: -5),
+                                SimSignal(name: "Vic", isData: false, level: 4, network: "5G", rsrp: -85, sinr: 21),
+                                SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil)],
+                               here: ["yoxo": spot])
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
                                    icon: Icons.wifi(strength: 2)))
             out.append(MenuRowView(name: "tzutze", columns: [samples[1]],

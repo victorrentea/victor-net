@@ -218,13 +218,13 @@ lets the music go if the resume never arrives. State: `/test/state` → `media_p
 location fix, rounded to ~1 km; `?` without one) and the data SIM the phone names in `/status`
 (`signal.sim`, with `rsrp` and `sinr`). Capacity can't be read off traffic, which only shows what
 was used, so after ten quiet minutes on one SIM in one place the 10 MB ⚡ test runs **once for that
-SIM there**, never on roaming data. The menu then shows `📶 Here: • yoxo 36 ms ⋅ 2.10 MB/s   Vic 53
-ms ⋅ —`. Kept in `~/.victor-net/sim-places.json`; `GET /test/state` → `sim_log`. The manual
+SIM there**, never on roaming data. Kept in `~/.victor-net/sim-places.json`; `GET /test/state` → `sim_log`. The manual
 measurements so far are in `victor-phone-addons/docs/sim-benchmarks.md`.
 
-`📡` above it: **both SIMs' signal right now**, from `signal.sims` — the phone keeps both registered
-for calls, so a new place (an airport where Vodafone has nothing) can be judged without switching.
-SINR in words: ≥ 20 dB excellent, ≥ 13 good, ≥ 0 fair, below poor. The switch itself stays Victor's,
+**Under the hotspot's row, while it is in use: the phone's SIMs**, each with the menu bar's GSM bars, ✓ on
+the one carrying data, its SINR and its median latency here (`signal.sims` — the phone keeps both
+registered for calls, so a new place, an airport where Vodafone has nothing, can be judged without
+switching). SINR in words: ≥ 20 dB excellent, ≥ 13 good, ≥ 0 fair, below poor. The switch itself stays Victor's,
 by hand on the phone (Android lets only system apps change the data SIM, and Samsung Routines have
 no action for it — checked on the phone, 2026-11-08).
 

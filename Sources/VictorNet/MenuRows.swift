@@ -39,7 +39,8 @@ final class MenuRowView: NSView {
 
     /// `columns` sit right-aligned at `MenuRowLayout.columnRights`.
     init(name: String, columns: [String] = [], icon: NSImage? = nil, checked: Bool = false,
-         enabled: Bool = true, dimmed: Bool = false, header: Bool = false, trailing: NSImage? = nil, bold: Bool = false) {
+         enabled: Bool = true, dimmed: Bool = false, header: Bool = false, trailing: NSImage? = nil, bold: Bool = false,
+         indent: CGFloat = 0) {
         // Headers too: the networks' header measures the speed on a click.
         self.enabled = enabled
         super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width,
@@ -50,12 +51,12 @@ final class MenuRowView: NSView {
         let base: NSColor = header || dimmed ? .tertiaryLabelColor : .labelColor
         if checked {
             add(label("✓", font: .systemFont(ofSize: size, weight: .semibold), color: base),
-                x: MenuRowLayout.checkX, width: 14)
+                x: MenuRowLayout.checkX + indent, width: 14)
         }
         if let icon {
             let v = NSImageView(image: icon)
             v.alphaValue = dimmed ? 0.45 : 1
-            v.frame = NSRect(x: MenuRowLayout.iconX, y: (frame.height - 16) / 2, width: 18, height: 16)
+            v.frame = NSRect(x: MenuRowLayout.iconX + indent, y: (frame.height - 16) / 2, width: 18, height: 16)
             v.imageScaling = .scaleProportionallyDown
             v.contentTintColor = base
             addSubview(v)
@@ -67,7 +68,7 @@ final class MenuRowView: NSView {
                       : .systemFont(ofSize: size, weight: bold ? .semibold : .regular), color: base)
         nameLabel = n
         n.lineBreakMode = .byTruncatingTail
-        add(n, x: header ? MenuRowLayout.checkX : MenuRowLayout.nameX, width: nameEnd - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
+        add(n, x: (header ? MenuRowLayout.checkX : MenuRowLayout.nameX) + indent, width: nameEnd - indent - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
         for (i, text) in columns.enumerated() where i < MenuRowLayout.columnRights.count {
             // Header units in a size smaller, so "↓MB/s" fits its column.
             let c = label(text, font: header ? .systemFont(ofSize: size - 1, weight: .medium)
