@@ -40,10 +40,11 @@ final class MenuRowView: NSView {
     /// `columns` sit right-aligned at `MenuRowLayout.columnRights`.
     init(name: String, columns: [String] = [], icon: NSImage? = nil, checked: Bool = false,
          enabled: Bool = true, dimmed: Bool = false, header: Bool = false, trailing: NSImage? = nil, bold: Bool = false,
-         indent: CGFloat = 0, staleNumbers: Bool = false) {
+         indent: CGFloat = 0, staleNumbers: Bool = false, width: CGFloat? = nil) {
         // Headers too: the networks' header measures the speed on a click.
         self.enabled = enabled
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width,
+        let rowWidth = width ?? MenuRowLayout.width
+        super.init(frame: NSRect(x: 0, y: 0, width: rowWidth,
                                  height: header ? 18 : MenuRowLayout.height))
         let size = header ? NSFont.smallSystemFontSize : NSFont.systemFontSize
         // Greyed only when unavailable (Ethernet unplugged); the network in use
@@ -62,7 +63,7 @@ final class MenuRowView: NSView {
             addSubview(v)
             images.append(v)
         }
-        let nameEnd = columns.isEmpty ? MenuRowLayout.width - 30
+        let nameEnd = columns.isEmpty ? rowWidth - 30
             : MenuRowLayout.columnRights[0] - MenuRowLayout.columnWidths[0] - 4
         let n = label(name, font: header ? .systemFont(ofSize: size, weight: .medium)
                       : .systemFont(ofSize: size, weight: bold ? .semibold : .regular), color: base)
@@ -88,7 +89,7 @@ final class MenuRowView: NSView {
         }
         if let trailing {
             let v = NSImageView(image: trailing)
-            v.frame = NSRect(x: MenuRowLayout.width - 26, y: (frame.height - 14) / 2, width: 14, height: 14)
+            v.frame = NSRect(x: rowWidth - 26, y: (frame.height - 14) / 2, width: 14, height: 14)
             v.contentTintColor = .secondaryLabelColor
             addSubview(v)
             images.append(v)
@@ -124,7 +125,7 @@ final class MenuRowView: NSView {
                 add(l, x: MenuRowLayout.iconX - 4, width: 26)
             } else {
                 l.alignment = .right
-                add(l, x: MenuRowLayout.width - MenuRowLayout.statusRightInset - 150, width: 150)
+                add(l, x: frame.width - MenuRowLayout.statusRightInset - 150, width: 150)
             }
             statusLabel = l
             let s = NSProgressIndicator()
@@ -139,7 +140,7 @@ final class MenuRowView: NSView {
         statusLabel?.stringValue = text
         if let l = statusLabel, let s = spinner {
             let w = (text as NSString).size(withAttributes: [.font: l.font as Any]).width
-            let x = statusBeforeName ? MenuRowLayout.iconX + 1 : MenuRowLayout.width - MenuRowLayout.statusRightInset - w - 20
+            let x = statusBeforeName ? MenuRowLayout.iconX + 1 : frame.width - MenuRowLayout.statusRightInset - w - 20
             s.frame = NSRect(x: x, y: (frame.height - 16) / 2, width: 16, height: 16)
             if spinning { s.startAnimation(nil) } else { s.stopAnimation(nil) }
         }

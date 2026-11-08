@@ -412,21 +412,21 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         othersMenu.removeAllItems()
         if others.isEmpty {
             othersMenu.addItem(NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off",
-                                                            enabled: false, dimmed: true)))
+                                                            enabled: false, dimmed: true, width: 160)))
         }
+        // As narrow as its longest name (Victor, 2026-11-08): no numbers here to line up.
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let longest = others.map { ($0.ssid as NSString).size(withAttributes: [.font: font]).width }.max() ?? 80
+        let width = (MenuRowLayout.nameX + longest + 40).rounded(.up)
         for n in others {
             let lock = n.secure ? NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "secured") : nil
             let row = MenuRowView(name: n.ssid, icon: Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi)),
-                                  trailing: lock)
+                                  trailing: lock, width: width)
             row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
             othersMenu.addItem(NSMenuItem(view: row))
         }
     }
 
-    /// *Start Hotspot*: a click asks the phone now, whatever the automatic
-    /// path thinks. Its right corner tells what the automatic path is doing, every
-    /// second: the attempt running, or how long until the next one (Victor,
-    /// 2026-11-05). The menu stays open, to watch it.
     private func frame(_ head: MenuRowView, _ children: [MenuRowView]) {
         head.groupEdge = children.isEmpty ? .single : .top
         for (i, c) in children.enumerated() { c.groupEdge = i == children.count - 1 ? .bottom : .middle }
@@ -460,6 +460,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// Whether the row drawn for the hotspot is its Stop row (else the hotspot's own row, = Start).
     private var hotspotRowStops = false
 
+    /// *Start Hotspot*: a click asks the phone now, whatever the automatic
+    /// path thinks. Its right corner tells what the automatic path is doing, every
+    /// second: the attempt running, or how long until the next one (Victor,
+    /// 2026-11-05). The menu stays open, to watch it.
     private func hotspotControl(_ row: MenuRowView, stops: Bool) {
         hotspotRowStops = stops
         row.keepsMenuOpen = true
