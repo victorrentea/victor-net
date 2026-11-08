@@ -191,10 +191,31 @@ final class MenuRowView: NSView {
         for v in images { v.contentTintColor = highlighted ? .selectedMenuItemTextColor : nil }
     }
 
+    /// Where this row sits in a framed group — the hotspot and its SIMs (Victor, 2026-11-08).
+    enum GroupEdge { case single, top, middle, bottom }
+    var groupEdge: GroupEdge? { didSet { needsDisplay = true } }
+
     override func draw(_ dirtyRect: NSRect) {
-        guard highlighted else { return }
-        NSColor.selectedContentBackgroundColor.setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 0), xRadius: 4, yRadius: 4).fill()
+        if highlighted {
+            NSColor.selectedContentBackgroundColor.setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 0), xRadius: 4, yRadius: 4).fill()
+        }
+        guard let edge = groupEdge else { return }
+        // One rounded frame across several rows: each draws the frame stretched past the edges
+        // it shares with a neighbour, clipped to itself, so only its own part shows.
+        let r: CGFloat = 6, over = r * 2
+        var frame = bounds.insetBy(dx: 4.5, dy: 0)
+        let openTop = edge == .middle || edge == .bottom, openBottom = edge == .middle || edge == .top
+        let (low, high) = isFlipped ? (openTop, openBottom) : (openBottom, openTop)
+        frame.origin.y -= low ? over : -0.5
+        frame.size.height += (low ? over : -0.5) + (high ? over : -0.5)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: bounds).setClip()
+        NSColor.tertiaryLabelColor.setStroke()
+        let path = NSBezierPath(roundedRect: frame, xRadius: r, yRadius: r)
+        path.lineWidth = 1
+        path.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     override func mouseEntered(with event: NSEvent) { highlighted = true }

@@ -148,7 +148,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
         networkItems.forEach(menu.addItem)
-        if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
 
         // Everything about the network that is not roaming, under its settings.
@@ -252,7 +251,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             records["wifi:\(ssid)"] = NetworkRecord(name: ssid, kind: ssid == Config.hotspotSSID ? "hotspot" : "wifi",
                                                     lastSeen: .distantPast)
         }
-        let shown = NetworkBookPolicy.listed(records, current: traffic.network?.key, reachable: reachable, now: now)
+        var shown = NetworkBookPolicy.listed(records, current: traffic.network?.key, reachable: reachable, now: now)
+        // The hotspot's row is also its Start button, so it is always there.
+        let hotspotKey = "wifi:\(Config.hotspotSSID)"
+        if Config.hasPhone, !Config.hotspotSSID.isEmpty, !shown.contains(where: { $0.key == hotspotKey }) {
+            shown.append((key: hotspotKey, value: records[hotspotKey]
+                          ?? NetworkRecord(name: Config.hotspotSSID, kind: "hotspot", lastSeen: .distantPast)))
+        }
         // One unit for the whole list, so the column reads straight down: KB/s
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
         let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
@@ -282,23 +287,39 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let inRange = ssid.map(reachable.contains) ?? false
             let icon: NSImage?
             if key == "wired" { icon = Icons.wired() }
-            else if ssid == Config.hotspotSSID { icon = Icons.phone() }
+            else if ssid == Config.hotspotSSID { icon = Icons.hotspot() }
             else {
                 let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
                 icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
             }
             // The hotspot's numbers are its SIMs', shown on their rows under it (Victor, 2026-11-08).
-            let sims = joined && ssid == Config.hotspotSSID ? simRows(records: records, cell: cell) : []
+            var sims = joined && ssid == Config.hotspotSSID ? simRows(records: records, cell: cell) : []
+            let isHotspot = ssid == Config.hotspotSSID && Config.hasPhone
+            // While it is on, the hotspot's row is only a heading: Stop is a row of its own, last in
+            // its frame; while it is off, the row itself starts it (Victor, 2026-11-08).
+            let hotspotOn = isHotspot && hotspotShowsStop
             let row = MenuRowView(name: ssid ?? "Ethernet",
-                                  columns: sims.isEmpty ? [cell(r, seen: seen(key, r))] : [],
-                                  icon: icon, checked: current, enabled: !current && inRange, dimmed: !current && !inRange)
-            if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
+                                  columns: sims.isEmpty && !isHotspot ? [cell(r, seen: seen(key, r))] : [],
+                                  icon: icon, checked: current,
+                                  enabled: isHotspot ? !hotspotOn : !current && inRange,
+                                  dimmed: !isHotspot && !current && !inRange)
+            if isHotspot {
+                if hotspotOn {
+                    let stop = MenuRowView(name: "Stop Hotspot", icon: Icons.hotspotOff(), indent: 16)
+                    hotspotControl(stop, stops: true)
+                    sims.append(NSMenuItem(view: stop))
+                } else {
+                    hotspotControl(row, stops: false)
+                }
+                frame(row, sims.compactMap { $0.view as? MenuRowView })
+            } else if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
             // The header said what the numbers are; the tooltip says it now (Victor, 2026-11-08).
             row.toolTip = r.maxDown == 0 && r.maxUp == 0 && r.latencyMs == nil ? "Not measured yet"
                 : (current ? "Best over the last hour" : "Best over the last hour spent on it")
                 + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
             items += sims
+
         }
         return items
     }
@@ -398,19 +419,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// path thinks. Its right corner tells what the automatic path is doing, every
     /// second: the attempt running, or how long until the next one (Victor,
     /// 2026-11-05). The menu stays open, to watch it.
-    private func startHotspotRow() -> NSMenuItem {
-        let row = MenuRowView(name: "Start Hotspot", icon: Icons.hotspot())
+    private func frame(_ head: MenuRowView, _ children: [MenuRowView]) {
+        head.groupEdge = children.isEmpty ? .single : .top
+        for (i, c) in children.enumerated() { c.groupEdge = i == children.count - 1 ? .bottom : .middle }
+    }
+
+    /// Whether the row drawn for the hotspot is its Stop row (else the hotspot's own row, = Start).
+    private var hotspotRowStops = false
+
+    private func hotspotControl(_ row: MenuRowView, stops: Bool) {
+        hotspotRowStops = stops
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in
             guard let self else { return }
             if self.hotspotShowsStop { self.stopHotspot() } else { self.hotspot.startNow() }
             self.updateHotspotRow()
         }
-        let item = NSMenuItem(view: row)
         hotspotRow = row
-        hotspotItem = item
         updateHotspotRow()
-        return item
     }
 
     private var hotspotShowsStop: Bool {
@@ -449,16 +475,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private static let holdAfterStop: TimeInterval = 120
     private var hotspotStoppedAt = Date.distantPast
     private weak var hotspotRow: MenuRowView?
-    private weak var hotspotItem: NSMenuItem?
 
     private func updateHotspotRow() {
-        guard let row = hotspotRow, let item = hotspotItem else { return }
+        guard let row = hotspotRow else { return }
         let p = hotspot.progress
-        let stop = hotspotShowsStop
-        item.isHidden = !stop && !HotspotRowPolicy.visible(p, onHotspot: net.onHotspot)
-        row.setName(stop ? "Stop Hotspot" : "Start Hotspot")
         let status = HotspotRowPolicy.status(p, now: Date())
-        row.setStatus(status.text, spinning: status.spinning)
+        // What a click does, unless an attempt is under way and says how far it got.
+        let text = !status.text.isEmpty || HotspotRowPolicy.busy(p) ? status.text : (hotspotRowStops ? "" : "Start Hotspot")
+        row.setStatus(text, spinning: status.spinning)
         row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }
     }
 
@@ -625,7 +649,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let rows: [(name: String, status: String, spinning: Bool)] = [
             ("More…", "", true), ("More…", "5", false), ("More…", "14", false), ("More…", "⚠︎", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
-            ("Start Hotspot", "retrying in 23s", false),
+            ("Start Hotspot", "retrying in 23s", false), ("Start Hotspot", "Start Hotspot", false),
         ]
         // Sized as the menu would be, with the sample cells counted in.
         let samples = ["290↓KB/s\u{2009}⋅\u{2009}120↑KB/s\u{2009}⋅\u{2009}145↕︎ms\u{2009}⋅\u{2009}3 days",
@@ -636,7 +660,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         func views() -> [NSView] {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
-            out.append(MenuRowView(name: "victor", columns: [samples[1]], icon: Icons.phone(), checked: true))
+            let head = MenuRowView(name: "victor", icon: Icons.hotspot(), checked: true)
+            out.append(head)
             var yoxo = NetworkRecord(name: "yoxo", kind: "sim", lastSeen: Date()); yoxo.maxDown = 2_100_000; yoxo.maxUp = 900_000; yoxo.latencyMs = 36
             var vic = NetworkRecord(name: "Vic", kind: "sim", lastSeen: Date().addingTimeInterval(-7200)); vic.maxDown = 1_300_000; vic.maxUp = 400_000; vic.latencyMs = 53
             out += simRowViews([SimSignal(name: "yoxo", isData: true, level: 3, network: "LTE", rsrp: -97, sinr: -5),
@@ -644,6 +669,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                 SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil)],
                                records: ["sim:yoxo": yoxo, "sim:Vic": vic],
                                cell: { r, seen in "\(TrafficPolicy.rate(r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })
+            out.append(MenuRowView(name: "Stop Hotspot", icon: Icons.hotspotOff(), indent: 16))
+            frame(head, Array(out.suffix(4)).compactMap { $0 as? MenuRowView })
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
                                    icon: Icons.wifi(strength: 2)))
             out.append(MenuRowView(name: "tzutze", columns: [samples[1]],
@@ -651,7 +678,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             for r in rows {
                 let row = r.name == "More…"
                     ? MenuRowView(name: r.name, trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
-                    : MenuRowView(name: r.name, icon: Icons.hotspot())
+                    : MenuRowView(name: Config.hotspotSSID, icon: Icons.hotspot())
                 row.statusBeforeName = r.name == "More…"
                 row.setStatus(r.status, spinning: r.spinning)
                 out.append(row)

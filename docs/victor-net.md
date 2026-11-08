@@ -50,13 +50,15 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 
 ```
 Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
-✓ 📱 victor      7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now    ← ✓ = in use, phone glyph for the hotspot; arrows green; no header (2026-11-08)
+╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its children (2026-11-08); off: click = start, "Start Hotspot" / countdown on the right
+│   ✓ ▂▄▆ yoxo   7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
+│     ▂▄▆ Vic    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h │
+╰   ((/)) Stop Hotspot                            │  ← only while it is on; the hotspot's row itself is then not clickable
   wifi tzutze    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h    ← today, out of range: greyed, not clickable
   wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)
-((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
 5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
 ──────────
-(Start Hotspot, or Stop Hotspot while the Mac is on it or sees it in a scan: `/hotspot/off` on the phone)
+(Stop Hotspot while the Mac is on it or sees it in a scan: `/hotspot/off` on the phone)
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
