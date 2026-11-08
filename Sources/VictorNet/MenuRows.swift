@@ -13,7 +13,7 @@ enum MenuRowLayout {
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
-    /// Two columns, right-aligned: "2.9 ↓MB/s ⋅ 2.5 ↑MB/s ⋅ 5 ↕︎ms" in one cell —
+    /// Two columns, right-aligned: "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" in one cell —
     /// each number with its unit, no header over them (Victor, 2026-11-08) — then "seen".
     static let columnRights: [CGFloat] = [342, 388]
     static let columnWidths: [CGFloat] = [200, 42]
@@ -149,7 +149,7 @@ final class MenuRowView: NSView {
 
     static let arrows: Set<Character> = ["↓", "↑", "↕︎", "↕"]
 
-    /// "2.9 ↓MB/s": the arrows in `arrows` colour, the unit after them a size smaller.
+    /// "2.9↓MB/s": the arrows in `arrows` colour, the unit after them a size smaller.
     static func greenArrows(_ text: String, font: NSFont, color: NSColor, arrows arrowColor: NSColor) -> NSAttributedString {
         let out = NSMutableAttributedString()
         let unitFont = NSFont.systemFont(ofSize: font.pointSize - 1)

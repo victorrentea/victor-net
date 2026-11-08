@@ -246,10 +246,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
         let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
         // Each number with its unit, the arrow before the unit (Victor, 2026-11-08):
-        // "2.9 ↓MB/s ⋅ 2.5 ↑MB/s ⋅ 5 ↕︎ms" — the header that labelled them is gone.
+        // "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" — the header that labelled them is gone.
         func cell(_ r: NetworkRecord) -> String {
-            "\(rate(r.maxDown)) ↓\(unit.name) ⋅ \(rate(r.maxUp)) ↑\(unit.name) ⋅ "
-                + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + " ↕︎ms"
+            "\(rate(r.maxDown))↓\(unit.name) ⋅ \(rate(r.maxUp))↑\(unit.name) ⋅ "
+                + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + "↕︎ms"
         }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
@@ -587,9 +587,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         func views() -> [NSView] {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
-            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: ["290 ↓KB/s ⋅ 120 ↑KB/s ⋅ 145 ↕︎ms", "3 days"],
+            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: ["290↓KB/s ⋅ 120↑KB/s ⋅ 145↕︎ms", "3 days"],
                                    icon: Icons.wifi(strength: 2)))
-            out.append(MenuRowView(name: "tzutze", columns: ["12.9 ↓MB/s ⋅ 12.5 ↑MB/s ⋅ — ↕︎ms", "2 h"],
+            out.append(MenuRowView(name: "tzutze", columns: ["12.9↓MB/s ⋅ 12.5↑MB/s ⋅ —↕︎ms", "2 h"],
                                    icon: Icons.wifi(strength: 3), dimmed: true))
             for r in rows {
                 let row = r.name == "More…"
