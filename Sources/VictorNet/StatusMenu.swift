@@ -273,6 +273,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                   columns: [cell(r), seen],
                                   icon: icon, checked: current, enabled: !current && inRange, dimmed: !current && !inRange)
             if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
+            // The header said what the numbers are; the tooltip says it now (Victor, 2026-11-08).
+            row.toolTip = r.maxDown == 0 && r.maxUp == 0 && r.latencyMs == nil ? "Not measured yet"
+                : (current ? "Best over the last hour" : "Best over the last hour spent on it")
+                + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
         }
         return items
