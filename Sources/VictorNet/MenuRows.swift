@@ -9,19 +9,19 @@ import AppKit
 enum MenuRowLayout {
     /// The whole menu's width: 320 like the native one, wider only as far as the
     /// network cells shown need (Victor, 2026-11-08: 400 fixed was too wide).
-    static var width: CGFloat { max(320, nameX + nameMin + 4 + cellWidth + 4 + seenWidth + 12) }
+    static var width: CGFloat { max(320, nameX + nameMin + 4 + cellWidth + 12) }
     static let height: CGFloat = 22
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
     static let nameMin: CGFloat = 80
-    static let seenWidth: CGFloat = 42
-    /// The widest "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" cell of the list being drawn —
-    /// each number with its unit, no header over them (Victor, 2026-11-08).
+    /// The widest "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms ⋅ now" cell of the list being drawn —
+    /// each number with its unit, no header over them, "seen" after a dot instead of
+    /// in a column of its own (Victor, 2026-11-08).
     static var cellWidth: CGFloat = 130
-    /// Two columns, right-aligned: that cell, then "seen".
-    static var columnRights: [CGFloat] { [width - 12 - seenWidth - 4, width - 12] }
-    static var columnWidths: [CGFloat] { [cellWidth, seenWidth] }
+    /// One column, right-aligned.
+    static var columnRights: [CGFloat] { [width - 12] }
+    static var columnWidths: [CGFloat] { [cellWidth] }
     static let statusRightInset: CGFloat = 12
 }
 

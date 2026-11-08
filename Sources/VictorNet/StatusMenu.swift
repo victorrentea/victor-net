@@ -249,13 +249,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
         // Each number with its unit, the arrow before the unit (Victor, 2026-11-08):
         // "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" — the header that labelled them is gone.
-        func cell(_ r: NetworkRecord) -> String {
+        func cell(_ r: NetworkRecord, seen: String) -> String {
             // Thin spaces around the dot: the full ones cost the menu 14 pt.
             "\(rate(r.maxDown))↓\(unit.name)\u{2009}⋅\u{2009}\(rate(r.maxUp))↑\(unit.name)\u{2009}⋅\u{2009}"
-                + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + "↕︎ms"
+                + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + "↕︎ms\u{2009}⋅\u{2009}\(seen)"
+        }
+        func seen(_ key: String, _ r: NetworkRecord) -> String {
+            let joined = key.hasPrefix("wifi:") && String(key.dropFirst(5)) == net.ssid
+            return joined ? "now" : r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
         }
         // Only grows: rows redrawn while the menu is open keep the width it opened with.
-        MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, shown.map { MenuRowView.cellWidth(cell($0.value)) }.max() ?? 0)
+        MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, shown.map { MenuRowView.cellWidth(cell($0.value, seen: seen($0.key, $0.value))) }.max() ?? 0)
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
         var items: [NSMenuItem] = []
@@ -273,9 +277,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
                 icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
             }
-            let seen = joined ? "now" : r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
             let row = MenuRowView(name: ssid ?? "Ethernet",
-                                  columns: [cell(r), seen],
+                                  columns: [cell(r, seen: seen(key, r))],
                                   icon: icon, checked: current, enabled: !current && inRange, dimmed: !current && !inRange)
             if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
             // The header said what the numbers are; the tooltip says it now (Victor, 2026-11-08).
@@ -589,17 +592,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             ("Start Hotspot", "retrying in 23s", false),
         ]
         // Sized as the menu would be, with the sample cells counted in.
-        let samples = ["290↓KB/s\u{2009}⋅\u{2009}120↑KB/s\u{2009}⋅\u{2009}145↕︎ms",
-                       "12.9↓MB/s\u{2009}⋅\u{2009}12.5↑MB/s\u{2009}⋅\u{2009}—↕︎ms"]
+        let samples = ["290↓KB/s\u{2009}⋅\u{2009}120↑KB/s\u{2009}⋅\u{2009}145↕︎ms\u{2009}⋅\u{2009}3 days",
+                       "12.9↓MB/s\u{2009}⋅\u{2009}12.5↑MB/s\u{2009}⋅\u{2009}—↕︎ms\u{2009}⋅\u{2009}2 h"]
         MenuRowLayout.cellWidth = 0
         _ = networkRows()
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, samples.map(MenuRowView.cellWidth).max() ?? 0)
         func views() -> [NSView] {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
-            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0], "3 days"],
+            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
                                    icon: Icons.wifi(strength: 2)))
-            out.append(MenuRowView(name: "tzutze", columns: [samples[1], "2 h"],
+            out.append(MenuRowView(name: "tzutze", columns: [samples[1]],
                                    icon: Icons.wifi(strength: 3), dimmed: true))
             for r in rows {
                 let row = r.name == "More…"
