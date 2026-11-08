@@ -51,8 +51,8 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 ```
 Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
 ╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its children (2026-11-08); off: click = start, "Start Hotspot" / countdown on the right
-│   ✓ ▂▄▆ yoxo   7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
-│     ▂▄▆ Vic    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h │
+│   ✓ ▂▄▆ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
+│     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
 ╰   ((/)) Stop Hotspot                            │  ← only while it is on; the hotspot's row itself is then not clickable
   wifi tzutze    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h    ← today, out of range: greyed, not clickable
   wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)

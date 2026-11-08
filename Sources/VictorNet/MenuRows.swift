@@ -40,7 +40,7 @@ final class MenuRowView: NSView {
     /// `columns` sit right-aligned at `MenuRowLayout.columnRights`.
     init(name: String, columns: [String] = [], icon: NSImage? = nil, checked: Bool = false,
          enabled: Bool = true, dimmed: Bool = false, header: Bool = false, trailing: NSImage? = nil, bold: Bool = false,
-         indent: CGFloat = 0) {
+         indent: CGFloat = 0, staleNumbers: Bool = false) {
         // Headers too: the networks' header measures the speed on a click.
         self.enabled = enabled
         super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width,
@@ -73,11 +73,14 @@ final class MenuRowView: NSView {
             // Header units in a size smaller, so "↓MB/s" fits its column.
             let c = label(text, font: header ? .systemFont(ofSize: size - 1, weight: .medium)
                           : .monospacedDigitSystemFont(ofSize: size - 1, weight: .regular),
-                          color: header ? base : .secondaryLabelColor)
+                          color: header ? base : staleNumbers ? .tertiaryLabelColor : .secondaryLabelColor)
             c.alignment = .right
             if !header, text.contains(where: Self.arrows.contains) {
-                arrowCells.append((c, text, c.font!))
-                c.attributedStringValue = Self.greenArrows(text, font: c.font!, color: .secondaryLabelColor, arrows: .systemGreen)
+                // Old numbers (a SIM not in use) in grey, arrows included (Victor, 2026-11-08).
+                let grey = NSColor.tertiaryLabelColor
+                if !staleNumbers { arrowCells.append((c, text, c.font!)) }
+                c.attributedStringValue = Self.greenArrows(text, font: c.font!, color: staleNumbers ? grey : .secondaryLabelColor,
+                                                           arrows: staleNumbers ? grey : .systemGreen)
             }
             // A header has no name: its first column may run over that space.
             let width = header && i == 0 ? MenuRowLayout.columnRights[0] - MenuRowLayout.checkX : MenuRowLayout.columnWidths[i]
@@ -108,6 +111,9 @@ final class MenuRowView: NSView {
     /// animates on its own thread, so it keeps turning while the menu tracks the mouse.
     private var nameLabel: NSTextField?
     func setName(_ name: String) { nameLabel?.stringValue = name }
+
+    /// Swaps the row's icon, e.g. bars redrawn with a newer age.
+    func setIcon(_ image: NSImage) { images.first?.image = image }
 
     func setStatus(_ text: String, spinning: Bool) {
         if statusLabel == nil {

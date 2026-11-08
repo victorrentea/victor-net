@@ -36,4 +36,16 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(SimSignalPolicy.ordered(sims).map(\.name), ["yoxo", "Vic", "far"])
         XCTAssertEqual(sims.map(\.level), [3, 4, 0])
     }
+
+    func testASimIsShownByItsOperator() {
+        let sims = SimSignal.parse([["name": "Vic", "operator": "Vodafone RO"], ["name": "yoxo", "operator": "orange"],
+                                    ["name": "Maya", "operator": ""]])
+        XCTAssertEqual(sims.map(SimSignalPolicy.label), ["Vodafone", "Orange", "Maya"])
+    }
+
+    func testSignalAge() {
+        let t = Date(timeIntervalSince1970: 1000)
+        XCTAssertEqual(SimSignalPolicy.age(t, now: t.addingTimeInterval(4.9)), "4s")
+        XCTAssertEqual(SimSignalPolicy.age(t, now: t.addingTimeInterval(185)), "3m")
+    }
 }

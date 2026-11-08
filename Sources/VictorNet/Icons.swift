@@ -34,8 +34,16 @@ enum Icons {
     }
 
     /// Four rising bars, `level` of them solid, the rest faint. No level = all faint.
-    static func cellular(level: Int?) -> NSImage {
-        let image = NSImage(size: NSSize(width: 17, height: barHeight), flipped: false) { _ in
+    /// `age` ("3s") sits small in the empty corner above the short bars: how old the reading is.
+    static func cellular(level: Int?, age: String? = nil) -> NSImage {
+        let image = NSImage(size: NSSize(width: 17, height: barHeight), flipped: false) { rect in
+            if let age {
+                let text = NSAttributedString(string: age, attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .semibold),
+                    .foregroundColor: NSColor.black,
+                ])
+                text.draw(at: NSPoint(x: 0, y: rect.height - text.size().height + 1.5))
+            }
             for i in 0..<4 {
                 let h = 4 + CGFloat(i) * 3
                 let bar = NSBezierPath(roundedRect: NSRect(x: 1 + CGFloat(i) * 4, y: 2, width: 3, height: h),

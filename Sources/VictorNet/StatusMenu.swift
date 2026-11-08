@@ -108,6 +108,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         onOpen?()
         net.onScan = { [weak self] in
             self?.updateMoreStatus()
+            self?.updateWifiArcs()
             if self?.net.scanning == false { self?.refreshOthers() }
         }
         net.scanInBackground()
@@ -119,6 +120,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             guard let self else { return }
             self.updateMoreStatus()
             self.updateHotspotRow()
+            self.updateSimBars()
             self.refreshNetworksIfChanged()
             if !self.net.scanning, Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= 2 {
                 self.net.scanInBackground()
@@ -278,6 +280,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
         var items: [NSMenuItem] = []
+        wifiRows = []
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
             // ✓ on every network this Mac is on: the route (the cable, say) *and*
@@ -303,6 +306,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                   icon: icon, checked: current,
                                   enabled: isHotspot ? !hotspotOn : !current && inRange,
                                   dimmed: !isHotspot && !current && !inRange)
+            if let ssid, key != "wired", ssid != Config.hotspotSSID { wifiRows.append((row, ssid)) }
             if isHotspot {
                 if hotspotOn {
                     let stop = MenuRowView(name: "Stop Hotspot", icon: Icons.hotspotOff(), indent: 16)
@@ -336,11 +340,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func simRowViews(_ sims: [SimSignal], records: [String: NetworkRecord],
                              cell: (NetworkRecord, String) -> String) -> [MenuRowView] {
         let now = Date()
+        let readAt = net.phoneSignal?.readAt ?? now
+        simAgeRows = []
         return SimSignalPolicy.ordered(sims).map { sim in
             let r = records[TrafficMonitor.simKey(sim.name)]
             let seen = sim.isData ? "now" : r.map { NetworkBookPolicy.since($0.lastSeen, now: now) } ?? "—"
-            let row = MenuRowView(name: sim.name, columns: r.map { [cell($0, seen)] } ?? [],
-                                  icon: Icons.cellular(level: sim.level), checked: sim.isData, enabled: false, indent: 16)
+            let row = MenuRowView(name: SimSignalPolicy.label(sim), columns: r.map { [cell($0, seen)] } ?? [],
+                                  icon: Icons.cellular(level: sim.level, age: SimSignalPolicy.age(readAt, now: now)),
+                                  checked: sim.isData, enabled: false, indent: 16, staleNumbers: !sim.isData)
+            simAgeRows.append((row, sim.name))
             row.toolTip = r == nil ? "Not used through the hotspot yet"
                 : "Best over the last hour on this SIM: ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             return row
@@ -422,6 +430,31 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func frame(_ head: MenuRowView, _ children: [MenuRowView]) {
         head.groupEdge = children.isEmpty ? .single : .top
         for (i, c) in children.enumerated() { c.groupEdge = i == children.count - 1 ? .bottom : .middle }
+    }
+
+    /// The Wi-Fi rows on screen, whose arcs follow each scan: the menu opens before the first
+    /// scan of its own is back, so a network not joined had no strength yet (Victor, 2026-11-08).
+    private var wifiRows: [(row: MenuRowView, ssid: String)] = []
+
+    private func updateWifiArcs() {
+        let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
+        for (row, ssid) in wifiRows {
+            guard let level = ssid == net.ssid ? net.rssi : rssi[ssid] else { continue }
+            row.setIcon(Icons.wifi(strength: NetworkLookPolicy.strength(rssi: level)) ?? NSImage())
+        }
+    }
+
+    /// The SIM rows on screen, to redraw their bars and age every second while the menu is open:
+    /// the phone answers every 5 s, and the corner shows how fresh that answer is (Victor, 2026-11-08).
+    private var simAgeRows: [(row: MenuRowView, sim: String)] = []
+
+    private func updateSimBars() {
+        guard let s = net.phoneSignal else { return }
+        let age = SimSignalPolicy.age(s.readAt, now: Date())
+        for (row, name) in simAgeRows {
+            let level = s.sims.first { $0.name == name }?.level
+            row.setIcon(Icons.cellular(level: level, age: age))
+        }
     }
 
     /// Whether the row drawn for the hotspot is its Stop row (else the hotspot's own row, = Start).
@@ -664,8 +697,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             out.append(head)
             var yoxo = NetworkRecord(name: "yoxo", kind: "sim", lastSeen: Date()); yoxo.maxDown = 2_100_000; yoxo.maxUp = 900_000; yoxo.latencyMs = 36
             var vic = NetworkRecord(name: "Vic", kind: "sim", lastSeen: Date().addingTimeInterval(-7200)); vic.maxDown = 1_300_000; vic.maxUp = 400_000; vic.latencyMs = 53
-            out += simRowViews([SimSignal(name: "yoxo", isData: true, level: 3, network: "LTE", rsrp: -97, sinr: -5),
-                                SimSignal(name: "Vic", isData: false, level: 4, network: "5G", rsrp: -85, sinr: 21),
+            out += simRowViews([SimSignal(name: "yoxo", isData: true, level: 3, operatorName: "orange", network: "LTE", rsrp: -97, sinr: -5),
+                                SimSignal(name: "Vic", isData: false, level: 4, operatorName: "Vodafone RO", network: "5G", rsrp: -85, sinr: 21),
                                 SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil)],
                                records: ["sim:yoxo": yoxo, "sim:Vic": vic],
                                cell: { r, seen in "\(TrafficPolicy.rate(r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })

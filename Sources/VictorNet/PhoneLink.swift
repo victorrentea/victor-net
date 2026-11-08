@@ -60,6 +60,8 @@ struct SimSignal: Equatable {
     let isData: Bool
     /// 0…4, on the phone's own status-bar scale when RSRP is known.
     let level: Int
+    /// The network it is on, as the phone reads it ("Vodafone RO", "orange"); empty without service.
+    var operatorName: String = ""
     let network: String?
     let rsrp: Int?
     let sinr: Int?
@@ -69,6 +71,7 @@ struct SimSignal: Equatable {
             SimSignal(name: $0["name"] as? String ?? "?", isData: $0["data"] as? Bool ?? false,
                       level: ($0["rsrp"] as? NSNumber).map { PhoneStatusPolicy.bars(dbm: $0.intValue) }
                           ?? max(0, min(4, ($0["level"] as? NSNumber)?.intValue ?? 0)),
+                      operatorName: $0["operator"] as? String ?? "",
                       network: $0["network"] as? String, rsrp: ($0["rsrp"] as? NSNumber)?.intValue,
                       sinr: ($0["sinr"] as? NSNumber)?.intValue)
         }
@@ -77,6 +80,19 @@ struct SimSignal: Equatable {
 
 /// 📶 The phone's SIMs under the hotspot's row, so a new place can be judged before switching by hand.
 enum SimSignalPolicy {
+    /// Shown by operator, not by the name given to the SIM (Victor, 2026-11-08: "Vic → Vodafone,
+    /// yoxo → Orange"): its first word, capitalised. No service = the SIM's own name.
+    static func label(_ s: SimSignal) -> String {
+        guard let first = s.operatorName.split(separator: " ").first, !first.isEmpty else { return s.name }
+        return first.prefix(1).uppercased() + first.dropFirst()
+    }
+
+    /// The signal's age for the bars' corner: `1s`…`59s`, then `3m`.
+    static func age(_ readAt: Date, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(readAt)))
+        return s < 60 ? "\(s)s" : "\(s / 60)m"
+    }
+
     /// The data SIM first, then the others by name.
     static func ordered(_ sims: [SimSignal]) -> [SimSignal] {
         sims.sorted { a, b in a.isData != b.isData ? a.isData : a.name < b.name }
