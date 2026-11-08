@@ -35,14 +35,5 @@ final class SimLogTests: XCTestCase {
                                     ["name": "far", "data": false, "level": 0]])
         XCTAssertEqual(SimSignalPolicy.ordered(sims).map(\.name), ["yoxo", "Vic", "far"])
         XCTAssertEqual(sims.map(\.level), [3, 4, 0])
-        XCTAssertEqual(SimSignalPolicy.cell(sims[1], latencyMs: 36.4), "LTE\u{2009}⋅\u{2009}-5 dB poor\u{2009}⋅\u{2009}36↕︎ms")
-        XCTAssertEqual(SimSignalPolicy.cell(sims[2], latencyMs: nil), "no signal")
-    }
-
-    func testSinrWords() {
-        XCTAssertEqual(SimSignalPolicy.quality(sinr: 20), "excellent")
-        XCTAssertEqual(SimSignalPolicy.quality(sinr: 13), "good")
-        XCTAssertEqual(SimSignalPolicy.quality(sinr: 0), "fair")
-        XCTAssertEqual(SimSignalPolicy.quality(sinr: -1), "poor")
     }
 }

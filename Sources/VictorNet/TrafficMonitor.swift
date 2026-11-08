@@ -110,7 +110,7 @@ enum NetworkBookPolicy {
                        now: Date, calendar: Calendar = .current) -> [(key: String, value: NetworkRecord)] {
         func today(_ r: NetworkRecord) -> Bool { calendar.isDate(r.lastSeen, inSameDayAs: now) }
         func inRange(_ key: String) -> Bool { key.hasPrefix("wifi:") && reachable.contains(String(key.dropFirst(5))) }
-        return records.filter { key, r in key == current || today(r) || inRange(key) }
+        return records.filter { key, r in !key.hasPrefix("sim:") && (key == current || today(r) || inRange(key)) }
             .map { (key: $0.key, value: $0.value) }
             .sorted { a, b in
                 if a.key == current || b.key == current { return a.key == current }
@@ -215,6 +215,10 @@ final class TrafficMonitor {
 
     /// Asked every second; `NetworkState` answers.
     var currentNetwork: () -> NetworkID? = { nil }
+    /// On the hotspot, the phone's data SIM: its numbers are filed under `sim:<name>` too, and a
+    /// switch of SIM starts a new window like a switch of network (Victor, 2026-11-08).
+    var currentSim: () -> String? = { nil }
+    private var sim: String?
     /// Main thread, after every sample.
     var onChange: (() -> Void)?
 
@@ -257,9 +261,11 @@ final class TrafficMonitor {
     private func tick() {
         let now = Date()
         let net = currentNetwork()
-        if net != network {
-            if let old = network { netInfo("📈 \(old.name) → \(net?.name ?? "offline"): new window") }
+        let nowSim = net?.kind == "hotspot" ? currentSim() : nil
+        if net != network || nowSim != sim {
+            if let old = network { netInfo("📈 \(old.name)\(sim.map { " (\($0))" } ?? "") → \(net?.name ?? "offline")\(nowSim.map { " (\($0))" } ?? ""): new window") }
             network = net
+            sim = nowSim
             down.reset()
             up.reset()
             latency = []
@@ -296,8 +302,21 @@ final class TrafficMonitor {
             if let median { r.latencyMs = median }
             r.lastSeen = now
         }, name: net.name, kind: net.kind)
+        if let sim {
+            book.update(Self.simKey(sim), { r in
+                r.maxDown = maxDown
+                r.maxUp = maxUp
+                if let median { r.latencyMs = median }
+                r.lastSeen = now
+            }, name: sim, kind: "sim")
+        }
         if ticks % 60 == 0 { book.save() }
     }
+
+    static func simKey(_ name: String) -> String { "sim:\(name)" }
+
+    /// The SIM whose numbers the live window holds now, if any.
+    var windowSim: String? { sim }
 
     /// ⚡ One download of a fixed size; the rate goes to this network's record.
     /// Smaller on the hotspot, where every byte comes out of the phone's plan.
@@ -319,6 +338,10 @@ final class TrafficMonitor {
                     netInfo("⚡ speed test on \(net.name): \(TrafficPolicy.rate(rate))")
                     self.book.update(net.key, { $0.speedDown = rate; $0.speedAt = Date(); $0.lastSeen = Date() },
                                      name: net.name, kind: net.kind)
+                    if let sim = self.sim {
+                        self.book.update(Self.simKey(sim), { $0.speedDown = rate; $0.speedAt = Date(); $0.lastSeen = Date() },
+                                         name: sim, kind: "sim")
+                    }
                     self.book.save()
                 } else {
                     netInfo("⚡ speed test on \(net.name) failed: \(error?.localizedDescription ?? "short read")")

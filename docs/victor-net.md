@@ -222,9 +222,11 @@ SIM there**, never on roaming data. Kept in `~/.victor-net/sim-places.json`; `GE
 measurements so far are in `victor-phone-addons/docs/sim-benchmarks.md`.
 
 **Under the hotspot's row, while it is in use: the phone's SIMs**, each with the menu bar's GSM bars, ✓ on
-the one carrying data, its SINR and its median latency here (`signal.sims` — the phone keeps both
+the one carrying data, and the numbers the hotspot's row had: best ↓ ↑, latency, last used — filed per SIM
+(`sim:<name>` in `networks.json`; a SIM switch starts a new window, as a network switch does). The
+`victor` row itself keeps no numbers while they are shown (no SINR text either: the bars said enough) (`signal.sims` — the phone keeps both
 registered for calls, so a new place, an airport where Vodafone has nothing, can be judged without
-switching). SINR in words: ≥ 20 dB excellent, ≥ 13 good, ≥ 0 fair, below poor. The switch itself stays Victor's,
+switching). The switch itself stays Victor's,
 by hand on the phone (Android lets only system apps change the data SIM, and Samsung Routines have
 no action for it — checked on the phone, 2026-11-08).
 

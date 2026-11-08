@@ -111,11 +111,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.phoneBattery = { [weak self] in self?.phoneBattery.current }
         phoneBatteryBar.start()
         simLog.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        traffic.currentSim = { [weak self] in self?.simLog.currentSim }
         simLog.signal = { [weak self] in self?.net.phoneSignal }
         simLog.location = { [weak self] in self?.hotspot.lastLocationFix() }
         simLog.roaming = { [weak self] in self?.roaming.reading?.roamingNow ?? true }
         traffic.onLatency = { [weak self] ms in self?.simLog.latency(ms) }
-        menu.simHere = { [weak self] in self?.simLog.here ?? [:] }
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.start()

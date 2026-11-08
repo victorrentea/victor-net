@@ -75,34 +75,13 @@ struct SimSignal: Equatable {
     }
 }
 
-/// 📡 Both SIMs' signal in one menu line, so a new place can be judged before switching by hand.
+/// 📶 The phone's SIMs under the hotspot's row, so a new place can be judged before switching by hand.
 enum SimSignalPolicy {
-    /// The usual LTE reading of SINR: past 20 dB nothing holds it back, below 0 the noise wins.
-    static func quality(sinr: Int) -> String {
-        switch sinr {
-        case 20...: return "excellent"
-        case 13...: return "good"
-        case 0...: return "fair"
-        default: return "poor"
-        }
-    }
-
     /// The data SIM first, then the others by name.
     static func ordered(_ sims: [SimSignal]) -> [SimSignal] {
         sims.sorted { a, b in a.isData != b.isData ? a.isData : a.name < b.name }
     }
 
-    /// The SIM's row under the hotspot: `LTE ⋅ -5 dB poor ⋅ 36↕︎ms`, the latency being this
-    /// SIM's median here (`SimLog`), when there is one.
-    static func cell(_ s: SimSignal, latencyMs: Double?) -> String {
-        var parts: [String] = []
-        if let n = s.network { parts.append(n) }
-        if let q = s.sinr { parts.append("\(q) dB \(quality(sinr: q))") }
-        else if let r = s.rsrp { parts.append("\(r) dBm") }
-        else { parts.append("no signal") }
-        if let ms = latencyMs { parts.append("\(Int(ms.rounded()))↕︎ms") }
-        return parts.joined(separator: "\u{2009}⋅\u{2009}")
-    }
 }
 
 enum PhoneStatusPolicy {

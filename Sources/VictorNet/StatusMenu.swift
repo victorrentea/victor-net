@@ -49,8 +49,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// The menu just opened — offline, that is when to ask the phone for its hotspot.
     var onOpen: (() -> Void)?
 
-    /// `SimLog`'s numbers for this place, by SIM name.
-    var simHere: (() -> [String: SimSpot])?
 
     init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor, hotspot: HotspotFallback) {
         self.net = net
@@ -240,6 +238,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             if let best = traffic.latencyBest { r.latencyMs = r.latencyMs.map { min($0, best) } ?? best }
             r.lastSeen = now
             records[cur.key] = r
+            if let sim = traffic.windowSim {
+                let key = TrafficMonitor.simKey(sim)
+                var s = records[key] ?? NetworkRecord(name: sim, kind: "sim", lastSeen: now)
+                s.maxDown = max(s.maxDown, traffic.down.maxAverage ?? 0)
+                s.maxUp = max(s.maxUp, traffic.up.maxAverage ?? 0)
+                if let best = traffic.latencyBest { s.latencyMs = s.latencyMs.map { min($0, best) } ?? best }
+                s.lastSeen = now
+                records[key] = s
+            }
         }
         for ssid in reachable.intersection(known) where records["wifi:\(ssid)"] == nil {
             records["wifi:\(ssid)"] = NetworkRecord(name: ssid, kind: ssid == Config.hotspotSSID ? "hotspot" : "wifi",
@@ -280,8 +287,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
                 icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
             }
+            // The hotspot's numbers are its SIMs', shown on their rows under it (Victor, 2026-11-08).
+            let sims = joined && ssid == Config.hotspotSSID ? simRows(records: records, cell: cell) : []
             let row = MenuRowView(name: ssid ?? "Ethernet",
-                                  columns: [cell(r, seen: seen(key, r))],
+                                  columns: sims.isEmpty ? [cell(r, seen: seen(key, r))] : [],
                                   icon: icon, checked: current, enabled: !current && inRange, dimmed: !current && !inRange)
             if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
             // The header said what the numbers are; the tooltip says it now (Victor, 2026-11-08).
@@ -289,24 +298,30 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 : (current ? "Best over the last hour" : "Best over the last hour spent on it")
                 + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
-            if joined, ssid == Config.hotspotSSID { items += simRows() }
+            items += sims
         }
         return items
     }
 
     /// Under the hotspot while it is in use: the phone's SIMs, in the same bars as the menu bar,
     /// ✓ on the one carrying the data (Victor, 2026-11-08). The switch stays his, on the phone.
-    private func simRows() -> [NSMenuItem] {
+    private func simRows(records: [String: NetworkRecord], cell: (NetworkRecord, String) -> String) -> [NSMenuItem] {
         guard let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter else { return [] }
-        return simRowViews(s.sims, here: simHere?() ?? [:]).map { NSMenuItem(view: $0) }
+        return simRowViews(s.sims, records: records, cell: cell).map { NSMenuItem(view: $0) }
     }
 
-    private func simRowViews(_ sims: [SimSignal], here: [String: SimSpot]) -> [MenuRowView] {
-        SimSignalPolicy.ordered(sims).map { sim in
-            let row = MenuRowView(name: sim.name,
-                                  columns: [SimSignalPolicy.cell(sim, latencyMs: here[sim.name].flatMap { SimLogPolicy.median($0.latency) })],
+    /// Each SIM with the same numbers as a network — its best ↓ ↑, latency and when last used —
+    /// and the bars the phone sees for it now.
+    private func simRowViews(_ sims: [SimSignal], records: [String: NetworkRecord],
+                             cell: (NetworkRecord, String) -> String) -> [MenuRowView] {
+        let now = Date()
+        return SimSignalPolicy.ordered(sims).map { sim in
+            let r = records[TrafficMonitor.simKey(sim.name)]
+            let seen = sim.isData ? "now" : r.map { NetworkBookPolicy.since($0.lastSeen, now: now) } ?? "—"
+            let row = MenuRowView(name: sim.name, columns: r.map { [cell($0, seen)] } ?? [],
                                   icon: Icons.cellular(level: sim.level), checked: sim.isData, enabled: false, indent: 16)
-            row.toolTip = "SINR: past 20 dB excellent, 13 good, 0 fair, below poor. ↕︎ = this SIM's median latency here."
+            row.toolTip = r == nil ? "Not used through the hotspot yet"
+                : "Best over the last hour on this SIM: ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             return row
         }
     }
@@ -622,11 +637,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
             out.append(MenuRowView(name: "victor", columns: [samples[1]], icon: Icons.phone(), checked: true))
-            var spot = SimSpot(); spot.latency = [36]
+            var yoxo = NetworkRecord(name: "yoxo", kind: "sim", lastSeen: Date()); yoxo.maxDown = 2_100_000; yoxo.maxUp = 900_000; yoxo.latencyMs = 36
+            var vic = NetworkRecord(name: "Vic", kind: "sim", lastSeen: Date().addingTimeInterval(-7200)); vic.maxDown = 1_300_000; vic.maxUp = 400_000; vic.latencyMs = 53
             out += simRowViews([SimSignal(name: "yoxo", isData: true, level: 3, network: "LTE", rsrp: -97, sinr: -5),
                                 SimSignal(name: "Vic", isData: false, level: 4, network: "5G", rsrp: -85, sinr: 21),
                                 SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil)],
-                               here: ["yoxo": spot])
+                               records: ["sim:yoxo": yoxo, "sim:Vic": vic],
+                               cell: { r, seen in "\(TrafficPolicy.rate(r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
                                    icon: Icons.wifi(strength: 2)))
             out.append(MenuRowView(name: "tzutze", columns: [samples[1]],
