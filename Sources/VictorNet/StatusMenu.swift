@@ -174,10 +174,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func speedTitle() -> String {
         if traffic.speedTestRunning { return "Testing speed…" }
         let mb = traffic.network?.kind == "hotspot" ? 10 : 25
-        if let key = traffic.network?.key, let r = traffic.book.records[key], let s = r.speedDown, let at = r.speedAt {
-            return "Test speed (\(mb) MB) — last \(TrafficPolicy.mbps(s)), \(NetworkBookPolicy.ago(at, now: Date()))"
-        }
-        return "Test speed (downloads \(mb) MB)"
+        return "Run speed test (\(mb)MB)"
     }
 
     // MARK: - Networks, like macOS's Wi-Fi menu
@@ -248,20 +245,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
         let unit = TrafficPolicy.listUnit(shown.flatMap { [$0.value.maxDown, $0.value.maxUp] })
         let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
+        // Each number with its unit, the arrow before the unit (Victor, 2026-11-08):
+        // "2.9 ↓MB/s ⋅ 2.5 ↑MB/s ⋅ 5 ↕︎ms" — the header that labelled them is gone.
         func cell(_ r: NetworkRecord) -> String {
-            "↓\(rate(r.maxDown)) / ↑\(rate(r.maxUp)) / " + (r.latencyMs.map { String(format: "%.0f ms", $0) } ?? "— ms")
+            "\(rate(r.maxDown)) ↓\(unit.name) ⋅ \(rate(r.maxUp)) ↑\(unit.name) ⋅ "
+                + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + " ↕︎ms"
         }
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
-        // The header labels the numbers, not the line: "best … over last hour"
-        // sits over the cell it describes.
-        // A click on it measures the current network now (Victor, 2026-10-21: the
-        // best of the last hour is not always what he wants to see).
-        let header = MenuRowView(name: "", columns: [traffic.speedTestRunning ? "⚡ testing speed…" : "best \(unit.name) over last hour", "seen"],
-                                 header: true)
-        header.toolTip = "Click to test the speed of this network now"
-        header.onClick = { [weak self] in self?.speedTestAction() }
-        var items = [NSMenuItem(view: header)]
+        var items: [NSMenuItem] = []
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
             // ✓ on every network this Mac is on: the route (the cable, say) *and*
@@ -578,30 +570,50 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return menu.items.map(\.title)
     }
 
-    /// `GET /test/more-row` — the rows with a status drawn off-screen, in each state,
-    /// on a light and a dark menu, to look at without opening the menu.
+    /// `GET /test/more-row` — the Wi-Fi switch, the network rows as they are now plus
+    /// sample ones, and the rows with a status, drawn off-screen in each state on a
+    /// light and a dark menu, to look at without opening the menu.
     func renderMoreRowForTest() -> String? {
-        let w = MenuRowLayout.width, h = MenuRowLayout.height
+        let w = MenuRowLayout.width
         let rows: [(name: String, status: String, spinning: Bool)] = [
             ("More…", "", true), ("More…", "5", false), ("More…", "14", false), ("More…", "⚠︎", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
             ("Start Hotspot", "retrying in 23s", false),
         ]
-        let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: h * CGFloat(rows.count)))
-        for (i, name) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
-            let pane = NSBox(frame: NSRect(x: CGFloat(i) * w, y: 0, width: w, height: board.frame.height))
-            pane.boxType = .custom
-            pane.borderWidth = 0
-            pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
-            pane.appearance = NSAppearance(named: name)
-            for (k, r) in rows.enumerated() {
+        func views() -> [NSView] {
+            var out: [NSView] = [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
+            out += networkRows().compactMap(\.view)
+            out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: ["290 ↓KB/s ⋅ 120 ↑KB/s ⋅ 145 ↕︎ms", "3 days"],
+                                   icon: Icons.wifi(strength: 2)))
+            out.append(MenuRowView(name: "tzutze", columns: ["12.9 ↓MB/s ⋅ 12.5 ↑MB/s ⋅ — ↕︎ms", "2 h"],
+                                   icon: Icons.wifi(strength: 3), dimmed: true))
+            for r in rows {
                 let row = r.name == "More…"
                     ? MenuRowView(name: r.name, trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
                     : MenuRowView(name: r.name, icon: Icons.hotspot())
                 row.statusBeforeName = r.name == "More…"
                 row.setStatus(r.status, spinning: r.spinning)
-                row.frame.origin = NSPoint(x: 0, y: CGFloat(rows.count - 1 - k) * h)
-                pane.addSubview(row)
+                out.append(row)
+            }
+            return out
+        }
+        let panes = [views(), views()]
+        let height = panes.map { $0.reduce(0) { $0 + $1.frame.height } }.max() ?? 0
+        let board = NSView(frame: NSRect(x: 0, y: 0, width: w * 2, height: height))
+        for (i, name) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
+            let pane = NSBox(frame: NSRect(x: CGFloat(i) * w, y: 0, width: w, height: board.frame.height))
+            pane.boxType = .custom
+            pane.borderWidth = 0
+            // No title strip and no margins: the box's content view is the whole pane.
+            pane.titlePosition = .noTitle
+            pane.contentViewMargins = .zero
+            pane.fillColor = i == 0 ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.2, alpha: 1)
+            pane.appearance = NSAppearance(named: name)
+            var y = height
+            for v in panes[i] {
+                y -= v.frame.height
+                v.frame.origin = NSPoint(x: 0, y: y)
+                pane.addSubview(v)
             }
             board.addSubview(pane)
         }

@@ -49,11 +49,10 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```
-Wi-Fi                                    [ON]       ← macOS's first line: a real switch
-       best MB/s over last hour              seen   ← click = test the speed now
-✓ 📱 victor            ↓7.3 / ↑1.2 / 87 ms  now     ← ✓ = in use, phone glyph for the hotspot
-  wifi tzutze          ↓3.1 / ↑0.4 / 38 ms  2 h     ← today, out of range: greyed, not clickable
-  wifi Hotel-Guest     ↓3.1 / ↑0.4 / 38 ms  3 days  ← Wi-Fi arcs at its strength; click = join
+Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
+✓ 📱 victor      7.3 ↓MB/s ⋅ 1.2 ↑MB/s ⋅ 87 ↕︎ms  now     ← ✓ = in use, phone glyph for the hotspot; arrows green; no header (2026-11-08)
+  wifi tzutze    3.1 ↓MB/s ⋅ 0.4 ↑MB/s ⋅ 38 ↕︎ms  2 h     ← today, out of range: greyed, not clickable
+  wifi Hotel-G…  3.1 ↓MB/s ⋅ 0.4 ↑MB/s ⋅ 38 ↕︎ms  3 days  ← Wi-Fi arcs at its strength; click = join; best of the last hour
 ((o)) Start Hotspot                retrying in 23s  ← click = ask the phone now; see hotspot-fallback.md
 5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
 ──────────
@@ -61,7 +60,7 @@ Wi-Fi                                    [ON]       ← macOS's first line: a re
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
-⚡ Test speed (downloads 10 MB)
+⚡ Run speed test (25MB)                             ← 10MB on the hotspot
 ──────────
 ↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)
 ✓ ✈️ Roaming: Allow Claude
@@ -74,7 +73,8 @@ Quit                                                ← no ⌘Q: its column wide
 
 - **Rows are drawn views** (`MenuRows.swift`): fixed-x columns that line up whatever the
   names (tab stops in a title could not), a rounded highlight under the pointer, a click that
-  acts — none of which AppKit gives a view-backed item. 300 pt wide, like the native menu.
+  acts — none of which AppKit gives a view-backed item. 400 pt wide: the numbers carry their
+  units since 2026-11-08, so the cell needs 200 pt.
 - **More is a submenu** ("Other Networks" until 2026-10-21; unfolded inline until 2026-11-05):
   its rows follow the scans while it is open, redrawn only when the list changed; 🔒 = secured. A secured network this Mac does not know asks for its password in
   the app's own dialog: big type, the password **in clear by default**, a "Hide password" box

@@ -7,16 +7,16 @@ import AppKit
 /// pointer, a click that acts. A view-backed `NSMenuItem` gets none of that
 /// from AppKit, so it is here.
 enum MenuRowLayout {
-    /// The whole menu's width — narrow, like the native one.
-    static let width: CGFloat = 320
+    /// The whole menu's width — as narrow as the numbers allow.
+    static let width: CGFloat = 400
     static let height: CGFloat = 22
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
-    /// Two columns, right-aligned: "↓7.3 / ↑1.2 / 94 ms" in one cell (Victor:
-    /// one cell saves the width three would take), then "seen".
-    static let columnRights: [CGFloat] = [262, 308]
-    static let columnWidths: [CGFloat] = [122, 42]
+    /// Two columns, right-aligned: "2.9 ↓MB/s ⋅ 2.5 ↑MB/s ⋅ 5 ↕︎ms" in one cell —
+    /// each number with its unit, no header over them (Victor, 2026-11-08) — then "seen".
+    static let columnRights: [CGFloat] = [342, 388]
+    static let columnWidths: [CGFloat] = [200, 42]
     static let statusRightInset: CGFloat = 12
 }
 
@@ -27,6 +27,9 @@ final class MenuRowView: NSView {
     private let enabled: Bool
     private var highlighted = false { didSet { needsDisplay = true; recolor() } }
     private var labels: [(NSTextField, NSColor)] = []
+    /// Number cells whose ↓ ↑ ↕︎ are green, redrawn on highlight (an attributed
+    /// string keeps its own colours whatever `textColor` says).
+    private var arrowCells: [(NSTextField, String, NSFont)] = []
     private var images: [NSImageView] = []
 
     /// `columns` sit right-aligned at `MenuRowLayout.columnRights`.
@@ -66,6 +69,10 @@ final class MenuRowView: NSView {
                           : .monospacedDigitSystemFont(ofSize: size - 1, weight: .regular),
                           color: header ? base : .secondaryLabelColor)
             c.alignment = .right
+            if !header, text.contains(where: Self.arrows.contains) {
+                arrowCells.append((c, text, c.font!))
+                c.attributedStringValue = Self.greenArrows(text, font: c.font!, color: .secondaryLabelColor, arrows: .systemGreen)
+            }
             // A header has no name: its first column may run over that space.
             let width = header && i == 0 ? MenuRowLayout.columnRights[0] - MenuRowLayout.checkX : MenuRowLayout.columnWidths[i]
             add(c, x: MenuRowLayout.columnRights[i] - width, width: width)
@@ -140,8 +147,35 @@ final class MenuRowView: NSView {
         addSubview(l)
     }
 
+    static let arrows: Set<Character> = ["↓", "↑", "↕︎", "↕"]
+
+    /// "2.9 ↓MB/s": the arrows in `arrows` colour, the unit after them a size smaller.
+    static func greenArrows(_ text: String, font: NSFont, color: NSColor, arrows arrowColor: NSColor) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let unitFont = NSFont.systemFont(ofSize: font.pointSize - 1)
+        var inUnit = false
+        for ch in text {
+            var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            if arrows.contains(ch) {
+                attrs[.foregroundColor] = arrowColor
+                inUnit = true
+            } else if inUnit, ch.isLetter || ch == "/" {
+                attrs[.font] = unitFont
+            } else {
+                inUnit = false
+            }
+            out.append(NSAttributedString(string: String(ch), attributes: attrs))
+        }
+        return out
+    }
+
     private func recolor() {
         for (l, c) in labels { l.textColor = highlighted ? .selectedMenuItemTextColor : c }
+        for (l, text, font) in arrowCells {
+            let c: NSColor = highlighted ? .selectedMenuItemTextColor : .secondaryLabelColor
+            l.attributedStringValue = Self.greenArrows(text, font: font, color: c, arrows: highlighted ? c : .systemGreen)
+            l.alignment = .right
+        }
         for v in images { v.contentTintColor = highlighted ? .selectedMenuItemTextColor : nil }
     }
 
@@ -193,20 +227,22 @@ final class MenuSwitchRow: NSView {
 }
 
 /// NSSwitch drawn by hand: in a menu, whose window is never key, NSSwitch shows its
-/// inactive grey even when on. This one is blue when on, like macOS's own Wi-Fi menu (Victor, 2026-10-26).
+/// inactive grey even when on. This one is blue when on, like macOS's own Wi-Fi menu (Victor, 2026-10-26),
+/// and shaped like macOS 26's small NSSwitch: 44×20, a flattened capsule knob 26×16 inset by 2
+/// (Victor, 2026-11-08: the round knob looked unlike the system's), measured off a rendered NSSwitch.
 final class AccentSwitch: NSControl {
     var state: NSControl.StateValue = .off { didSet { needsDisplay = true } }
 
-    init() { super.init(frame: NSRect(x: 0, y: 0, width: 38, height: 22)) }
+    init() { super.init(frame: NSRect(x: 0, y: 0, width: 44, height: 20)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
         let on = state == .on
-        let track = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let track = bounds
         (on ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.15)).setFill()
         NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
-        let d = track.height - 4
-        let knob = NSRect(x: on ? track.maxX - d - 2 : track.minX + 2, y: track.minY + 2, width: d, height: d)
+        let h = track.height - 4, w = (h * 26 / 16).rounded()
+        let knob = NSRect(x: on ? track.maxX - w - 2 : track.minX + 2, y: track.minY + 2, width: w, height: h)
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowBlurRadius = 2
@@ -214,7 +250,7 @@ final class AccentSwitch: NSControl {
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
         shadow.set()
         NSColor.white.setFill()
-        NSBezierPath(ovalIn: knob).fill()
+        NSBezierPath(roundedRect: knob, xRadius: h / 2, yRadius: h / 2).fill()
         NSGraphicsContext.restoreGraphicsState()
     }
 
