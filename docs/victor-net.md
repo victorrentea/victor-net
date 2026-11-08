@@ -212,6 +212,16 @@ every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot
 The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
 lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
 
+## 📶 Which SIM, place by place (2026-11-08)
+
+`SimLog`: on the hotspot, every `LatencyProbe` handshake is filed under the place (the Mac's
+location fix, rounded to ~1 km; `?` without one) and the data SIM the phone names in `/status`
+(`signal.sim`, with `rsrp` and `sinr`). Capacity can't be read off traffic, which only shows what
+was used, so after ten quiet minutes on one SIM in one place the 10 MB ⚡ test runs **once for that
+SIM there**, never on roaming data. The menu then shows `📶 Here: • yoxo 36 ms ⋅ 2.10 MB/s   Vic 53
+ms ⋅ —`. Kept in `~/.victor-net/sim-places.json`; `GET /test/state` → `sim_log`. The manual
+measurements so far are in `victor-phone-addons/docs/sim-benchmarks.md`.
+
 ## 🔋 The phone's battery in the menu bar (2026-11-06)
 
 `PhoneBatteryBar`: an item of its own, there only at 30% or less, unplugged, read in the last two

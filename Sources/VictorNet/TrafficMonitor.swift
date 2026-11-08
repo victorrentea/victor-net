@@ -204,6 +204,8 @@ final class TrafficMonitor {
     private(set) var latency: [(at: Date, ms: Double)] = []
     private(set) var network: NetworkID?
     let book = NetworkBook()
+    /// Each successful handshake, ms (`SimLog`). Main thread.
+    var onLatency: ((Double) -> Void)?
     private let probe = LatencyProbe()
     private var timer: Timer?
     private var lastCounters: [String: (UInt32, UInt32)] = [:]
@@ -232,6 +234,7 @@ final class TrafficMonitor {
                 netInfo("📶 back online after \(Int(Date().timeIntervalSince(since)))s")
             }
             self.offlineSince = nil
+            self.onLatency?(ms)
             self.latency.append((Date(), ms))
             self.latency.removeAll { Date().timeIntervalSince($0.at) > RateHistory.keep }
         }

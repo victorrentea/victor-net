@@ -49,6 +49,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// The menu just opened — offline, that is when to ask the phone for its hotspot.
     var onOpen: (() -> Void)?
 
+    /// `SimLog`'s line for this place, both SIMs side by side.
+    var simRow: (() -> String?)?
+
     init(net: NetworkState, traffic: TrafficMonitor, phone: PhoneLink, roaming: PhoneRoamingMonitor, hotspot: HotspotFallback) {
         self.net = net
         self.traffic = traffic
@@ -147,6 +150,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
         networkItems.forEach(menu.addItem)
+        if let sims = simRow?() { menu.addItem(info(sims)) }
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
 

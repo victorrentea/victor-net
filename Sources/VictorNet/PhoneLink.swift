@@ -44,6 +44,12 @@ struct PhoneSignal: Equatable {
     let network: String?
     let operatorName: String?
     let readAt: Date
+    /// The data SIM's name as the phone shows it ("yoxo", "Vic"); nil from an older phone app.
+    var sim: String? = nil
+    /// LTE RSRP / 5G SS-RSRP, dBm.
+    var rsrp: Int? = nil
+    /// LTE RSSNR / 5G SS-SINR, dB: what decides the speed, more than the bars do.
+    var sinr: Int? = nil
 }
 
 enum PhoneStatusPolicy {
@@ -55,7 +61,8 @@ enum PhoneStatusPolicy {
             let dbm = (s["dbm"] as? NSNumber)?.intValue
             signal = PhoneSignal(level: dbm.map(bars(dbm:)) ?? max(0, min(4, level)), dbm: dbm,
                                  network: s["network"] as? String, operatorName: s["operator"] as? String,
-                                 readAt: now)
+                                 readAt: now, sim: s["sim"] as? String,
+                                 rsrp: (s["rsrp"] as? NSNumber)?.intValue, sinr: (s["sinr"] as? NSNumber)?.intValue)
         }
         var reading: RoamingWarningPolicy.Reading?
         if let r = o["roaming"] as? [String: Any],

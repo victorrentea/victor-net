@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phoneCloud = PhoneCloud()
     private lazy var mediaPause = PhoneMediaPause(phone: phone)
     private lazy var clipSync = ClipSync(phone: phone)
+    private lazy var simLog = SimLog(traffic: traffic)
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
     private var roamingData: RoamingDataWatch?
@@ -109,6 +110,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneBatteryBar.reading = { [weak self] in self?.phoneBattery.current }
         menu.phoneBattery = { [weak self] in self?.phoneBattery.current }
         phoneBatteryBar.start()
+        simLog.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        simLog.signal = { [weak self] in self?.net.phoneSignal }
+        simLog.location = { [weak self] in self?.hotspot.lastLocationFix() }
+        simLog.roaming = { [weak self] in self?.roaming.reading?.roamingNow ?? true }
+        traffic.onLatency = { [weak self] ms in self?.simLog.latency(ms) }
+        menu.simRow = { [weak self] in self?.simLog.row }
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.start()
@@ -147,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["hotspot"] = self.hotspot.stateJSON
                 o["media_pause"] = self.mediaPause.stateJSON
                 o["clip"] = self.clipSync.stateJSON
+                o["sim_log"] = self.simLog.stateJSON
                 o["phone_battery_bar"] = self.phoneBatteryBar.stateJSON
             }
             return (200, HttpServer.json(o))
