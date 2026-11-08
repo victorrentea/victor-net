@@ -50,6 +50,50 @@ struct PhoneSignal: Equatable {
     var rsrp: Int? = nil
     /// LTE RSSNR / 5G SS-SINR, dB: what decides the speed, more than the bars do.
     var sinr: Int? = nil
+    /// Every active SIM, the data one included: both stay registered for calls.
+    var sims: [SimSignal] = []
+}
+
+/// One SIM's signal, as `/status` → `signal.sims` reports it.
+struct SimSignal: Equatable {
+    let name: String
+    let isData: Bool
+    let network: String?
+    let rsrp: Int?
+    let sinr: Int?
+
+    static func parse(_ list: Any?) -> [SimSignal] {
+        (list as? [[String: Any]] ?? []).map {
+            SimSignal(name: $0["name"] as? String ?? "?", isData: $0["data"] as? Bool ?? false,
+                      network: $0["network"] as? String, rsrp: ($0["rsrp"] as? NSNumber)?.intValue,
+                      sinr: ($0["sinr"] as? NSNumber)?.intValue)
+        }
+    }
+}
+
+/// 📡 Both SIMs' signal in one menu line, so a new place can be judged before switching by hand.
+enum SimSignalPolicy {
+    /// The usual LTE reading of SINR: past 20 dB nothing holds it back, below 0 the noise wins.
+    static func quality(sinr: Int) -> String {
+        switch sinr {
+        case 20...: return "excellent"
+        case 13...: return "good"
+        case 0...: return "fair"
+        default: return "poor"
+        }
+    }
+
+    /// `📡 • yoxo LTE −5 dB poor   Vic LTE 12 dB good` — the data SIM first and dotted.
+    static func row(_ sims: [SimSignal]) -> String? {
+        guard !sims.isEmpty else { return nil }
+        let cells = sims.sorted { $0.isData && !$1.isData }.map { s -> String in
+            var parts = [(s.isData ? "• " : "") + s.name]
+            if let n = s.network { parts.append(n) }
+            if let q = s.sinr { parts.append("\(q) dB \(quality(sinr: q))") } else if let r = s.rsrp { parts.append("\(r) dBm") } else { parts.append("no signal") }
+            return parts.joined(separator: " ")
+        }
+        return "📡 " + cells.joined(separator: "   ")
+    }
 }
 
 enum PhoneStatusPolicy {
@@ -62,7 +106,8 @@ enum PhoneStatusPolicy {
             signal = PhoneSignal(level: dbm.map(bars(dbm:)) ?? max(0, min(4, level)), dbm: dbm,
                                  network: s["network"] as? String, operatorName: s["operator"] as? String,
                                  readAt: now, sim: s["sim"] as? String,
-                                 rsrp: (s["rsrp"] as? NSNumber)?.intValue, sinr: (s["sinr"] as? NSNumber)?.intValue)
+                                 rsrp: (s["rsrp"] as? NSNumber)?.intValue, sinr: (s["sinr"] as? NSNumber)?.intValue,
+                                 sims: SimSignal.parse(s["sims"]))
         }
         var reading: RoamingWarningPolicy.Reading?
         if let r = o["roaming"] as? [String: Any],

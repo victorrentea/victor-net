@@ -222,6 +222,12 @@ SIM there**, never on roaming data. The menu then shows `📶 Here: • yoxo 36 
 ms ⋅ —`. Kept in `~/.victor-net/sim-places.json`; `GET /test/state` → `sim_log`. The manual
 measurements so far are in `victor-phone-addons/docs/sim-benchmarks.md`.
 
+`📡` above it: **both SIMs' signal right now**, from `signal.sims` — the phone keeps both registered
+for calls, so a new place (an airport where Vodafone has nothing) can be judged without switching.
+SINR in words: ≥ 20 dB excellent, ≥ 13 good, ≥ 0 fair, below poor. The switch itself stays Victor's,
+by hand on the phone (Android lets only system apps change the data SIM, and Samsung Routines have
+no action for it — checked on the phone, 2026-11-08).
+
 ## 🔋 The phone's battery in the menu bar (2026-11-06)
 
 `PhoneBatteryBar`: an item of its own, there only at 30% or less, unplugged, read in the last two

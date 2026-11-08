@@ -36,4 +36,19 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(row, "📶 Here: • Vic 53 ms ⋅ —   yoxo 36 ms ⋅ \(TrafficPolicy.rate(2_100_000))")
         XCTAssertNil(SimLogPolicy.row([:], current: "Vic"))
     }
+
+    func testBothSimsSignalDataFirst() {
+        let sims = SimSignal.parse([["name": "Vic", "data": false, "network": "LTE", "rsrp": -98, "sinr": 14],
+                                    ["name": "yoxo", "data": true, "network": "LTE", "rsrp": -97, "sinr": -5],
+                                    ["name": "far", "data": false]])
+        XCTAssertEqual(SimSignalPolicy.row(sims), "📡 • yoxo LTE -5 dB poor   Vic LTE 14 dB good   far no signal")
+        XCTAssertNil(SimSignalPolicy.row([]))
+    }
+
+    func testSinrWords() {
+        XCTAssertEqual(SimSignalPolicy.quality(sinr: 20), "excellent")
+        XCTAssertEqual(SimSignalPolicy.quality(sinr: 13), "good")
+        XCTAssertEqual(SimSignalPolicy.quality(sinr: 0), "fair")
+        XCTAssertEqual(SimSignalPolicy.quality(sinr: -1), "poor")
+    }
 }

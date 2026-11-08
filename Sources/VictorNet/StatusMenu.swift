@@ -150,6 +150,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(wifiSwitchRow())
         menu.addItem(.separator())
         networkItems.forEach(menu.addItem)
+        if net.onHotspot, let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter,
+           let both = SimSignalPolicy.row(s.sims) { menu.addItem(info(both)) }
         if let sims = simRow?() { menu.addItem(info(sims)) }
         if Config.hasPhone, !Config.hotspotSSID.isEmpty { menu.addItem(startHotspotRow()) }
         menu.addItem(otherNetworksRow())
