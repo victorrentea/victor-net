@@ -463,10 +463,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             rows[String(key.dropFirst(4))] = (r, false)
         }
         for (name, spot) in here {
+            // A spot filed before it kept ↓ ↑ has only latency and its speed test: the test is ↓
+            // here, and what it lacks comes from the SIM's book record (Victor, 2026-11-09: "—").
+            let book = rows[name]?.0
             var r = NetworkRecord(name: name, kind: "sim", lastSeen: spot.lastSeen)
-            r.maxDown = spot.maxDown ?? 0
-            r.maxUp = spot.maxUp ?? 0
-            r.latencyMs = SimLogPolicy.median(spot.latency)
+            r.maxDown = max(spot.maxDown ?? 0, spot.speed ?? 0)
+            if r.maxDown == 0 { r.maxDown = max(book?.maxDown ?? 0, book?.speedDown ?? 0) }
+            r.maxUp = spot.maxUp ?? book?.maxUp ?? 0
+            r.latencyMs = SimLogPolicy.median(spot.latency) ?? book?.latencyMs
             rows[name] = (r, true)
         }
         return rows.keys.sorted().compactMap { name in
