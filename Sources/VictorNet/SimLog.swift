@@ -119,6 +119,11 @@ final class SimLog {
         }
     }
 
+    /// How the menu named this SIM wherever it was used last.
+    func label(_ sim: String) -> String? {
+        spots.values.compactMap { $0[sim] }.filter { $0.label != nil }.max { $0.lastSeen < $1.lastSeen }?.label
+    }
+
     /// What each SIM gave this Mac where it is now.
     var here: [String: SimSpot] { spots[place] ?? [:] }
 

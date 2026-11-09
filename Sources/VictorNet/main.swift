@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         simLog.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         traffic.currentSim = { [weak self] in self?.simLog.currentSim }
         menu.simHere = { [weak self] in self?.simLog.here ?? [:] }
+        menu.simLabel = { [weak self] in self?.simLog.label($0) }
         simLog.signal = { [weak self] in self?.net.phoneSignal }
         simLog.location = { [weak self] in self?.hotspot.lastLocationFix() }
         simLog.roaming = { [weak self] in self?.roaming.reading?.roamingNow ?? true }

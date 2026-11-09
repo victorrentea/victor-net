@@ -254,6 +254,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                                     lastSeen: .distantPast)
         }
         var shown = NetworkBookPolicy.listed(records, current: traffic.network?.key, reachable: reachable, now: now)
+        // The cable first, a line under it, then the Wi-Fis (Victor, 2026-11-09).
+        if let k = shown.firstIndex(where: { $0.key == "wired" }) { shown.insert(shown.remove(at: k), at: 0) }
         // The hotspot's row is also its Start button, so it is always there.
         let hotspotKey = "wifi:\(Config.hotspotSSID)"
         if Config.hasPhone, !Config.hotspotSSID.isEmpty, !shown.contains(where: { $0.key == hotspotKey }) {
@@ -314,7 +316,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                     sims.append(NSMenuItem(view: stop))
                 } else {
                     hotspotControl(row, stops: false)
-                    if !joined { sims = expectedSimRows(cell: cell) }
+                    if !joined { sims = expectedSimRows(records: records, cell: cell) }
                 }
                 frame(row, sims.compactMap { $0.view as? MenuRowView })
             } else if !current, inRange, let ssid { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
@@ -324,7 +326,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
             items += sims
-
+            if key == "wired", shown.count > 1 { items.append(.separator()) }
         }
         return items
     }
@@ -448,25 +450,38 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// What each SIM gave this Mac where it is now (`SimLog`), by the SIM's own name.
     var simHere: (() -> [String: SimSpot])?
 
-    /// With the hotspot off: what each SIM gave here before, in grey, so the place can be judged
-    /// before starting it (Victor, 2026-11-08). Nothing recorded here = no rows.
-    private func expectedSimRows(cell: (NetworkRecord, String) -> String) -> [NSMenuItem] {
+    /// With the hotspot off — on the home, hotel or office Wi-Fi too: what each SIM gave here before,
+    /// in grey, so the place can be judged before starting it (Victor, 2026-11-08). With nothing
+    /// filed for this place (or no recent location fix), each SIM's best overall from the book
+    /// (Victor, 2026-11-09: *"chiar dacă sunt pe wifi … arată și mediile de pe mobil"*). None = no rows.
+    private func expectedSimRows(records: [String: NetworkRecord], cell: (NetworkRecord, String) -> String) -> [NSMenuItem] {
         let here = simHere?() ?? [:]
         let known = net.phoneSignal?.sims ?? []
         let now = Date()
-        return here.keys.sorted().compactMap { name in
-            guard let spot = here[name] else { return nil }
+        var rows: [String: (NetworkRecord, here: Bool)] = [:]
+        for (key, r) in records where key.hasPrefix("sim:") && (r.maxDown > 0 || r.maxUp > 0 || r.latencyMs != nil) {
+            rows[String(key.dropFirst(4))] = (r, false)
+        }
+        for (name, spot) in here {
             var r = NetworkRecord(name: name, kind: "sim", lastSeen: spot.lastSeen)
             r.maxDown = spot.maxDown ?? 0
             r.maxUp = spot.maxUp ?? 0
             r.latencyMs = SimLogPolicy.median(spot.latency)
-            let label = spot.label ?? known.first { $0.name == name }.map(SimSignalPolicy.label) ?? name
-            let row = MenuRowView(name: label, columns: [cell(r, NetworkBookPolicy.since(spot.lastSeen, now: now))],
+            rows[name] = (r, true)
+        }
+        return rows.keys.sorted().compactMap { name in
+            guard let (r, isHere) = rows[name] else { return nil }
+            let label = here[name]?.label ?? simLabel?(name) ?? known.first { $0.name == name }.map(SimSignalPolicy.label) ?? name
+            let row = MenuRowView(name: label, columns: [cell(r, NetworkBookPolicy.since(r.lastSeen, now: now))],
                                   icon: Icons.cellular(level: nil), enabled: false, indent: 16, staleNumbers: true)
-            row.toolTip = "Measured here before, through the hotspot on this SIM"
+            row.toolTip = isHere ? "Measured here before, through the hotspot on this SIM"
+                : "Best through the hotspot on this SIM, anywhere (nothing measured here yet)"
             return NSMenuItem(view: row)
         }
     }
+
+    /// How a SIM was named in any place it was used ("Orange"), for when the phone is not around.
+    var simLabel: ((String) -> String?)?
 
     /// The SIM rows on screen, to redraw their bars and age every second while the menu is open:
     /// the phone answers every 5 s, and the corner shows how fresh that answer is (Victor, 2026-11-08).
