@@ -431,7 +431,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 ?? e.bars.map { Icons.cellular(level: $0.level, age: SimSignalPolicy.age($0.readAt, now: now)) }
             let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
                                   icon: icon, checked: e.isData, enabled: false, indent: 16, staleNumbers: !e.isData)
-            if e.signal != nil { simAgeRows.append((row, e.name)) }
+            if e.signal != nil || e.bars != nil { simAgeRows.append((row, e.name)) }
             let test = !e.isData && e.record?.speedDown != nil
             row.toolTip = e.record == nil ? "Not used through the hotspot yet"
                 : (e.isData ? "Best over the last hour on this SIM"
@@ -542,12 +542,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// the phone answers every 5 s, and the corner shows how fresh that answer is (Victor, 2026-11-08).
     private var simAgeRows: [(row: MenuRowView, sim: String)] = []
 
+    /// With the hotspot off too, from the phone's answer over the home Wi-Fi (Victor, 2026-11-09: the age runs live).
     private func updateSimBars() {
-        guard let s = net.phoneSignal else { return }
-        let age = SimSignalPolicy.age(s.readAt, now: Date())
+        let now = Date()
         for (row, name) in simAgeRows {
+            guard let s = [net.phoneSignal, lanSignal].compactMap({ $0 })
+                .filter({ r in r.sims.contains { $0.name == name } }).max(by: { $0.readAt < $1.readAt }) else { continue }
             let level = s.sims.first { $0.name == name }?.level
-            row.setIcon(Icons.cellular(level: level, age: age))
+            row.setIcon(Icons.cellular(level: level, age: SimSignalPolicy.age(s.readAt, now: now)))
         }
     }
 
