@@ -56,7 +56,9 @@ Wi-Fi                                         [ON]  ← macOS's first line: swit
 ╰   ((/)) Stop Hotspot                            │  ← only while it is on; the hotspot's row itself is then not clickable
    (off, on any other Wi-Fi or the cable too: under victor, both SIMs always, numbers in grey — measured here
     before (`SimLog`, by GPS place), else its best anywhere (`sim:<name>`), else none; bars only from a real
-    reading ≤ 15 min old — the phone's `/status` over the home Wi-Fi (`PhoneLan`) — else no icon)
+    reading ≤ 15 min old — the phone's `/status` off the hotspot — else no icon. Each opening asks for it
+    (at most once in 30 s): over the home Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars and their
+    age then update in the open menu)
    ⚡ before a row's numbers (any network or SIM not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
   wifi tzutze    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h    ← today, out of range: greyed, not clickable
   wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)

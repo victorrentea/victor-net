@@ -361,8 +361,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var isData: Bool { signal?.isData ?? false }
     }
 
-    /// The SIMs' signal from the phone's `/status` off the hotspot (`PhoneLan`, every 10 min).
-    var lanSignal: PhoneSignal?
+    /// The SIMs' signal from the phone's `/status` off the hotspot: over the home Wi-Fi (`PhoneLan`)
+    /// or Bluetooth (`PhoneRoamingMonitor`), every 10 / 20 min and once more at each menu opening.
+    var offHotspotSignal: PhoneSignal?
 
     /// Under the hotspot while it is in use: the phone's SIMs, in the same bars as the menu bar,
     /// ✓ on the one carrying the data (Victor, 2026-11-08). The switch stays his, on the phone.
@@ -384,11 +385,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let now = Date()
         // Bars only from a real reading (Victor, 2026-11-09): the phone's answer over the home Wi-Fi,
         // at most 15 min old (it is asked every 10); without one, no icon at all.
-        let reading = [net.phoneSignal, lanSignal].compactMap { $0 }
+        let reading = [net.phoneSignal, offHotspotSignal].compactMap { $0 }
             .filter { now.timeIntervalSince($0.readAt) < 900 }.max { $0.readAt < $1.readAt }
         let live = reading?.sims ?? []
         // Every SIM the phone ever named here, numbers or not (Victor, 2026-11-09: "ambele SIM-uri, oricum").
-        let known = live + (net.phoneSignal?.sims ?? []) + (lanSignal?.sims ?? [])
+        let known = live + (net.phoneSignal?.sims ?? []) + (offHotspotSignal?.sims ?? [])
         let names = Set(records.keys.filter { $0.hasPrefix("sim:") }.map { String($0.dropFirst(4)) })
             .union((simHere?() ?? [:]).keys).union(known.map(\.name))
         return names.sorted().compactMap { name in
@@ -429,9 +430,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return entries.map { e in
             let icon = e.signal.map { Icons.cellular(level: $0.level, age: SimSignalPolicy.age(readAt, now: now)) }
                 ?? e.bars.map { Icons.cellular(level: $0.level, age: SimSignalPolicy.age($0.readAt, now: now)) }
+                // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
+                ?? NSImage(size: NSSize(width: 17, height: Icons.barHeight))
             let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
                                   icon: icon, checked: e.isData, enabled: false, indent: 16, staleNumbers: !e.isData)
-            if e.signal != nil || e.bars != nil { simAgeRows.append((row, e.name)) }
+            simAgeRows.append((row, e.name))
             let test = !e.isData && e.record?.speedDown != nil
             row.toolTip = e.record == nil ? "Not used through the hotspot yet"
                 : (e.isData ? "Best over the last hour on this SIM"
@@ -546,8 +549,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func updateSimBars() {
         let now = Date()
         for (row, name) in simAgeRows {
-            guard let s = [net.phoneSignal, lanSignal].compactMap({ $0 })
-                .filter({ r in r.sims.contains { $0.name == name } }).max(by: { $0.readAt < $1.readAt }) else { continue }
+            guard let s = [net.phoneSignal, offHotspotSignal].compactMap({ $0 })
+                .filter({ r in now.timeIntervalSince(r.readAt) < 900 && r.sims.contains { $0.name == name } })
+                .max(by: { $0.readAt < $1.readAt }) else { continue }
             let level = s.sims.first { $0.name == name }?.level
             row.setIcon(Icons.cellular(level: level, age: SimSignalPolicy.age(s.readAt, now: now)))
         }

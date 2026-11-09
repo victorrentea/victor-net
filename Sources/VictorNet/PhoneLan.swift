@@ -94,6 +94,23 @@ final class PhoneLan {
         }
     }
 
+    /// One ask now, at the address that answered last, on the home Wi-Fi only (no sweep: that is
+    /// the 10-min tick's job). False = not asked, so the caller can try Bluetooth.
+    func askNow(onMiss: @escaping () -> Void) -> Bool {
+        guard !busy, ssid() == Config.preferredSSID, !onHotspot(), let ip else {
+            netInfo("📶 SIMs' signal: not over the Wi-Fi (busy=\(busy), ssid=\(ssid() ?? "-"), ip=\(ip ?? "-"))")
+            return false
+        }
+        busy = true
+        let start = Date()
+        ask([ip]) { [weak self] found in
+            self?.busy = false
+            netInfo("📶 SIMs' signal over the Wi-Fi: \(found != nil ? "answered" : "no answer") in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+            if found == nil { onMiss() }
+        }
+        return true
+    }
+
     private func sweep() {
         let hosts = Self.wifiAddress().map { PhoneLanPolicy.hosts(ip: $0.ip, mask: $0.mask) } ?? []
         guard !hosts.isEmpty else { busy = false; return }

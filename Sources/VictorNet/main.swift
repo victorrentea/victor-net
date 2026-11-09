@@ -58,6 +58,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menu: StatusMenu?
     private var http: HttpServer?
 
+    private var lastSignalAsk: Date?
+
+    /// The SIMs' bars, fresh when the menu opens with the hotspot off (Victor, 2026-11-09: *"aș vrea să
+    /// văd semnalul GSM repede"*): over the home Wi-Fi when the phone is there (milliseconds), else over
+    /// Bluetooth (~4 s, the bars update in the open menu). At most once in 30 s. On the hotspot,
+    /// `PhoneLink` already reads it every 5 s.
+    private func askPhoneSignal() {
+        guard Config.hasPhone, !net.onHotspot,
+              Date().timeIntervalSince(lastSignalAsk ?? .distantPast) > 30 else { return }
+        lastSignalAsk = Date()
+        let bluetooth = { [weak self] in self?.roaming.pollNow(reason: "menu opened: the SIMs' signal") }
+        if !phoneLan.askNow(onMiss: { bluetooth() }) { bluetooth() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         netInfo("Victor Net starting (built \(BuildInfo.time)); config \(Config.file.path)\(Config.hasPhone ? "" : " — no phone configured")")
         try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
@@ -93,6 +107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.onStatus = { [weak self] data in
+            // On the poll's queue: the signal goes to the menu on the main thread.
+            if let s = PhoneStatusPolicy.parse(data, now: Date()).0 {
+                RunLoop.main.perform(inModes: [.common]) { self?.menu?.offHotspotSignal = s }
+                CFRunLoopWakeUp(CFRunLoopGetMain())
+            }
             self?.phoneBattery.accept(data)
             self?.clipSync.status(data)
         }
@@ -100,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in
-            if let s = PhoneStatusPolicy.parse(data, now: Date()).0 { self?.menu?.lanSignal = s }
+            if let s = PhoneStatusPolicy.parse(data, now: Date()).0 { self?.menu?.offHotspotSignal = s }
             self?.phoneBattery.accept(data)
             self?.clipSync.status(data)
         }
@@ -122,7 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.start()
-        menu.onOpen = { [weak self] in self?.hotspot.menuOpened() }
+        menu.onOpen = { [weak self] in
+            self?.hotspot.menuOpened()
+            self?.askPhoneSignal()
+        }
         preferredWifi.start()
 
         let watch = RoamingDataWatch(phone: roaming, net: net, location: { [weak self] in self?.hotspot.lastLocationFix() })
