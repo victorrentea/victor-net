@@ -100,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in
+            if let s = PhoneStatusPolicy.parse(data, now: Date()).0 { self?.menu?.lanSignal = s }
             self?.phoneBattery.accept(data)
             self?.clipSync.status(data)
         }
