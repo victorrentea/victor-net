@@ -764,7 +764,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // from before a restart) says when it is from.
             let age = Date().timeIntervalSince(r.readAt)
             let asOf = age > 30 * 60 ? " · \(NetworkBookPolicy.ago(r.readAt, now: Date()))" : ""
-            roamingRow("✈️ Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
+            if r.sims.count > 1 {
+                // One allowance per SIM (Victor, 2026-11-11), each with its own plan and
+                // reset day. Only the data SIM's moves with this Mac's traffic.
+                for sim in r.sims {
+                    let simLeft = sim.isData ? left : sim.remaining
+                    let title = "✈️ \(sim.simName ?? sim.simKey ?? "SIM"): \(gb(simLeft))/\(gb(simLeft + sim.cycleTotal)) GB left until \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
+                    if sim.simKey == "22601" { roamingRow(title) } else { otherSimRow(title, sim) }
+                }
+            } else {
+                roamingRow("✈️ Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
+            }
         } else {
             roamingRow("✈️ Roaming: the phone has not answered yet")
         }
@@ -803,6 +813,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         row.isEnabled = !asking
         menu.addItem(row)
     }
+
+    /// A SIM no `*123#` answers for (yoxo has no balance code, only its app): the
+    /// phone's own count against the plan. A click asks the phone again.
+    private func otherSimRow(_ title: String, _ sim: RoamingWarningPolicy.Reading) {
+        let row = action(title, #selector(pollRoaming))
+        row.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Ask the phone")
+        row.toolTip = "Counted by the phone while \(sim.simName ?? "this SIM") carried the data, against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan"
+        menu.addItem(row)
+    }
+
+    @objc private func pollRoaming() { roaming.pollNow(reason: "menu") }
 
     // MARK: - Rows
 
@@ -984,7 +1005,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func vodafoneArrived(_ v: VodafoneBalance) {
         vodafone = v
         let applied = UserDefaults.standard.double(forKey: Self.appliedKey)
-        guard v.received.timeIntervalSince1970 > applied, let r = roaming.reading, let plan = r.planMb else { return }
+        // Vodafone's SIM, whichever SIM carries the data now (yoxo has its own plan).
+        guard v.received.timeIntervalSince1970 > applied, let top = roaming.reading else { return }
+        let r = top.vodafone
+        guard let plan = r.planMb else { return }
         let adjust = VodafonePolicy.adjustMb(v, planMb: plan, usedNowBytes: r.cycleTotal)
         netInfo("📶 Vodafone says \(Double(v.remainingMb) / 1000) GB left (data of \(v.at)) → adjust \(adjust) MB")
         guard !applyingVodafone else { return }
@@ -992,7 +1016,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         askedVodafoneAt = nil
         // Marked applied only once the phone took it: a failed send is retried on
         // the next `/status` that carries the same SMS.
-        send(["adjustMb": "\(adjust)"], what: "Vodafone's \(Double(v.remainingMb) / 1000) GB") { [weak self] ok in
+        var params = ["adjustMb": "\(adjust)"]
+        if let key = r.simKey { params["sim"] = key }
+        send(params, what: "Vodafone's \(Double(v.remainingMb) / 1000) GB") { [weak self] ok in
             self?.applyingVodafone = false
             if ok { UserDefaults.standard.set(v.received.timeIntervalSince1970, forKey: Self.appliedKey) }
         }

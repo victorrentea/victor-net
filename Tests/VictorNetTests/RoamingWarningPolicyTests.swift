@@ -91,4 +91,26 @@ final class RoamingWarningPolicyTests: XCTestCase {
         XCTAssertNotNil(r)
         XCTAssertEqual(RoamingWarningPolicy.parse(RoamingWarningPolicy.line(r!)), r)
     }
+
+    /// 11 Nov 2026: one allowance per SIM. The top level is the data SIM's; Vodafone's
+    /// `*123#` correction must land on Vodafone's SIM even while yoxo carries the data.
+    func testParsesOneAllowancePerSim() throws {
+        let vic = #"{"v":1,"sim":"Vic","simKey":"22601","data":false,"cycleTotal":4000000000,"today":0,"limit":13380000000,"readAt":1794437579281,"nextReset":1796166000000,"planMb":13380}"#
+        let yoxo = #"{"v":1,"sim":"yoxo","simKey":"22610","data":true,"cycleTotal":1000000000,"today":5,"limit":7370000000,"readAt":1794437579281,"nextReset":1796598000000,"planMb":7370}"#
+        let line = #"{"v":1,"sim":"yoxo","simKey":"22610","data":true,"cycleTotal":1000000000,"today":5,"roamingNow":true,"limit":7370000000,"readAt":1794437579281,"nextReset":1796598000000,"planMb":7370,"sims":["# + vic + "," + yoxo + "]}"
+        let r = try XCTUnwrap(RoamingWarningPolicy.parse(line))
+        XCTAssertEqual(r.simName, "yoxo")
+        XCTAssertEqual(r.sims.map { $0.simName }, ["Vic", "yoxo"])
+        XCTAssertEqual(r.sims.map { $0.remaining }, [9_380_000_000, 6_370_000_000])
+        XCTAssertEqual(r.vodafone.simKey, "22601")
+        XCTAssertEqual(r.vodafone.planMb, 13_380)
+        XCTAssertEqual(RoamingWarningPolicy.parse(RoamingWarningPolicy.line(r)), r)
+    }
+
+    /// A phone app from before 11 Nov 2026: one allowance, which is Vodafone's.
+    func testOlderPhoneHasOneAllowance() throws {
+        let r = try XCTUnwrap(RoamingWarningPolicy.parse(#"{"v":1,"cycleTotal":1,"today":0,"limit":13380000000,"readAt":1794437579281}"#))
+        XCTAssertTrue(r.sims.isEmpty)
+        XCTAssertEqual(r.vodafone, r)
+    }
 }

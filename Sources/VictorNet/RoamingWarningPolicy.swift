@@ -34,6 +34,17 @@ enum RoamingWarningPolicy {
         var planMb: Int64?
         var adjust: Int64 = 0
         var resetDay: Int?
+        /// Whose allowance this is (11 Nov 2026: one per SIM). `simKey` is MCC+MNC
+        /// (`22601` Vodafone RO, `22610` Orange RO = yoxo), `simName` what the phone calls it.
+        var simKey: String? = nil
+        var simName: String? = nil
+        /// This SIM carries the data now. The top-level reading is the data SIM's.
+        var isData: Bool = true
+        /// Every SIM with its own allowance; empty from a phone app older than 11 Nov 2026.
+        var sims: [Reading] = []
+
+        /// The SIM Vodafone's `*123#` SMS is about, or the reading itself on an older phone.
+        var vodafone: Reading { sims.first { $0.simKey == "22601" } ?? self }
 
         var remaining: Int64 { max(0, limit - cycleTotal) }
         var remainingFraction: Double { limit > 0 ? Double(remaining) / Double(limit) : 0 }
@@ -76,7 +87,13 @@ enum RoamingWarningPolicy {
             guardOff: (o["guardOff"] as? Bool) ?? false,
             planMb: (o["planMb"] as? NSNumber)?.int64Value,
             adjust: (o["adjust"] as? NSNumber)?.int64Value ?? 0,
-            resetDay: (o["resetDay"] as? NSNumber)?.intValue)
+            resetDay: (o["resetDay"] as? NSNumber)?.intValue,
+            simKey: o["simKey"] as? String,
+            simName: o["sim"] as? String,
+            isData: (o["data"] as? Bool) ?? true,
+            sims: (o["sims"] as? [[String: Any]] ?? []).compactMap { sim in
+                (try? JSONSerialization.data(withJSONObject: sim)).flatMap { String(data: $0, encoding: .utf8) }.flatMap(parse)
+            })
     }
 
     /// The inverse of `parse`, for the copy kept on disk (`PhoneRoamingMonitor`).
@@ -90,6 +107,14 @@ enum RoamingWarningPolicy {
         ]
         if let p = r.planMb { o["planMb"] = p }
         if let d = r.resetDay { o["resetDay"] = d }
+        if let k = r.simKey { o["simKey"] = k }
+        if let n = r.simName { o["sim"] = n }
+        o["data"] = r.isData
+        if !r.sims.isEmpty {
+            o["sims"] = r.sims.map { sim in
+                (try? JSONSerialization.jsonObject(with: Data(line(sim).utf8))) ?? [:]
+            }
+        }
         let data = (try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys])) ?? Data()
         return String(data: data, encoding: .utf8) ?? "{}"
     }

@@ -182,3 +182,26 @@ phone's, `RoamingWarningPolicy.line`) and loads it at launch, so the menu never 
 has not answered yet" just because the app restarted or the phone is out of reach. A reading over
 30 min old says its age in the row (`· 9 h ago`). The roaming row and "Ask Vodafone" are one row
 (↺): a click asks Vodafone.
+
+## One allowance per SIM (11 Nov 2026)
+
+Asked for once yoxo (Orange RO eSIM, "YOXO Nelimitat 5G") sat next to Vodafone: each SIM has its own
+roaming plan, reset day, extra packages and reserve switch. The phone keys them by MCC+MNC
+(`22601` Vodafone RO, `22610` Orange RO = yoxo); the settings written before that, with no SIM in the
+key, are Vodafone's. Defaults for yoxo: **7 370 MB** (the yoxo brochure: "7.37 GB disponibili în roaming
+SEE" for the 4.9 € plan) and **reset day 8** (the eSIM went in on 8 Nov; yoxo renews monthly from
+activation — check in the yoxo app).
+
+**Who used what.** `NetworkStatsManager` does not say which SIM a bucket went through (a subscriber
+filter is for system apps since Android 10), so the phone writes down every change of data SIM
+(`dataSimTimeline` in its prefs, checked on every reading, ≤60 s late) and charges each SIM only for
+the spans it carried the data. Everything before the first note is Vodafone's. A switch cuts one 2-hour
+bucket proportionally.
+
+**On the wire.** `/status` → `roaming` is the **data SIM's** reading, as before (the meter, the pill,
+the hotspot guard and ⏸ Claude all follow the SIM in use), plus `sim`, `simKey`, `data` and `sims[]`
+with one reading per SIM. `/config?sim=22610&planMb=…` sets one SIM; without `sim`, the data SIM.
+The menu shows one `✈️ <SIM>: x/y GB left until …` row per SIM; Vodafone's keeps ↺ = `*123#`
+(dialled on the Vodafone SIM, whichever carries the data), and its correction is sent with
+`sim=22601`. yoxo has **no balance code** (no USSD, no SMS on request; only its app), so its row is
+the phone's own count against the plan.
