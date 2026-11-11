@@ -281,3 +281,7 @@ until the phone answers once); Victor Addons reads it and passes it on in its `/
 was on but the Mac sat on another network (the hotel's), because the frame once ended in a Stop row.
 Stop is the button at the top since 11 Nov, so the SIM rows, their numbers and their roaming rows
 stay, to compare with the Wi-Fi in use.
+
+**Only what was measured here (12 Nov 2026).** A SIM not carrying the data shows its numbers from
+this place's `SimLog` spot, or none. Its best anywhere (`sim:<name>`) used to stand in, so in
+Utrecht yoxo showed the ⚡ 3.0 MB/s speed test run in Bucharest as if run here.

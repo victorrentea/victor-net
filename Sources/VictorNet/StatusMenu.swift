@@ -449,22 +449,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    /// A SIM not carrying data: what it gave at this place (`SimLog`) — its speed test there, if
-    /// one ran, shown after a ⚡ — else its best anywhere (`sim:<name>`). Nothing = nil.
+    /// A SIM not carrying data: what it gave at this place (`SimLog`), its speed test there after a ⚡
+    /// if one ran there. **Only this place** (Victor, 2026-11-12): its best anywhere showed yoxo's
+    /// Bucharest speed test in Utrecht as if run here. Nothing measured here = nil, no numbers.
     private func idleSim(_ name: String, records: [String: NetworkRecord]) -> (NetworkRecord, here: Bool)? {
-        let book = records[TrafficMonitor.simKey(name)]
-        if let spot = simHere?()[name] {
-            var r = NetworkRecord(name: name, kind: "sim", lastSeen: spot.lastSeen)
-            // A spot filed before it kept ↓ ↑ lacks them: those come from the book.
-            r.maxDown = spot.maxDown ?? book?.maxDown ?? 0
-            r.maxUp = spot.maxUp ?? book?.maxUp ?? 0
-            r.latencyMs = SimLogPolicy.median(spot.latency) ?? book?.latencyMs
-            r.speedDown = spot.speed
-            r.speedAt = spot.speedAt
-            return (r, true)
-        }
-        guard let book, book.maxDown > 0 || book.maxUp > 0 || book.latencyMs != nil || book.speedDown != nil else { return nil }
-        return (book, false)
+        guard let spot = simHere?()[name] else { return nil }
+        var r = NetworkRecord(name: name, kind: "sim", lastSeen: spot.lastSeen)
+        // A spot filed before it kept ↓ ↑ lacks them: none, rather than another place's.
+        r.maxDown = spot.maxDown ?? 0
+        r.maxUp = spot.maxUp ?? 0
+        r.latencyMs = SimLogPolicy.median(spot.latency)
+        r.speedDown = spot.speed
+        r.speedAt = spot.speedAt
+        return (r, true)
     }
 
     /// Each SIM with the same numbers as a network — best ↓ ↑ (⚡ = a speed test's ↓), latency
@@ -484,10 +481,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                   icon: icon, checked: e.isData, enabled: false, indent: MenuRowLayout.simIndent, staleNumbers: !e.isData)
             simAgeRows.append((row, e.name))
             let test = !e.isData && e.record?.speedDown != nil
-            row.toolTip = e.record == nil ? "Not used through the hotspot yet"
+            row.toolTip = e.record == nil ? "Nothing measured on this SIM here yet"
                 : (e.isData ? "Best over the last hour on this SIM"
-                   : e.here ? "Measured here before, through the hotspot on this SIM"
-                   : "Best through the hotspot on this SIM, anywhere (nothing measured here yet)")
+                   : "Measured here before, through the hotspot on this SIM")
                 + (test ? ": ⚡ ↓ from a speed test, ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
                    : ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1")
             return row
