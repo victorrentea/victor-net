@@ -14,8 +14,8 @@ enum MenuRowLayout {
     static let checkX: CGFloat = 10
     static let iconX: CGFloat = 26
     static let nameX: CGFloat = 48
-    /// Room for "Vodafone" under the hotspot too: 16 of indent plus the bars' age after them (2026-11-11).
-    static let nameMin: CGFloat = 92
+    /// Room for "Vodafone RO" under the hotspot too: 16 of indent plus the bars' age after them (2026-11-11).
+    static let nameMin: CGFloat = 112
     /// The widest "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms ⋅ now" cell of the list being drawn —
     /// each number with its unit, no header over them, "seen" after a dot instead of
     /// in a column of its own (Victor, 2026-11-08).

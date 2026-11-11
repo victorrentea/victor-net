@@ -40,7 +40,7 @@ final class SimLogTests: XCTestCase {
     func testASimIsShownByItsOperator() {
         let sims = SimSignal.parse([["name": "Vic", "operator": "Vodafone RO"], ["name": "yoxo", "operator": "orange"],
                                     ["name": "Maya", "operator": ""]])
-        XCTAssertEqual(sims.map(SimSignalPolicy.label), ["Vodafone", "Orange", "Maya"])
+        XCTAssertEqual(sims.map(SimSignalPolicy.label), ["Vodafone RO", "Orange", "Maya"])
     }
 
     func testSignalAge() {
@@ -61,10 +61,10 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(SimSignalPolicy.generation("LTE", shown: ""), "4G")
     }
 
-    func testCountryCodeBeforeTheOperatorIsSkipped() {
+    func testTheOperatorsWholeNameIsKept() {
         let kpn = SimSignal(name: "yoxo", isData: false, level: 0, operatorName: "NL KPN", network: "LTE", rsrp: nil, sinr: nil)
         let voda = SimSignal(name: "Vic", isData: true, level: 3, operatorName: "vodafone NL", network: "LTE", rsrp: -106, sinr: -5)
-        XCTAssertEqual(SimSignalPolicy.label(kpn), "KPN")
-        XCTAssertEqual(SimSignalPolicy.label(voda), "Vodafone")
+        XCTAssertEqual(SimSignalPolicy.label(kpn), "NL KPN")
+        XCTAssertEqual(SimSignalPolicy.label(voda), "Vodafone NL")
     }
 }

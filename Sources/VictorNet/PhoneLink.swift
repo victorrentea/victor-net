@@ -85,13 +85,13 @@ struct SimSignal: Equatable {
 /// 📶 The phone's SIMs under the hotspot's row, so a new place can be judged before switching by hand.
 enum SimSignalPolicy {
     /// Shown by operator, not by the name given to the SIM (Victor, 2026-11-08: "Vic → Vodafone,
-    /// yoxo → Orange"): its first word, capitalised. No service = the SIM's own name.
-    /// A country code the network puts in front ("NL KPN", 2026-11-11) is skipped: it read as "NL".
+    /// yoxo → Orange"): the operator's whole name as the phone reads it, first letter capitalised
+    /// ("NL KPN", "Vodafone RO") — no guessing which word is a country code (Victor, 2026-11-11).
+    /// No service = the SIM's own name.
     static func label(_ s: SimSignal) -> String {
-        let words = s.operatorName.split(separator: " ")
-        let named = words.first { !($0.count == 2 && $0.allSatisfy(\.isUppercase)) } ?? words.first
-        guard let first = named, !first.isEmpty else { return s.name }
-        return first.prefix(1).uppercased() + first.dropFirst()
+        let name = s.operatorName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return s.name }
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     /// The network type as the phone's status bar shows it over the bars: its own word when it sends
