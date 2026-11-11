@@ -309,8 +309,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         // The SIM rows under the hotspot: live while it is in use, what each gave before while it is off.
         let hotspotJoined = Config.hasPhone && !Config.hotspotSSID.isEmpty && net.ssid == Config.hotspotSSID
-        let simEntries = hotspotJoined ? liveSimEntries(records: records)
-            : hotspotShowsStop ? [] : idleSimEntries(records: records)
+        // On another Wi-Fi with the hotspot still on too (Victor, 2026-11-12: "to compare them"): the
+        // Stop that once closed this frame is the button at the top since 2026-11-11.
+        let simEntries = hotspotJoined ? liveSimEntries(records: records) : idleSimEntries(records: records)
         // One unit for the whole list, so the column reads straight down: KB/s
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
         let unit = TrafficPolicy.listUnit((shown.map(\.value) + simEntries.compactMap(\.record))
@@ -845,18 +846,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         day.dateFormat = "d MMM"
         // Only the data SIM's moves with this Mac's traffic between the phone's answers.
         let left = sim.isData ? (roamingLeft ?? sim.remaining) : sim.remaining
-        let asOf = Date().timeIntervalSince(r.readAt) > 30 * 60 ? " · \(NetworkBookPolicy.ago(r.readAt, now: Date()))" : ""
+        // When the phone counted it, and how much is left in % (Victor, 2026-11-12): the time alone
+        // today, the day too before that.
+        let at = DateFormatter()
+        at.locale = Locale(identifier: "en_US_POSIX")   // 24 h whatever the system clock says
+        at.dateFormat = Calendar.current.isDateInToday(sim.readAt) ? "HH:mm" : "d MMM HH:mm"
+        let pct = sim.limit > 0 ? Int((Double(left) / Double(sim.limit) * 100).rounded()) : 0
         let vodafone = sim.simKey == "22601"
         let asking = vodafone && (askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false)
         // +12 h: the reset is midnight in the phone's time zone, which may still be the day before here.
-        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal)) GB left · \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
+        let resets = DateFormatter()
+        resets.locale = Locale(identifier: "en_US_POSIX")
+        resets.dateFormat = "MMM d"
+        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal)) GB · \(pct)% left · \(at.string(from: sim.readAt)) · resets: \(resets.string(from: sim.nextReset + 12 * 3600))"
             + (asking ? " · asking…" : "")
         let row = MenuRowView(name: title, enabled: !asking,
                               trailing: NSImage(systemSymbolName: vodafone ? "arrow.counterclockwise" : "arrow.clockwise",
                                                 accessibilityDescription: vodafone ? "Ask Vodafone" : "Ask the phone"),
                               indent: 16)
-        row.toolTip = vodafone ? "Roaming left until the reset on \(day.string(from: sim.nextReset + 12 * 3600)). Click: ask Vodafone (*123#, through the phone)"
-            : "Counted by the phone while \(name) carried the data, against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan (no balance code for it). Click: ask the phone again"
+        let live = sim.isData && roamingLeft != nil
+            ? " The GB move on with what this Mac pulled through the hotspot since then." : ""
+        row.toolTip = "Counted by the phone at \(at.string(from: sim.readAt)).\(live) "
+            + (vodafone ? "Click: ask Vodafone (*123#, through the phone)"
+               : "Against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan, while \(name) carried the data (no balance code for it). Click: ask the phone again")
         row.onClick = { [weak self] in vodafone ? self?.askVodafone() : self?.pollRoaming() }
         return row
     }

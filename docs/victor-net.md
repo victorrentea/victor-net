@@ -276,3 +276,8 @@ It needs `RELAY_URL` and `RELAY_TOKEN` (the tablet bridge's token) in `config.en
 whole subnet, so it runs **only on `PREFERRED_SSID`, on a /24 or smaller**: on a client's
 network that sweep is a port scan. Between sweeps it asks only the address that answered. `GET /phone/battery` → `{"pct":63,"charging":false,"age_s":120}` (`{"pct":-1}`
 until the phone answers once); Victor Addons reads it and passes it on in its `/ping`.
+
+**The SIMs under `victor` on any other Wi-Fi too (12 Nov 2026).** They used to vanish while the hotspot
+was on but the Mac sat on another network (the hotel's), because the frame once ended in a Stop row.
+Stop is the button at the top since 11 Nov, so the SIM rows, their numbers and their roaming rows
+stay, to compare with the Wi-Fi in use.
