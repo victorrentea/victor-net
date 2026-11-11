@@ -205,3 +205,12 @@ The menu shows one `✈️ <SIM>: x/y GB left until …` row per SIM; Vodafone's
 (dialled on the Vodafone SIM, whichever carries the data), and its correction is sent with
 `sim=22601`. yoxo has **no balance code** (no USSD, no SMS on request; only its app), so its row is
 the phone's own count against the plan.
+
+**Under each SIM (12 Nov 2026).** The allowance rows moved from the roaming group into the network
+list: `✈️ 6.6/13.4 GB left · 2 Dec` sits right under its SIM's row, under `victor`, in the same frame
+(↺ = `*123#` for Vodafone, ↻ = ask the phone for any other SIM). The roaming group keeps only the
+two switches, plus any SIM whose row is not drawn (no SIM rows while the hotspot is stopping, or an
+older phone app with a single reading). The phone had a bug the first night: with Vodafone carrying
+the data from the start, its SIM timeline stayed empty and **every** SIM was charged all the
+traffic (yoxo showed 6.6 of 7.37 GB used and its hotspot blocked); fixed in `victor-phone-addons`
+`d53d0e6`. Consumption before that APK (12 Nov, 00:33) is all Vodafone's.

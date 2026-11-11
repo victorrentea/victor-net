@@ -341,6 +341,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         var items: [NSMenuItem] = []
         wifiRows = []
+        roamingPlaced = []
         for (key, r) in shown {
             let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
             // ✓ on every network this Mac is on: the route (the cable, say) *and*
@@ -359,7 +360,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // The hotspot's numbers are its SIMs', shown on their rows under it (Victor, 2026-11-08).
             // Start/Stop is no longer here but the button at the top (Victor, 2026-11-11): this row
             // is a network like the others, a click joins it when it is in range.
-            let sims = isHotspot ? simRowViews(simEntries, cell: cell).map { NSMenuItem(view: $0) } : []
+            // Each SIM's roaming allowance right under it, in the same frame (Victor, 2026-11-12).
+            let sims = isHotspot ? zip(simEntries, simRowViews(simEntries, cell: cell)).flatMap { e, row in
+                [NSMenuItem(view: row)] + (simRoamingRow(e.name).map { [NSMenuItem(view: $0)] } ?? [])
+            } : []
             let row = MenuRowView(name: ssid ?? "Ethernet",
                                   columns: isHotspot ? [] : [cell(r, seen(key, r), unused: !current)],
                                   icon: icon, checked: current,
@@ -751,7 +755,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let gb: (Int64) -> String = { String(format: "%.1f", Double($0) / 1e9) }
         let day = DateFormatter()
         day.dateFormat = "d MMM"
-        if let r = roaming.reading {
+        if let r = roaming.reading, r.sims.count > 1, r.sims.allSatisfy({ roamingPlaced.contains($0.simName ?? "") }) {
+            // Every SIM's allowance already sits under its SIM row.
+        } else if let r = roaming.reading {
             // One line: "✈️ Roaming: 22.6/60.9 GB left until 2 Nov" — the total is
             // what this cycle allowed in all, used + left. Every row of the group starts
             // with "✈️ Roaming" (Victor, 2026-11-06), so it reads as one.
@@ -767,7 +773,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             if r.sims.count > 1 {
                 // One allowance per SIM (Victor, 2026-11-11), each with its own plan and
                 // reset day. Only the data SIM's moves with this Mac's traffic.
-                for sim in r.sims {
+                for sim in r.sims where !roamingPlaced.contains(sim.simName ?? "") {
                     let simLeft = sim.isData ? left : sim.remaining
                     let title = "✈️ \(sim.simName ?? sim.simKey ?? "SIM"): \(gb(simLeft))/\(gb(simLeft + sim.cycleTotal)) GB left until \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
                     if sim.simKey == "22601" { roamingRow(title) } else { otherSimRow(title, sim) }
@@ -824,6 +830,36 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func pollRoaming() { roaming.pollNow(reason: "menu") }
+
+    /// The SIMs whose allowance was drawn under their SIM row this time, so the roaming group skips them.
+    private var roamingPlaced: Set<String> = []
+
+    /// A SIM's roaming allowance as a row under it (Victor, 2026-11-12): "✈️ 6.7/13.4 GB left · 2 Dec".
+    /// Vodafone's click asks `*123#`; any other SIM's asks the phone for a new count. Nil without a
+    /// per-SIM reading for it (an older phone app), and then the roaming group shows it as before.
+    private func simRoamingRow(_ name: String) -> MenuRowView? {
+        guard let r = roaming.reading, r.sims.count > 1, let sim = r.sims.first(where: { $0.simName == name }) else { return nil }
+        roamingPlaced.insert(name)
+        let gb: (Int64) -> String = { String(format: "%.1f", Double($0) / 1e9) }
+        let day = DateFormatter()
+        day.dateFormat = "d MMM"
+        // Only the data SIM's moves with this Mac's traffic between the phone's answers.
+        let left = sim.isData ? (roamingLeft ?? sim.remaining) : sim.remaining
+        let asOf = Date().timeIntervalSince(r.readAt) > 30 * 60 ? " · \(NetworkBookPolicy.ago(r.readAt, now: Date()))" : ""
+        let vodafone = sim.simKey == "22601"
+        let asking = vodafone && (askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false)
+        // +12 h: the reset is midnight in the phone's time zone, which may still be the day before here.
+        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal)) GB left · \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
+            + (asking ? " · asking…" : "")
+        let row = MenuRowView(name: title, enabled: !asking,
+                              trailing: NSImage(systemSymbolName: vodafone ? "arrow.counterclockwise" : "arrow.clockwise",
+                                                accessibilityDescription: vodafone ? "Ask Vodafone" : "Ask the phone"),
+                              indent: 16)
+        row.toolTip = vodafone ? "Roaming left until the reset on \(day.string(from: sim.nextReset + 12 * 3600)). Click: ask Vodafone (*123#, through the phone)"
+            : "Counted by the phone while \(name) carried the data, against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan (no balance code for it). Click: ask the phone again"
+        row.onClick = { [weak self] in vodafone ? self?.askVodafone() : self?.pollRoaming() }
+        return row
+    }
 
     // MARK: - Rows
 
@@ -899,11 +935,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let sims = [(SimSignal(name: "yoxo", isData: true, level: 3, operatorName: "orange", network: "LTE", rsrp: -97, sinr: -5, shown: "4G+"), yoxo as NetworkRecord?),
                         (SimSignal(name: "Vic", isData: false, level: 4, operatorName: "Vodafone RO", network: "5G", rsrp: -85, sinr: 21), vic),
                         (SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil), nil)]
-            out += simRowViews(sims.map { SimEntry(name: $0.0.name, label: SimSignalPolicy.label($0.0), signal: $0.0, record: $0.1,
+            let simRows = simRowViews(sims.map { SimEntry(name: $0.0.name, label: SimSignalPolicy.label($0.0), signal: $0.0, record: $0.1,
                                                    here: true, seen: $0.0.isData ? "now" : "2 h") },
                                cell: { r, seen, unused in (unused && r.speedDown != nil ? "⚡\u{2009}" : "")
                                    + "\(TrafficPolicy.rate(unused ? r.speedDown ?? r.maxDown : r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })
-            frame(head, Array(out.suffix(3)).compactMap { $0 as? MenuRowView })
+            // Each SIM's roaming allowance under it, from the phone's real reading.
+            let framed = zip(sims, simRows).flatMap { s, row in [row] + (simRoamingRow(s.0.name).map { [$0] } ?? []) }
+            out += framed
+            frame(head, framed)
             // Off: what each SIM gave here before, in grey.
             let off = MenuRowView(name: "victor", icon: Icons.hotspot())
             out.append(off)
