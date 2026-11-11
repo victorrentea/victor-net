@@ -14,6 +14,10 @@ CONTENTS="$APP_DIR/Contents"
 BUILD_CONFIG="release"
 
 BUILD_TIMESTAMP=$(date "+%b %-d, %H:%M")
+# The stamp goes in only for this build: the file is put back afterwards, so git stays clean.
+BUILDINFO_BACKUP="$(mktemp -t victor-net-buildinfo)"
+cp "$DIR/Sources/VictorNet/BuildInfo.swift" "$BUILDINFO_BACKUP"
+trap 'cp "$BUILDINFO_BACKUP" "$DIR/Sources/VictorNet/BuildInfo.swift"; rm -f "$BUILDINFO_BACKUP"' EXIT
 sed -i '' "s/static let time = .*/static let time = \"$BUILD_TIMESTAMP\"/" "$DIR/Sources/VictorNet/BuildInfo.swift"
 echo "Build timestamp: $BUILD_TIMESTAMP"
 

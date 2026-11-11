@@ -105,7 +105,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// The data SIM's "5G" / "4G" for the menu bar's bars, from a fresh reading only.
     private var barsNetwork: String? {
         guard let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter else { return nil }
-        return SimSignalPolicy.generation(s.network)
+        return SimSignalPolicy.generation(s.network, shown: s.shown)
     }
 
     func refreshIcon() {
@@ -393,7 +393,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let here: Bool
         let seen: String
         /// Bars the phone reported for it with the hotspot off (`PhoneLan`, on the home Wi-Fi): nil = no icon.
-        var bars: (level: Int, network: String?, readAt: Date)? = nil
+        var bars: (level: Int, network: String?, readAt: Date)? = nil   // network: already as shown ("5G", "4G+")
         var isData: Bool { signal?.isData ?? false }
     }
 
@@ -434,7 +434,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let label = known.first { $0.name == name }.map(SimSignalPolicy.label) ?? simLabel?(name) ?? name
             var e = SimEntry(name: name, label: label, signal: nil, record: found?.0, here: found?.here ?? false,
                              seen: found.map { NetworkBookPolicy.since($0.0.lastSeen, now: now) } ?? "—")
-            if let sim, let reading { e.bars = (sim.level, sim.network, reading.readAt) }
+            if let sim, let reading { e.bars = (sim.level, SimSignalPolicy.generation(sim.network, shown: sim.shown), reading.readAt) }
             return e
         }
     }
@@ -464,9 +464,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let readAt = net.phoneSignal?.readAt ?? now
         simAgeRows = []
         return entries.map { e in
-            let icon = e.signal.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network),
+            let icon = e.signal.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network, shown: $0.shown),
                                                      age: SimSignalPolicy.age(readAt, now: now)) }
-                ?? e.bars.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network),
+                ?? e.bars.map { Icons.cellular(level: $0.level, network: $0.network,
                                                age: SimSignalPolicy.age($0.readAt, now: now)) }
                 // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
                 ?? NSImage(size: NSSize(width: Icons.cellularWithAgeWidth, height: Icons.barHeight))
@@ -591,7 +591,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 .filter({ r in now.timeIntervalSince(r.readAt) < 900 && r.sims.contains { $0.name == name } })
                 .max(by: { $0.readAt < $1.readAt }) else { continue }
             let sim = s.sims.first { $0.name == name }
-            row.setIcon(Icons.cellular(level: sim?.level, network: SimSignalPolicy.generation(sim?.network),
+            row.setIcon(Icons.cellular(level: sim?.level, network: SimSignalPolicy.generation(sim?.network, shown: sim?.shown),
                                        age: SimSignalPolicy.age(s.readAt, now: now)))
         }
     }
@@ -875,7 +875,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             var yoxo = NetworkRecord(name: "yoxo", kind: "sim", lastSeen: Date()); yoxo.maxDown = 2_100_000; yoxo.maxUp = 900_000; yoxo.latencyMs = 36
             var vic = NetworkRecord(name: "Vic", kind: "sim", lastSeen: Date().addingTimeInterval(-7200)); vic.maxDown = 1_300_000; vic.maxUp = 400_000; vic.latencyMs = 53
             vic.speedDown = 9_050_000
-            let sims = [(SimSignal(name: "yoxo", isData: true, level: 3, operatorName: "orange", network: "LTE", rsrp: -97, sinr: -5), yoxo as NetworkRecord?),
+            let sims = [(SimSignal(name: "yoxo", isData: true, level: 3, operatorName: "orange", network: "LTE", rsrp: -97, sinr: -5, shown: "4G+"), yoxo as NetworkRecord?),
                         (SimSignal(name: "Vic", isData: false, level: 4, operatorName: "Vodafone RO", network: "5G", rsrp: -85, sinr: 21), vic),
                         (SimSignal(name: "Maya", isData: false, level: 0, network: nil, rsrp: nil, sinr: nil), nil)]
             out += simRowViews(sims.map { SimEntry(name: $0.0.name, label: SimSignalPolicy.label($0.0), signal: $0.0, record: $0.1,

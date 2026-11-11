@@ -43,6 +43,8 @@ struct PhoneSignal: Equatable {
     /// "5G", "LTE", "3G"… — nil without READ_PHONE_STATE on the phone.
     let network: String?
     let operatorName: String?
+    /// What the phone's status bar shows over its bars ("5G" on NSA too, "4G+"): `TelephonyDisplayInfo`.
+    var shown: String? = nil
     let readAt: Date
     /// The data SIM's name as the phone shows it ("yoxo", "Vic"); nil from an older phone app.
     var sim: String? = nil
@@ -65,6 +67,8 @@ struct SimSignal: Equatable {
     let network: String?
     let rsrp: Int?
     let sinr: Int?
+    /// What the phone's status bar shows over its bars ("5G" on NSA too, "4G+"); nil from an older phone app.
+    var shown: String? = nil
 
     static func parse(_ list: Any?) -> [SimSignal] {
         (list as? [[String: Any]] ?? []).map {
@@ -73,7 +77,7 @@ struct SimSignal: Equatable {
                           ?? max(0, min(4, ($0["level"] as? NSNumber)?.intValue ?? 0)),
                       operatorName: $0["operator"] as? String ?? "",
                       network: $0["network"] as? String, rsrp: ($0["rsrp"] as? NSNumber)?.intValue,
-                      sinr: ($0["sinr"] as? NSNumber)?.intValue)
+                      sinr: ($0["sinr"] as? NSNumber)?.intValue, shown: $0["shown"] as? String)
         }
     }
 }
@@ -82,14 +86,19 @@ struct SimSignal: Equatable {
 enum SimSignalPolicy {
     /// Shown by operator, not by the name given to the SIM (Victor, 2026-11-08: "Vic → Vodafone,
     /// yoxo → Orange"): its first word, capitalised. No service = the SIM's own name.
+    /// A country code the network puts in front ("NL KPN", 2026-11-11) is skipped: it read as "NL".
     static func label(_ s: SimSignal) -> String {
-        guard let first = s.operatorName.split(separator: " ").first, !first.isEmpty else { return s.name }
+        let words = s.operatorName.split(separator: " ")
+        let named = words.first { !($0.count == 2 && $0.allSatisfy(\.isUppercase)) } ?? words.first
+        guard let first = named, !first.isEmpty else { return s.name }
         return first.prefix(1).uppercased() + first.dropFirst()
     }
 
-    /// The network type as the phone's status bar shows it over the bars: Samsung says "4G" for LTE.
-    /// Unknown or empty = nothing drawn.
-    static func generation(_ network: String?) -> String? {
+    /// The network type as the phone's status bar shows it over the bars: its own word when it sends
+    /// one (`shown`, from `TelephonyDisplayInfo`: "5G" on NSA, "4G+"), else from the raw type, where
+    /// Samsung says "4G" for LTE. Unknown or empty = nothing drawn.
+    static func generation(_ network: String?, shown: String? = nil) -> String? {
+        if let s = shown?.trimmingCharacters(in: .whitespaces), !s.isEmpty, s.count <= 3 { return s }
         guard let n = network?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return nil }
         if n == "LTE" { return "4G" }
         return n.count <= 3 ? n : nil
@@ -138,7 +147,7 @@ enum PhoneStatusPolicy {
             let dbm = (s["dbm"] as? NSNumber)?.intValue
             signal = PhoneSignal(level: dbm.map(bars(dbm:)) ?? max(0, min(4, level)), dbm: dbm,
                                  network: s["network"] as? String, operatorName: s["operator"] as? String,
-                                 readAt: now, sim: s["sim"] as? String,
+                                 shown: s["shown"] as? String, readAt: now, sim: s["sim"] as? String,
                                  rsrp: (s["rsrp"] as? NSNumber)?.intValue, sinr: (s["sinr"] as? NSNumber)?.intValue,
                                  sims: SimSignal.parse(s["sims"]))
         }

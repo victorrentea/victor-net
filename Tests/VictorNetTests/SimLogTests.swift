@@ -55,5 +55,16 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(SimSignalPolicy.generation("3G"), "3G")
         XCTAssertNil(SimSignalPolicy.generation(nil))
         XCTAssertNil(SimSignalPolicy.generation(""))
+        // The phone's own word wins: on 5G NSA the raw type still says LTE.
+        XCTAssertEqual(SimSignalPolicy.generation("LTE", shown: "5G"), "5G")
+        XCTAssertEqual(SimSignalPolicy.generation("LTE", shown: "4G+"), "4G+")
+        XCTAssertEqual(SimSignalPolicy.generation("LTE", shown: ""), "4G")
+    }
+
+    func testCountryCodeBeforeTheOperatorIsSkipped() {
+        let kpn = SimSignal(name: "yoxo", isData: false, level: 0, operatorName: "NL KPN", network: "LTE", rsrp: nil, sinr: nil)
+        let voda = SimSignal(name: "Vic", isData: true, level: 3, operatorName: "vodafone NL", network: "LTE", rsrp: -106, sinr: -5)
+        XCTAssertEqual(SimSignalPolicy.label(kpn), "KPN")
+        XCTAssertEqual(SimSignalPolicy.label(voda), "Vodafone")
     }
 }

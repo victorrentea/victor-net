@@ -49,8 +49,16 @@ enum Icons {
             if switchHint {
                 switchArrows(in: NSRect(x: 0, y: 10, width: 8.5, height: 6))
             } else if let network {
-                let text = NSAttributedString(string: network, attributes: small)
-                text.draw(at: NSPoint(x: 0, y: rect.height - text.size().height + 1.5))
+                // "4G+" / "5G+": the + small and raised, as on the phone, so it stays clear of the third bar.
+                let base = network.hasSuffix("+") ? String(network.dropLast()) : network
+                let text = NSMutableAttributedString(string: base, attributes: small)
+                text.addAttribute(.kern, value: -0.2, range: NSRange(location: 0, length: text.length))
+                if base != network {
+                    text.append(NSAttributedString(string: "+", attributes: [
+                        .font: NSFont.systemFont(ofSize: 5, weight: .bold), .foregroundColor: NSColor.black,
+                        .baselineOffset: 1.8]))
+                }
+                text.draw(at: NSPoint(x: 0, y: rect.height - NSAttributedString(string: base, attributes: small).size().height + 1.5))
             }
             if let age {
                 let text = NSAttributedString(string: age, attributes: small)
@@ -163,22 +171,20 @@ enum Icons {
         return image
     }
 
-    /// Wi-Fi on but joined to nothing: the full symbol, greyed, a size larger —
-    /// macOS's "not connected".
+    /// Wi-Fi joined but with nothing behind it: the arcs white like any Wi-Fi, only the "!" red
+    /// (Victor, 2026-11-11; it was all red). Palette order is the symbol's layers: "!" first, arcs second.
     static func wifiNoInternet() -> NSImage? {
         NSImage(systemSymbolName: "wifi.exclamationmark", accessibilityDescription: "No internet")?
             .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold)
-                .applying(.init(paletteColors: [.systemRed])))
+                .applying(.init(paletteColors: [.systemRed, .labelColor])))
     }
 
+    /// Wi-Fi on but joined to nothing: the full symbol, white like the other states (Victor,
+    /// 2026-11-11: macOS greys it, he wants it white always).
     static func wifiIdle() -> NSImage? {
-        guard let arcs = NSImage(systemSymbolName: "wifi", variableValue: 1, accessibilityDescription: "Wi-Fi")?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular)) else { return nil }
-        let image = NSImage(size: arcs.size, flipped: false) { r in
-            tinted(arcs, NSColor.labelColor.withAlphaComponent(0.35)).draw(in: r)
-            return true
-        }
-        image.isTemplate = false
+        let image = NSImage(systemSymbolName: "wifi", variableValue: 1, accessibilityDescription: "Wi-Fi")?
+            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+        image?.isTemplate = true
         return image
     }
 
