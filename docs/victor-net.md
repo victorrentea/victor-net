@@ -9,7 +9,7 @@ system Wi-Fi item, which Victor takes out of the menu bar.
 | the Mac is on…        | icon |
 |-----------------------|------|
 | a cable with an address | `< ‐ ‐ >` — open angle brackets, two dashes |
-| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s; while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
+| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s, with the data SIM's type small over the short bars like on the phone (`5G`, `4G` — the phone's `LTE` shown as Samsung does, `3G`, `2G`; Victor, 2026-11-11); while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
 | any other Wi-Fi       | the system Wi-Fi symbol, arcs filled by RSSI (−50 dBm full, −90 empty) |
 | nothing               | Wi-Fi slashed |
 
@@ -59,13 +59,15 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 ──────────
 Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
 ╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its SIMs (2026-11-08); a network like the others: in range and not in use, click = join
-│   ✓ ▂▄▆ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
+│   ✓ ⁴ᴳ▂▄▆₃ₛ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
 ╰     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
    (off, on any other Wi-Fi or the cable too: under victor, both SIMs always, numbers in grey — measured here
     before (`SimLog`, by GPS place), else its best anywhere (`sim:<name>`), else none; bars only from a real
     reading ≤ 15 min old — the phone's `/status` off the hotspot — else no icon. Each opening asks for it
     (at most once in 30 s): over the home Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars and their
     age then update in the open menu)
+   the SIM bars like the phone's (Victor, 2026-11-11): its type (5G / 4G) over the short bars, the reading's age
+    ("3s") at their bottom-right, after them; the name moves right by that much (`Icons.cellularWithAgeWidth`)
    ⚡ before a row's numbers (any network or SIM not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
   wifi tzutze    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h    ← today, out of range: greyed, not clickable
   wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)
