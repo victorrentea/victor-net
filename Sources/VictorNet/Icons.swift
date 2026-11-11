@@ -35,8 +35,10 @@ enum Icons {
 
     /// Four rising bars, `level` of them solid, the rest faint. No level = all faint.
     /// `age` ("3s") sits small in the empty corner above the short bars: how old the reading is.
-    static func cellular(level: Int?, age: String? = nil) -> NSImage {
+    /// `switchHint` draws a slanted ⇄ in that same corner: the other SIM has more bars (`SimSwitchHint`).
+    static func cellular(level: Int?, age: String? = nil, switchHint: Bool = false) -> NSImage {
         let image = NSImage(size: NSSize(width: 17, height: barHeight), flipped: false) { rect in
+            if switchHint { switchArrows(in: NSRect(x: 0, y: 10, width: 8.5, height: 6)) }
             if let age {
                 let text = NSAttributedString(string: age, attributes: [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .semibold),
@@ -55,6 +57,34 @@ enum Icons {
         }
         image.isTemplate = true
         return image
+    }
+
+    /// ⇄ drawn as two thin arrows, slanted like italics, in `r` (the corner above the short bars).
+    private static func switchArrows(in r: NSRect) {
+        let slant: CGFloat = 0.3
+        func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: x + (y - r.minY) * slant, y: y) }
+        let top = r.maxY - 1.7, bottom = r.minY + 1.4, head: CGFloat = 1.7
+        let left = r.minX + 0.6, right = r.maxX - 1.6
+        let path = NSBezierPath()
+        path.move(to: p(left, top)); path.line(to: p(right, top))
+        path.move(to: p(right - head, top + head)); path.line(to: p(right, top)); path.line(to: p(right - head, top - head))
+        path.move(to: p(right, bottom)); path.line(to: p(left, bottom))
+        path.move(to: p(left + head, bottom + head)); path.line(to: p(left, bottom)); path.line(to: p(left + head, bottom - head))
+        path.lineWidth = 1.1
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        NSColor.black.set()
+        path.stroke()
+    }
+
+    /// The same image at `alpha` — the dim half of a blink. Keeps it a template if it was one.
+    static func faded(_ image: NSImage, _ alpha: CGFloat) -> NSImage {
+        let out = NSImage(size: image.size, flipped: false) { r in
+            image.draw(in: r, from: .zero, operation: .sourceOver, fraction: alpha)
+            return true
+        }
+        out.isTemplate = image.isTemplate
+        return out
     }
 
     /// The system's own Wi-Fi symbol, its arcs filled by `strength` (0…1).
@@ -197,11 +227,12 @@ enum Icons {
         return image
     }
 
-    static func image(for look: NetworkLook) -> NSImage? {
+    static func image(for look: NetworkLook, switchHint: Bool = false) -> NSImage? {
         switch look {
         case .wired: return wired()
         case .hotspot(let level, let weakWifi, let alert):
-            var image = cellular(level: level)
+            // The roaming badge takes the same corner, and says more.
+            var image = cellular(level: level, switchHint: switchHint && alert == nil)
             if let weakWifi, let wifi = wifi(strength: weakWifi) { image = pair(image, wifi) }
             guard let alert else { return image }
             return badged(image, alert)

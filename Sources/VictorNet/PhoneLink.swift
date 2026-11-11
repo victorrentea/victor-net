@@ -100,6 +100,27 @@ enum SimSignalPolicy {
 
 }
 
+/// ⇄ over the bars, blinking (Victor, 2026-11-11): on the hotspot, a SIM that is not carrying data
+/// has at least `margin` bars more than the one that is — worth switching the data SIM by hand
+/// (the app cannot, see docs/victor-net.md).
+enum SimSwitchHint {
+    static let margin = 2
+
+    /// The SIM to try instead, or nil. Both levels from `signal.sims`, so they are on the same scale.
+    static func better(_ sims: [SimSignal]) -> SimSignal? {
+        guard let data = sims.first(where: \.isData),
+              let best = sims.filter({ !$0.isData }).max(by: { $0.level < $1.level }),
+              best.level - data.level >= margin else { return nil }
+        return best
+    }
+
+    static func tooltip(_ better: SimSignal, over sims: [SimSignal]) -> String {
+        let data = sims.first(where: \.isData)
+        return "\(SimSignalPolicy.label(better)) has \(better.level)/4, "
+            + "data is on \(data.map(SimSignalPolicy.label) ?? "?") with \(data?.level ?? 0)/4 — try switching the data SIM"
+    }
+}
+
 enum PhoneStatusPolicy {
     /// `{"signal":{"level":3,"dbm":-97,"network":"LTE","operator":"Vodafone RO"},"roaming":{…}}`
     static func parse(_ data: Data, now: Date) -> (PhoneSignal?, RoamingWarningPolicy.Reading?) {

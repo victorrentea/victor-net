@@ -35,6 +35,12 @@ Bluetooth page every 5 s would cost ~4 s each; this costs milliseconds.
 
 No signal for 16 s (three missed polls) → the bars go faint rather than lying.
 
+**⇄ — try the other SIM** (Victor, 2026-11-11): on the hotspot, when the SIM *not* carrying data has
+at least 2 bars more than the data SIM (both from `signal.sims`, fresh), a slanted ⇄ sits in the
+corner above the short bars and the whole icon blinks (full / 30 %, once a second). The tooltip
+names both SIMs. The switch stays Victor's, by hand on the phone. The roaming badge takes the same
+corner and wins. `SimSwitchHint`; `GET /test/sim-hint/simulate/on|off`; `/test/state` → `sim_switch_hint`.
+
 ## The menu: which network is better
 
 The question it answers (Victor): *"I sometimes have a hard time telling if the hotel Wi-Fi

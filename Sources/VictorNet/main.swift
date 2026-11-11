@@ -181,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["clip"] = self.clipSync.stateJSON
                 o["sim_log"] = self.simLog.stateJSON
                 o["phone_battery_bar"] = self.phoneBatteryBar.stateJSON
+                o["sim_switch_hint"] = self.menu?.switchHintJSON ?? [:]
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":
@@ -225,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let pct = Int(p.dropFirst("/test/phone-battery/simulate/".count))
             onMain { self.phoneBatteryBar.simulate(pct) }
             return (200, HttpServer.json(["simulated": orNull(pct)]))
+        case let p where p.hasPrefix("/test/sim-hint/simulate/"):
+            let on = p.hasSuffix("/on")
+            onMain { self.menu?.simulateSwitchHint = on; self.menu?.refreshIcon() }
+            return (200, HttpServer.json(["simulated": on]))
         case let p where p.hasPrefix("/test/roaming/simulate/"):
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }

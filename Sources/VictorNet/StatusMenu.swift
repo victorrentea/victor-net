@@ -43,6 +43,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let hotspot: HotspotFallback
     private var hotspotCounter = InterfaceByteCounter()
     private var lastAskedAt = Date.distantPast
+    /// The blink of the ⇄ hint: flipped once a second by `tick`.
+    private var blinkBright = true
+    /// `GET /test/sim-hint/simulate/on|off`: draw the hint whatever the SIMs say.
+    var simulateSwitchHint = false
 
     var onRoamingSuspendToggled: (() -> Void)?
     var phoneBattery: (() -> PhoneBattery?)?
@@ -74,7 +78,22 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             lastAskedAt = now
             roaming.pollNow()
         }
+        blinkBright.toggle()
         refreshIcon()
+    }
+
+    /// On the hotspot, with a fresh reading: the SIM not carrying data has ≥ 2 bars more.
+    private var switchHint: (better: SimSignal?, sims: [SimSignal])? {
+        if simulateSwitchHint { return (nil, []) }
+        guard net.onHotspot, let s = net.phoneSignal,
+              Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter,
+              let better = SimSwitchHint.better(s.sims) else { return nil }
+        return (better, s.sims)
+    }
+
+    var switchHintJSON: [String: Any] {
+        let h = switchHint
+        return ["showing": h != nil, "simulated": simulateSwitchHint, "better": orNull(h?.better.map(SimSignalPolicy.label))]
     }
 
     /// What is left now: the phone's number minus what this Mac pulled since.
@@ -96,9 +115,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             button.image = Icons.wifiOff()
         } else if noInternet {
             button.image = Icons.wifiNoInternet()
+        } else if case .hotspot = look, let hint = switchHint {
+            // Blinks (Victor, 2026-11-11): a nudge to switch the data SIM by hand on the phone.
+            let image = Icons.image(for: look, switchHint: true)
+            button.image = image.map { blinkBright ? $0 : Icons.faded($0, 0.3) }
+            button.toolTip = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
+            button.title = ""
+            return
         } else {
             button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look)
         }
+        button.toolTip = nil
         button.title = ""
     }
 
