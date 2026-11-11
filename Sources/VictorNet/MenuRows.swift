@@ -54,10 +54,13 @@ final class MenuRowView: NSView {
             add(label("✓", font: .systemFont(ofSize: size, weight: .semibold), color: base),
                 x: MenuRowLayout.checkX + indent, width: 14)
         }
+        // An icon wider than the slot (the SIM bars with their age after them) pushes the name right.
+        let iconWidth = icon.map { $0.size.width > 22 ? $0.size.width : 18 } ?? 18
+        let nameShift = max(0, iconWidth - 18)
         if let icon {
             let v = NSImageView(image: icon)
             v.alphaValue = dimmed ? 0.45 : 1
-            v.frame = NSRect(x: MenuRowLayout.iconX + indent, y: (frame.height - 16) / 2, width: 18, height: 16)
+            v.frame = NSRect(x: MenuRowLayout.iconX + indent, y: (frame.height - 16) / 2, width: iconWidth, height: 16)
             v.imageScaling = .scaleProportionallyDown
             v.contentTintColor = base
             addSubview(v)
@@ -69,7 +72,8 @@ final class MenuRowView: NSView {
                       : .systemFont(ofSize: size, weight: bold ? .semibold : .regular), color: base)
         nameLabel = n
         n.lineBreakMode = .byTruncatingTail
-        add(n, x: (header ? MenuRowLayout.checkX : MenuRowLayout.nameX) + indent, width: nameEnd - indent - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
+        add(n, x: (header ? MenuRowLayout.checkX : MenuRowLayout.nameX) + indent + nameShift,
+            width: nameEnd - indent - nameShift - (header ? MenuRowLayout.checkX : MenuRowLayout.nameX))
         for (i, text) in columns.enumerated() where i < MenuRowLayout.columnRights.count {
             // Header units in a size smaller, so "↓MB/s" fits its column.
             let c = label(text, font: header ? .systemFont(ofSize: size - 1, weight: .medium)

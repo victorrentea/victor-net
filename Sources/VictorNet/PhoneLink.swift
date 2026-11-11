@@ -87,7 +87,15 @@ enum SimSignalPolicy {
         return first.prefix(1).uppercased() + first.dropFirst()
     }
 
-    /// The signal's age for the bars' corner: `1s`…`59s`, then `3m`.
+    /// The network type as the phone's status bar shows it over the bars: Samsung says "4G" for LTE.
+    /// Unknown or empty = nothing drawn.
+    static func generation(_ network: String?) -> String? {
+        guard let n = network?.trimmingCharacters(in: .whitespaces), !n.isEmpty else { return nil }
+        if n == "LTE" { return "4G" }
+        return n.count <= 3 ? n : nil
+    }
+
+    /// The signal's age at the bars' bottom-right: `1s`…`59s`, then `3m`.
     static func age(_ readAt: Date, now: Date) -> String {
         let s = max(0, Int(now.timeIntervalSince(readAt)))
         return s < 60 ? "\(s)s" : "\(s / 60)m"

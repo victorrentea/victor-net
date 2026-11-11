@@ -34,17 +34,27 @@ enum Icons {
     }
 
     /// Four rising bars, `level` of them solid, the rest faint. No level = all faint.
-    /// `age` ("3s") sits small in the empty corner above the short bars: how old the reading is.
-    /// `switchHint` draws a slanted ⇄ in that same corner: the other SIM has more bars (`SimSwitchHint`).
-    static func cellular(level: Int?, age: String? = nil, switchHint: Bool = false) -> NSImage {
-        let image = NSImage(size: NSSize(width: 17, height: barHeight), flipped: false) { rect in
-            if switchHint { switchArrows(in: NSRect(x: 0, y: 10, width: 8.5, height: 6)) }
-            if let age {
-                let text = NSAttributedString(string: age, attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .semibold),
-                    .foregroundColor: NSColor.black,
-                ])
+    /// Like the phone's status bar (Victor, 2026-11-11): `network` ("5G", "4G") sits small in the empty
+    /// corner above the short bars, and `age` ("3s") at the bars' bottom-right, in a slot after them
+    /// (`ageSlot`, also kept empty so the SIM rows line up while no reading has come).
+    /// `switchHint` draws a slanted ⇄ in the top corner instead: the other SIM has more bars (`SimSwitchHint`).
+    static func cellular(level: Int?, network: String? = nil, age: String? = nil, switchHint: Bool = false,
+                         ageSlot: Bool = false) -> NSImage {
+        let width = ageSlot || age != nil ? cellularWithAgeWidth : 17
+        let image = NSImage(size: NSSize(width: width, height: barHeight), flipped: false) { rect in
+            let small: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .semibold),
+                .foregroundColor: NSColor.black,
+            ]
+            if switchHint {
+                switchArrows(in: NSRect(x: 0, y: 10, width: 8.5, height: 6))
+            } else if let network {
+                let text = NSAttributedString(string: network, attributes: small)
                 text.draw(at: NSPoint(x: 0, y: rect.height - text.size().height + 1.5))
+            }
+            if let age {
+                let text = NSAttributedString(string: age, attributes: small)
+                text.draw(at: NSPoint(x: 17.5, y: 0.5))
             }
             for i in 0..<4 {
                 let h = 4 + CGFloat(i) * 3
@@ -58,6 +68,9 @@ enum Icons {
         image.isTemplate = true
         return image
     }
+
+    /// The bars plus the age after them: room for "59s" / "12m".
+    static let cellularWithAgeWidth: CGFloat = 29
 
     /// ⇄ drawn as two thin arrows, slanted like italics, in `r` (the corner above the short bars).
     private static func switchArrows(in r: NSRect) {
@@ -227,12 +240,14 @@ enum Icons {
         return image
     }
 
-    static func image(for look: NetworkLook, switchHint: Bool = false) -> NSImage? {
+    /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
+    static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
         switch look {
         case .wired: return wired()
         case .hotspot(let level, let weakWifi, let alert):
             // The roaming badge takes the same corner, and says more.
-            var image = cellular(level: level, switchHint: switchHint && alert == nil)
+            var image = cellular(level: level, network: alert == nil ? network : nil,
+                                 switchHint: switchHint && alert == nil)
             if let weakWifi, let wifi = wifi(strength: weakWifi) { image = pair(image, wifi) }
             guard let alert else { return image }
             return badged(image, alert)

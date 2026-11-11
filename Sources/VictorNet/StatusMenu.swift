@@ -102,6 +102,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return RoamingMeterPolicy.estimate(r, macBytesSince: hotspotCounter.since(r.readAt))
     }
 
+    /// The data SIM's "5G" / "4G" for the menu bar's bars, from a fresh reading only.
+    private var barsNetwork: String? {
+        guard let s = net.phoneSignal, Date().timeIntervalSince(s.readAt) < PhoneStatusPolicy.staleAfter else { return nil }
+        return SimSignalPolicy.generation(s.network)
+    }
+
     func refreshIcon() {
         guard let button = statusItem.button else { return }
         var look = net.look
@@ -117,13 +123,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             button.image = Icons.wifiNoInternet()
         } else if case .hotspot = look, let hint = switchHint {
             // Blinks (Victor, 2026-11-11): a nudge to switch the data SIM by hand on the phone.
-            let image = Icons.image(for: look, switchHint: true)
+            let image = Icons.image(for: look, switchHint: true, network: barsNetwork)
             button.image = image.map { blinkBright ? $0 : Icons.faded($0, 0.3) }
             button.toolTip = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
             button.title = ""
             return
         } else {
-            button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look)
+            button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look, network: barsNetwork)
         }
         button.toolTip = nil
         button.title = ""
@@ -387,7 +393,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let here: Bool
         let seen: String
         /// Bars the phone reported for it with the hotspot off (`PhoneLan`, on the home Wi-Fi): nil = no icon.
-        var bars: (level: Int, readAt: Date)? = nil
+        var bars: (level: Int, network: String?, readAt: Date)? = nil
         var isData: Bool { signal?.isData ?? false }
     }
 
@@ -428,7 +434,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let label = known.first { $0.name == name }.map(SimSignalPolicy.label) ?? simLabel?(name) ?? name
             var e = SimEntry(name: name, label: label, signal: nil, record: found?.0, here: found?.here ?? false,
                              seen: found.map { NetworkBookPolicy.since($0.0.lastSeen, now: now) } ?? "—")
-            if let sim, let reading { e.bars = (sim.level, reading.readAt) }
+            if let sim, let reading { e.bars = (sim.level, sim.network, reading.readAt) }
             return e
         }
     }
@@ -458,10 +464,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let readAt = net.phoneSignal?.readAt ?? now
         simAgeRows = []
         return entries.map { e in
-            let icon = e.signal.map { Icons.cellular(level: $0.level, age: SimSignalPolicy.age(readAt, now: now)) }
-                ?? e.bars.map { Icons.cellular(level: $0.level, age: SimSignalPolicy.age($0.readAt, now: now)) }
+            let icon = e.signal.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network),
+                                                     age: SimSignalPolicy.age(readAt, now: now)) }
+                ?? e.bars.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network),
+                                               age: SimSignalPolicy.age($0.readAt, now: now)) }
                 // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
-                ?? NSImage(size: NSSize(width: 17, height: Icons.barHeight))
+                ?? NSImage(size: NSSize(width: Icons.cellularWithAgeWidth, height: Icons.barHeight))
             let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
                                   icon: icon, checked: e.isData, enabled: false, indent: 16, staleNumbers: !e.isData)
             simAgeRows.append((row, e.name))
@@ -582,8 +590,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             guard let s = [net.phoneSignal, offHotspotSignal].compactMap({ $0 })
                 .filter({ r in now.timeIntervalSince(r.readAt) < 900 && r.sims.contains { $0.name == name } })
                 .max(by: { $0.readAt < $1.readAt }) else { continue }
-            let level = s.sims.first { $0.name == name }?.level
-            row.setIcon(Icons.cellular(level: level, age: SimSignalPolicy.age(s.readAt, now: now)))
+            let sim = s.sims.first { $0.name == name }
+            row.setIcon(Icons.cellular(level: sim?.level, network: SimSignalPolicy.generation(sim?.network),
+                                       age: SimSignalPolicy.age(s.readAt, now: now)))
         }
     }
 
@@ -879,7 +888,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             out.append(off)
             for (name, cellText) in [("Orange", "2.1↓MB/s\u{2009}⋅\u{2009}0.9↑MB/s\u{2009}⋅\u{2009}36↕︎ms\u{2009}⋅\u{2009}3 days"),
                                      ("Vodafone", "1.3↓MB/s\u{2009}⋅\u{2009}0.4↑MB/s\u{2009}⋅\u{2009}53↕︎ms\u{2009}⋅\u{2009}3 days")] {
-                out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil), enabled: false,
+                out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil, ageSlot: true), enabled: false,
                                        indent: 16, staleNumbers: true))
             }
             frame(off, Array(out.suffix(2)).compactMap { $0 as? MenuRowView })
