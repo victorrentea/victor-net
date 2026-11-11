@@ -209,8 +209,9 @@ the phone's own count against the plan.
 **Under each SIM (12 Nov 2026).** The allowance rows moved from the roaming group into the network
 list: `✈️ 6.6/13.4 GB left · 2 Dec` sits right under its SIM's row, under `victor`, in the same frame
 (↺ = `*123#` for Vodafone, ↻ = ask the phone for any other SIM). The row also says how much is left
-in % and when the phone counted it: `✈️ 6.6/13.4 GB · 49% left · 00:40 · resets: Dec 2` (24 h, the
-day too when it is not today). The roaming group keeps only the
+in % and when the phone counted it, in Victor's words: `✈️ 6.6/13.4GB (49%) left at Nov 12 00:44 -
+resets Dec 2` (24 h whatever the system clock says). The menu widens until that line fits whole, and
+the SIM rows with their roaming rows sit at `MenuRowLayout.simIndent` (4, was 16) to keep it narrow. The roaming group keeps only the
 two switches, plus any SIM whose row is not drawn (no SIM rows while the hotspot is stopping, or an
 older phone app with a single reading). The phone had a bug the first night: with Vodafone carrying
 the data from the start, its SIM timeline stayed empty and **every** SIM was charged all the

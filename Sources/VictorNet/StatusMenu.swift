@@ -338,6 +338,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let texts = shown.map { cell($0.value, seen($0.key, $0.value), unused: !isCurrent($0.key)) }
             + simEntries.compactMap { e in e.record.map { cell($0, e.seen, unused: !e.isData) } }
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, texts.map(MenuRowView.cellWidth).max() ?? 0)
+        // The roaming rows under the SIMs whole, not cut ("… - resets Dec 2"): the menu widens for them.
+        // Their name starts at nameX + simIndent and leaves 30 for the ↺ on the right.
+        let roamingNeed = simEntries.compactMap { simRoamingRow($0.name)?.nameWidth }.max() ?? 0
+        MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth,
+                                      roamingNeed + MenuRowLayout.simIndent + 30 - (MenuRowLayout.nameMin + 4 + 12))
         let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
         var items: [NSMenuItem] = []
@@ -476,7 +481,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
                 ?? NSImage(size: NSSize(width: Icons.cellularWithAgeWidth, height: Icons.barHeight))
             let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
-                                  icon: icon, checked: e.isData, enabled: false, indent: 16, staleNumbers: !e.isData)
+                                  icon: icon, checked: e.isData, enabled: false, indent: MenuRowLayout.simIndent, staleNumbers: !e.isData)
             simAgeRows.append((row, e.name))
             let test = !e.isData && e.record?.speedDown != nil
             row.toolTip = e.record == nil ? "Not used through the hotspot yet"
@@ -846,11 +851,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         day.dateFormat = "d MMM"
         // Only the data SIM's moves with this Mac's traffic between the phone's answers.
         let left = sim.isData ? (roamingLeft ?? sim.remaining) : sim.remaining
-        // When the phone counted it, and how much is left in % (Victor, 2026-11-12): the time alone
-        // today, the day too before that.
+        // Victor's wording, 2026-11-12: "6.6/13GB (50%) left at <date/time> - resets Dec 2".
         let at = DateFormatter()
         at.locale = Locale(identifier: "en_US_POSIX")   // 24 h whatever the system clock says
-        at.dateFormat = Calendar.current.isDateInToday(sim.readAt) ? "HH:mm" : "d MMM HH:mm"
+        at.dateFormat = "MMM d HH:mm"
         let pct = sim.limit > 0 ? Int((Double(left) / Double(sim.limit) * 100).rounded()) : 0
         let vodafone = sim.simKey == "22601"
         let asking = vodafone && (askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false)
@@ -858,12 +862,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let resets = DateFormatter()
         resets.locale = Locale(identifier: "en_US_POSIX")
         resets.dateFormat = "MMM d"
-        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal)) GB · \(pct)% left · \(at.string(from: sim.readAt)) · resets: \(resets.string(from: sim.nextReset + 12 * 3600))"
+        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal))GB (\(pct)%) left at \(at.string(from: sim.readAt)) - resets \(resets.string(from: sim.nextReset + 12 * 3600))"
             + (asking ? " · asking…" : "")
         let row = MenuRowView(name: title, enabled: !asking,
                               trailing: NSImage(systemSymbolName: vodafone ? "arrow.counterclockwise" : "arrow.clockwise",
                                                 accessibilityDescription: vodafone ? "Ask Vodafone" : "Ask the phone"),
-                              indent: 16)
+                              indent: MenuRowLayout.simIndent)
         let live = sim.isData && roamingLeft != nil
             ? " The GB move on with what this Mac pulled through the hotspot since then." : ""
         row.toolTip = "Counted by the phone at \(at.string(from: sim.readAt)).\(live) "
@@ -961,7 +965,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             for (name, cellText) in [("Orange", "2.1↓MB/s\u{2009}⋅\u{2009}0.9↑MB/s\u{2009}⋅\u{2009}36↕︎ms\u{2009}⋅\u{2009}3 days"),
                                      ("Vodafone", "1.3↓MB/s\u{2009}⋅\u{2009}0.4↑MB/s\u{2009}⋅\u{2009}53↕︎ms\u{2009}⋅\u{2009}3 days")] {
                 out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil, ageSlot: true), enabled: false,
-                                       indent: 16, staleNumbers: true))
+                                       indent: MenuRowLayout.simIndent, staleNumbers: true))
             }
             frame(off, Array(out.suffix(2)).compactMap { $0 as? MenuRowView })
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],

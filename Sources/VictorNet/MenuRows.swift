@@ -16,6 +16,9 @@ enum MenuRowLayout {
     static let nameX: CGFloat = 48
     /// Room for "Vodafone RO" under the hotspot too: 16 of indent plus the bars' age after them (2026-11-11).
     static let nameMin: CGFloat = 112
+    /// The SIM rows under the hotspot and their roaming rows: 16 until 2026-11-12, then pulled left
+    /// so "… - resets Dec 2" fits without widening the menu as much (Victor).
+    static let simIndent: CGFloat = 4
     /// The widest "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms ⋅ now" cell of the list being drawn —
     /// each number with its unit, no header over them, "seen" after a dot instead of
     /// in a column of its own (Victor, 2026-11-08).
@@ -117,6 +120,9 @@ final class MenuRowView: NSView {
     /// animates on its own thread, so it keeps turning while the menu tracks the mouse.
     private var nameLabel: NSTextField?
     func setName(_ name: String) { nameLabel?.stringValue = name }
+
+    /// How wide the name is drawn, untruncated: a long one widens the menu ([StatusMenu]'s roaming rows).
+    var nameWidth: CGFloat { ceil(nameLabel?.cell?.cellSize.width ?? 0) + 8 }   // the field's own inset, and a little air
 
     /// Swaps the row's icon, e.g. bars redrawn with a newer age.
     func setIcon(_ image: NSImage) { images.first?.image = image }
