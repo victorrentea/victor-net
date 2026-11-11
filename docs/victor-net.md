@@ -49,11 +49,12 @@ figures sit in **real tables** — an `NSGridView` as the row's view
 (`MenuTable`), numbers right-aligned in monospaced digits.
 
 ```
+((o)) Start Hotspot                     retrying in 23s  ← the hotspot button, alone at the top (2026-11-11), see below
+──────────
 Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
-╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its children (2026-11-08); off: click = start, "Start Hotspot" / countdown on the right
+╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its SIMs (2026-11-08); a network like the others: in range and not in use, click = join
 │   ✓ ▂▄▆ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
-│     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
-╰   ((/)) Stop Hotspot                            │  ← only while it is on; the hotspot's row itself is then not clickable
+╰     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
    (off, on any other Wi-Fi or the cable too: under victor, both SIMs always, numbers in grey — measured here
     before (`SimLog`, by GPS place), else its best anywhere (`sim:<name>`), else none; bars only from a real
     reading ≤ 15 min old — the phone's `/status` off the hotspot — else no icon. Each opening asks for it
@@ -64,7 +65,6 @@ Wi-Fi                                         [ON]  ← macOS's first line: swit
   wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)
 5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
 ──────────
-(Stop Hotspot while the Mac is on it or sees it in a scan: `/hotspot/off` on the phone)
 ⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
@@ -74,7 +74,8 @@ Wi-Fi                                         [ON]  ← macOS's first line: swit
 ✓ ✈️ Roaming: Allow Claude
 ✓ 🔒 ✈️ Roaming: Auto-Stop Hotspot < 1 GB             ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
-🔋 Phone: 63% ⚡                                    ← greyed; ⚡ = charging, over 30 min old says when; no row before a first reading
+🔋 Phone: 63% ⚡ · 12s ago · Wi-Fi                  ← greyed; ⚡ = charging; always its age (ticking while open) and how it came:
+                                                       Hotspot (PhoneLink, 5 s), Wi-Fi (PhoneLan), BT (roaming poll), Internet (Railway)
 Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu
 ```

@@ -64,3 +64,46 @@ enum HotspotRowPolicy {
         }
     }
 }
+
+/// The menu's hotspot button: one row at the top, above the Wi-Fi switch and apart from the
+/// list of networks, so it never moves under the cursor (Victor, 2026-11-11: offline, the list
+/// was one grey "Offline" row with no Start in it; when the hotspot came up the list grew under
+/// his cursor and his click landed on "Stop Hotspot").
+enum HotspotButton: String, Equatable {
+    case start, asking, starting, stop, stopping
+
+    var title: String {
+        switch self {
+        case .start: return "Start Hotspot"
+        case .asking: return "Asking the phone…"
+        // The phone's app accepted the channel: the routine is turning the hotspot on.
+        case .starting: return "Starting Hotspot…"
+        case .stop: return "Stop Hotspot"
+        case .stopping: return "Stopping Hotspot…"
+        }
+    }
+
+    static let allStates: [HotspotButton] = [.start, .asking, .starting, .stop, .stopping]
+
+    /// Only the two verbs act; the -ing states just show how far it got.
+    var clickable: Bool { self == .start || self == .stop }
+}
+
+extension HotspotRowPolicy {
+    static func button(_ p: HotspotProgress, onHotspot: Bool, inScan: Bool, stoppedRecently: Bool) -> HotspotButton {
+        switch p.phase {
+        case .askingPhone: return .asking
+        case .joining: return .starting
+        case .idle, .checking: break
+        }
+        // A scan keeps a stopped hotspot's name for 40–50 s: right after a stop only being on it counts.
+        if stoppedRecently { return onHotspot ? .stopping : .start }
+        return onHotspot || inScan ? .stop : .start
+    }
+
+    /// A click does what the button said for at least a second before it: one on a label that
+    /// just changed under the cursor is dropped, not turned into the opposite verb.
+    static func takesClick(shown: HotspotButton, now: HotspotButton, shownSince: Date, at: Date) -> Bool {
+        shown == now && now.clickable && at.timeIntervalSince(shownSince) >= 1
+    }
+}

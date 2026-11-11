@@ -433,7 +433,35 @@ or `hold` from `PreferredWifi` → nothing; an attempt in flight → nothing. Th
 is the short one (`wakeCooldown`, 10 s), as on wake, so opening the menu repeatedly
 cannot page the phone in a loop — but neither does the 45 s floor make a click wait.
 
+## The hotspot button, apart from the list (11 Nov 2026)
+
+What happened at 08:38: the Mac woke offline at home (no auto-start: 🏠), and the menu showed
+the network list as one grey "Offline 12m" row, so there was no Start to click. The wake's own
+attempt brought the hotspot up at 08:38:09; the list grew from one row to the full one under
+the cursor, and a click 9 s later landed on "Stop Hotspot" (the second Stop in the log was
+`stopHotspot`'s own retry, 3 s after the first got no answer).
+
+Victor: *„scoate separat acțiunea de Start hotspot, și după ce app-ul de pe tel a recepționat
+comanda, să se vadă Starting Hotspot … în afara listei de rețele"*. So Start/Stop is now **one
+row at the very top**, above the Wi-Fi switch, where nothing above it changes height:
+
+| title | when | click |
+|---|---|---|
+| Start Hotspot | off; right corner = the automatic path (`retrying in 23s`, `checking`) | `startNow` |
+| Asking the phone… ◌ 38s | page + SDP + channel open | — |
+| Starting Hotspot… ◌ 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins | — |
+| Stop Hotspot | on it, or it is in a scan | `stopHotspot` |
+| Stopping Hotspot… ◌ | stopped < 60 s ago and still on it | — |
+
+A click acts only if the title it lands on has been the same for ≥ 1 s
+(`HotspotRowPolicy.takesClick`); one on a label that just changed is dropped and logged, never
+turned into the opposite verb. The `victor` row in the list is now a plain network (click =
+join), framed with its SIMs. `/test/hotspot/row` → `button`.
+
 ## Start Hotspot, with the countdown (5 Nov 2026)
+
+> Superseded on 11 Nov 2026 by the button above: the row is no longer under the networks, the
+> right corner below still applies to its *Start Hotspot* state.
 
 Victor: *„să-mi permită din meniu să forțeze o conectare prin Bluetooth la telefon și
 inițierea hotspotului … să am un countdown: retrying to open hotspot"*. A row under the

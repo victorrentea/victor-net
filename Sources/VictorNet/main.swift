@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phone.onReading = { [weak self] r in self?.roaming.accept(r) }
         phone.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         phone.onStatus = { [weak self] data in
-            self?.phoneBattery.accept(data)
+            self?.phoneBattery.accept(data, via: .hotspot)
             self?.clipSync.status(data)
         }
         phone.viaBluetooth = { [weak self] path, budget, done in self?.roaming.request(path, budget: budget, done: done) }
@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 RunLoop.main.perform(inModes: [.common]) { self?.menu?.offHotspotSignal = s }
                 CFRunLoopWakeUp(CFRunLoopGetMain())
             }
-            self?.phoneBattery.accept(data)
+            self?.phoneBattery.accept(data, via: .bluetooth)
             self?.clipSync.status(data)
         }
         roaming.start()
@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in
             if let s = PhoneStatusPolicy.parse(data, now: Date()).0 { self?.menu?.offHotspotSignal = s }
-            self?.phoneBattery.accept(data)
+            self?.phoneBattery.accept(data, via: .wifi)
             self?.clipSync.status(data)
         }
         phoneLan.start()

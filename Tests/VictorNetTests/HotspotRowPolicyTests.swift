@@ -68,4 +68,34 @@ final class HotspotRowPolicyTests: XCTestCase {
         let next = HotspotRowPolicy.nextAttempt(lastStart: now, ended: now + 100, cooldown: 45, pause: 15)
         XCTAssertEqual(next, now + 115)
     }
+
+    // MARK: - The button at the top (2026-11-11)
+
+    private func button(_ p: HotspotProgress = HotspotProgress(), on: Bool = false, scan: Bool = false,
+                        stopped: Bool = false) -> HotspotButton {
+        HotspotRowPolicy.button(p, onHotspot: on, inScan: scan, stoppedRecently: stopped)
+    }
+
+    func testButtonWalksStartAskingStartingStop() {
+        XCTAssertEqual(button(), .start)
+        XCTAssertEqual(button(HotspotProgress(phase: .askingPhone(deadline: now))), .asking)
+        // The phone's app took the channel: the hotspot is coming.
+        XCTAssertEqual(button(HotspotProgress(phase: .joining(deadline: now)), scan: true), .starting)
+        XCTAssertEqual(button(on: true), .stop)
+        XCTAssertEqual(button(scan: true), .stop)
+    }
+
+    func testAfterAStopTheLingeringScanDoesNotBringStopBack() {
+        XCTAssertEqual(button(on: true, stopped: true), .stopping)
+        XCTAssertEqual(button(scan: true, stopped: true), .start)
+    }
+
+    /// 2026-11-11 08:38: the hotspot came up under the cursor and a click meant for it stopped it.
+    func testAClickOnALabelThatJustChangedIsDropped() {
+        XCTAssertFalse(HotspotRowPolicy.takesClick(shown: .start, now: .stop, shownSince: now - 10, at: now))
+        XCTAssertFalse(HotspotRowPolicy.takesClick(shown: .stop, now: .stop, shownSince: now - 0.4, at: now))
+        XCTAssertTrue(HotspotRowPolicy.takesClick(shown: .stop, now: .stop, shownSince: now - 1, at: now))
+        XCTAssertTrue(HotspotRowPolicy.takesClick(shown: .start, now: .start, shownSince: now - 5, at: now))
+        XCTAssertFalse(HotspotRowPolicy.takesClick(shown: .starting, now: .starting, shownSince: now - 5, at: now))
+    }
 }

@@ -33,7 +33,7 @@ final class PhoneBatteryTests: XCTestCase {
     func testCloudReadingKeepsItsAge() {
         let now = Date(timeIntervalSince1970: 1_000)
         let b = PhoneBattery.parseCloud(Data(#"{"pct":63,"charging":true,"age_s":120}"#.utf8), now: now)
-        XCTAssertEqual(b, PhoneBattery(pct: 63, charging: true, readAt: Date(timeIntervalSince1970: 880)))
+        XCTAssertEqual(b, PhoneBattery(pct: 63, charging: true, readAt: Date(timeIntervalSince1970: 880), via: .internet))
     }
 
     func testCloudSaysNothingBeforeThePhoneReported() {
@@ -71,11 +71,23 @@ final class PhoneLowBatteryTests: XCTestCase {
         XCTAssertNil(PhoneLowBattery.showing(b(12, charging: true), now: now))
     }
 
-    func testTheMenuRowSaysChargingAndAnOldReadingsAge() {
-        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now).menuTitle(now: now), "🔋 Phone: 63%")
-        XCTAssertEqual(PhoneBattery(pct: 63, charging: true, readAt: now).menuTitle(now: now), "🔋 Phone: 63% ⚡")
-        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now - 2 * 3600).menuTitle(now: now),
-                       "🔋 Phone: 63% · 2 h ago")
+    /// Always its age and the way it came (Victor, 2026-11-11).
+    func testTheMenuRowSaysChargingHowOldAndHowItCame() {
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now - 4, via: .hotspot).menuTitle(now: now),
+                       "🔋 Phone: 63% · 4s ago · Hotspot")
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: true, readAt: now - 125, via: .wifi).menuTitle(now: now),
+                       "🔋 Phone: 63% ⚡ · 2 min ago · Wi-Fi")
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now - 2 * 3600, via: .bluetooth).menuTitle(now: now),
+                       "🔋 Phone: 63% · 2 h ago · BT")
+        XCTAssertEqual(PhoneBattery(pct: 63, charging: false, readAt: now - 3 * 86_400, via: .internet).menuTitle(now: now),
+                       "🔋 Phone: 63% · 3 days ago · Internet")
+    }
+
+    func testTheBookKeepsTheChannelAndTheJsonSaysIt() {
+        let book = PhoneBatteryBook()
+        book.accept(Data(#"{"battery":{"pct":63,"charging":false}}"#.utf8), via: .bluetooth)
+        XCTAssertEqual(book.current?.via, .bluetooth)
+        XCTAssertEqual(book.json["via"] as? String, "BT")
     }
 
     func testHidesAnUnknownOrOldReading() {
