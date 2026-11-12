@@ -8,7 +8,7 @@ import Network
 ///
 ///   GET /ping                          → {"ok":true,"app":"victor-net","built":…}
 ///   GET /phone/battery                 → {"pct":63,"charging":false,"age_s":120} ({"pct":-1} = unknown); read by Victor Addons
-///   GET /test/state                    → network, icon, traffic, phone link
+///   GET /test/state                    → network, icon (+ its tooltip), traffic, phone link
 ///   GET /test/clip/toast?text=…&png=/tmp/t.png → the toast a clip from the phone shows ("Open in Browser" for a link), drawn to png
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/hotspot/start            → the menu's "Start Hotspot"; progress in /test/state → hotspot

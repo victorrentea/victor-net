@@ -149,6 +149,15 @@ final class RoamingAlertTests: XCTestCase {
         XCTAssertEqual(RoamingAlertPolicy.alert(reading(roaming: true, blocked: true), left: 900_000_000, now: Date()), .capped)
     }
 
+    /// The badge in words, for the menu bar's tooltip and the data SIM's row.
+    func testReasonSaysWhyTheBadgeIsUp() {
+        XCTAssertEqual(RoamingAlertPolicy.reason(.low, left: 4_240_000_000, sim: "Vic"),
+                       "Only 4.2 GB of roaming left on Vic (warns under 5 GB)")
+        XCTAssertEqual(RoamingAlertPolicy.reason(.capped, left: 0, sim: "Vic"), "Roaming allowance used up on Vic")
+        XCTAssertEqual(RoamingAlertPolicy.reason(.capped, left: 900_000_000, sim: nil),
+                       "0.9 GB of roaming left, under the phone's reserve: it keeps the hotspot off")
+    }
+
     /// At home the same numbers cost nothing; a stale reading says nothing about now.
     func testNoBadgeAtHomeOrOnAStaleReading() {
         XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: false), left: 0, now: Date()))

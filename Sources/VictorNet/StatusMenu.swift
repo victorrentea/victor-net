@@ -108,12 +108,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return SimSignalPolicy.generation(s.network, shown: s.shown)
     }
 
+    /// The ⚠ / ✕ beside the bars: the data SIM's allowance, while roaming.
+    private var roamingAlert: RoamingAlert? {
+        RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date())
+    }
+
+    /// What hovering the menu bar icon says (`/test/state`).
+    var menuBarTooltip: String? { statusItem.button?.toolTip }
+
+    /// The badge in words, or nil without one.
+    private var roamingAlertReason: String? {
+        guard let a = roamingAlert, let r = roaming.reading else { return nil }
+        return RoamingAlertPolicy.reason(a, left: roamingLeft ?? r.remaining, sim: r.simName)
+    }
+
     func refreshIcon() {
         guard let button = statusItem.button else { return }
         var look = net.look
+        let alertReason: String?
         if case .hotspot(let level, let weak, _) = look {
-            look = .hotspot(level: level, weakWifi: weak,
-                            alert: RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date()))
+            look = .hotspot(level: level, weakWifi: weak, alert: roamingAlert)
+            alertReason = roamingAlertReason
+        } else {
+            alertReason = nil
         }
         // Connected but with nothing behind it must not look connected (Victor, 2026-11-06).
         let noInternet = offlineSince != nil || hotspot.progress.offline
@@ -125,13 +142,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             // Blinks (Victor, 2026-11-11): a nudge to switch the data SIM by hand on the phone.
             let image = Icons.image(for: look, switchHint: true, network: barsNetwork)
             button.image = image.map { blinkBright ? $0 : Icons.faded($0, 0.3) }
-            button.toolTip = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
+            let hintText = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
+            button.toolTip = [alertReason, hintText].compactMap { $0 }.joined(separator: "\n")
             button.title = ""
             return
         } else {
             button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look, network: barsNetwork)
         }
-        button.toolTip = nil
+        button.toolTip = alertReason
         button.title = ""
     }
 
@@ -804,11 +822,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 // reset day. Only the data SIM's moves with this Mac's traffic.
                 for sim in r.sims where !roamingPlaced.contains(sim.simName ?? "") {
                     let simLeft = sim.isData ? left : sim.remaining
-                    let title = "✈️ \(sim.simName ?? sim.simKey ?? "SIM"): \(gb(simLeft))/\(gb(simLeft + sim.cycleTotal)) GB left until \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
+                    let mark = sim.isData ? roamingAlert.map(RoamingAlertPolicy.emoji) ?? "✈️" : "✈️"
+                    let title = "\(mark) \(sim.simName ?? sim.simKey ?? "SIM"): \(gb(simLeft))/\(gb(simLeft + sim.cycleTotal)) GB left until \(day.string(from: sim.nextReset + 12 * 3600))\(asOf)"
                     if sim.simKey == "22601" { roamingRow(title) } else { otherSimRow(title, sim) }
                 }
             } else {
-                roamingRow("✈️ Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
+                roamingRow("\(roamingAlert.map(RoamingAlertPolicy.emoji) ?? "✈️") Roaming: \(gb(left))/\(gb(left + r.cycleTotal)) GB left until \(day.string(from: r.nextReset + 12 * 3600))\(asOf)")
             }
         } else {
             roamingRow("✈️ Roaming: the phone has not answered yet")
@@ -885,7 +904,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let resets = DateFormatter()
         resets.locale = Locale(identifier: "en_US_POSIX")
         resets.dateFormat = "MMM d"
-        let title = "✈️ \(gb(left))/\(gb(left + sim.cycleTotal))GB (\(pct)%) left at \(at.string(from: sim.readAt)) - resets \(resets.string(from: sim.nextReset + 12 * 3600))"
+        // The menu bar's ⚠ / ✕ belongs to the data SIM: its row says so too, in place of ✈️.
+        let alert = sim.isData ? roamingAlert : nil
+        let title = "\(alert.map(RoamingAlertPolicy.emoji) ?? "✈️") \(gb(left))/\(gb(left + sim.cycleTotal))GB (\(pct)%) left at \(at.string(from: sim.readAt)) - resets \(resets.string(from: sim.nextReset + 12 * 3600))"
             + (asking ? " · asking…" : "")
         let row = MenuRowView(name: title, enabled: !asking,
                               trailing: NSImage(systemSymbolName: vodafone ? "arrow.counterclockwise" : "arrow.clockwise",
@@ -893,7 +914,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                               indent: MenuRowLayout.simIndent)
         let live = sim.isData && roamingLeft != nil
             ? " The GB move on with what this Mac pulled through the hotspot since then." : ""
-        row.toolTip = "Counted by the phone at \(at.string(from: sim.readAt)).\(live) "
+        row.toolTip = (alert.map { RoamingAlertPolicy.reason($0, left: left, sim: name) + ".\n" } ?? "")
+            + "Counted by the phone at \(at.string(from: sim.readAt)).\(live) "
             + (vodafone ? "Click: ask Vodafone (*123#, through the phone)"
                : "Against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan, while \(name) carried the data (no balance code for it). Click: ask the phone again")
         row.onClick = { [weak self] in vodafone ? self?.askVodafone() : self?.pollRoaming() }

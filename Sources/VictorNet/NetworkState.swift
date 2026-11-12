@@ -39,6 +39,22 @@ enum RoamingAlertPolicy {
         if left <= 0 || r.hotspotBlocked { return .capped }
         return left < lowBytes ? .low : nil
     }
+
+    /// Why the badge is up, in words (Victor, 2026-11-12: *"I can't tell why"*): the
+    /// menu bar's tooltip, and the head of the data SIM's row in the menu.
+    static func reason(_ a: RoamingAlert, left: Int64, sim: String?) -> String {
+        let on = sim.map { " on \($0)" } ?? ""
+        switch a {
+        case .low:
+            return String(format: "Only %.1f GB of roaming left%@ (warns under %.0f GB)", Double(left) / 1e9, on, Double(lowBytes) / 1e9)
+        case .capped:
+            return left <= 0 ? "Roaming allowance used up\(on)"
+                : String(format: "%.1f GB of roaming left%@, under the phone's reserve: it keeps the hotspot off", Double(left) / 1e9, on)
+        }
+    }
+
+    /// The emoji that stands in for ✈️ on the data SIM's row while the badge is up.
+    static func emoji(_ a: RoamingAlert) -> String { a == .low ? "⚠️" : "❌" }
 }
 
 enum NetworkLookPolicy {

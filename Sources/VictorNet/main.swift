@@ -182,6 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 o["sim_log"] = self.simLog.stateJSON
                 o["phone_battery_bar"] = self.phoneBatteryBar.stateJSON
                 o["sim_switch_hint"] = self.menu?.switchHintJSON ?? [:]
+                o["menubar_tooltip"] = orNull(self.menu?.menuBarTooltip)
             }
             return (200, HttpServer.json(o))
         case "/test/hotspot":
