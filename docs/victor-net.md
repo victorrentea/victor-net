@@ -20,6 +20,10 @@ deploys would restart the other.
 | the hotspot, with no internet behind it | the bars empty, a red **!** in their corner |
 | anything else, or nothing | the bars of the phone's **last answer**, as solid as on the hotspot: `/status` over the home Wi-Fi or Bluetooth, at most 25 min old (`NetworkLookPolicy.awayFreshFor`, one Bluetooth poll and a bit); without one, four faint bars |
 
+**The phone's battery, while low** (≤ 30 %, not charging): a small red battery blinking **in the same item,
+left of the bars** (2026-11-12; an item of its own before, which macOS placed where it liked).
+`GET /test/phone-battery/simulate/<pct>`.
+
 On both, while the phone roams: a small yellow ⚠ in the bars' top-left corner under 5 GB left, a
 red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot). The route
 itself (which Wi-Fi, how strong, the cable) is macOS's icon next to it.
@@ -61,6 +65,7 @@ the menu is open — the hotspot comes up, say — the network rows are redrawn 
 ```
 ((o)) Start Hotspot                     retrying in 23s  ← the hotspot button, at the top (2026-11-11), see below
 ✓ ((o)) Auto-Start on no Internet                   ← right under the button it automates (2026-11-12)
+✓ ((x)) Auto-Stop at home                           ← third (2026-11-12; "Prefer home over hotspot" before): `PreferredWifi`, only with PREFERRED_SSID
 ──────────
 ✓ wifi Hotel-G…   3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ now │  ← **this network, now**: the one row left of the list, to hold against the SIMs;
                                                         Ethernet with the cable glyph; not there on the hotspot (its numbers are the data SIM's);
@@ -80,7 +85,6 @@ the menu is open — the hotspot comes up, say — the network rows are redrawn 
     stood at their bottom-right until 2026-11-12: the hotspot's row says how old the phone's word is, next to the battery
    ⚡ before a SIM's numbers (not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
 ──────────
-✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ⚡ Run speed test (25MB)                             ← 10MB on the hotspot
 ──────────
 ↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)

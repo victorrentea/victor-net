@@ -186,6 +186,22 @@ enum Icons {
         return image
     }
 
+    /// Two glyphs side by side as one image. Not a template (the battery is red): a template
+    /// one is filled with the bar's text colour at draw time.
+    static func beside(_ a: NSImage, _ b: NSImage) -> NSImage {
+        let gap: CGFloat = 4
+        let size = NSSize(width: a.size.width + gap + b.size.width, height: max(a.size.height, b.size.height))
+        let image = NSImage(size: size, flipped: false) { _ in
+            for (img, x) in [(a, CGFloat(0)), (b, a.size.width + gap)] {
+                (img.isTemplate ? tinted(img, .labelColor) : img)
+                    .draw(in: NSRect(x: x, y: (size.height - img.size.height) / 2, width: img.size.width, height: img.size.height))
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
     /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
     static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
         switch look {

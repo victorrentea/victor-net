@@ -107,6 +107,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// one is the phone): live on its hotspot, from its last answer (≤ 25 min) off it.
     func refreshIcon() {
         guard let button = statusItem.button else { return }
+        defer { addLowBattery(to: button) }
         var look = net.look
         let alert = roamingAlert
         let alertReason = roamingAlertReason
@@ -138,6 +139,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             button.image = Icons.image(for: look, network: barsNetwork)
             button.toolTip = alertReason
         }
+    }
+
+    /// The phone's battery while it runs low (`PhoneLowBattery`), blinking red, **in this same
+    /// item, left of the bars** (Victor, 2026-11-12: "fix lângă semnal") — an item of its own
+    /// landed wherever macOS put it.
+    var lowBattery: (() -> Int?)?
+
+    private func addLowBattery(to button: NSStatusBarButton) {
+        guard let pct = lowBattery?(), let bars = button.image else { return }
+        button.image = Icons.beside(Icons.lowPhoneBattery(pct: pct, bright: blinkBright), bars)
+        button.toolTip = ["Phone battery: \(pct)%", button.toolTip].compactMap { $0 }.joined(separator: "\n")
     }
 
     // MARK: - Menu
@@ -189,12 +201,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                    checked: HotspotFallbackSettings.isEnabled)
             auto.onClick = { [weak self] in self?.toggleHotspot() }
             menu.addItem(NSMenuItem(view: auto))
+            // Third from the top, named for what it does (Victor, 2026-11-12; "Prefer <home> over
+            // <hotspot>" among the settings until then).
+            if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
+                let stop = MenuRowView(name: "Auto-Stop at home", icon: Icons.hotspotOff(),
+                                       checked: PreferredWifiSettings.isEnabled)
+                stop.toolTip = "On the hotspot with \(home) in range: this Mac moves to \(home)"
+                stop.onClick = { [weak self] in self?.togglePreferred() }
+                menu.addItem(NSMenuItem(view: stop))
+            }
             menu.addItem(.separator())
         }
         networkItems.forEach(menu.addItem)
 
         menu.addItem(.separator())
-        if Config.hasPhone { addAutoJoinRows() }
         let speed = action(speedTitle(), #selector(speedTestAction))
         speed.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "Speed test")
         menu.addItem(speed)
@@ -642,16 +662,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Home over the hotspot, when both are in range. (Auto-Start sits under the Start button.)
-    private func addAutoJoinRows() {
-        if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
-            let prefer = action("Prefer \(home) over \(Config.hotspotSSID)", #selector(togglePreferred))
-            prefer.image = Icons.wifi(strength: 1)
-            prefer.state = PreferredWifiSettings.isEnabled ? .on : .off
-            menu.addItem(prefer)
-        }
-    }
-
     private func roamingRow(_ title: String) {
         let asking = askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false
         let row = action(asking ? "\(title) — asking Vodafone…" : title, #selector(askVodafone))
@@ -939,12 +949,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         traffic.runSpeedTest { _ in }
     }
 
-    @objc private func toggleHotspot() {
+    private func toggleHotspot() {
         HotspotFallbackSettings.isEnabled.toggle()
         netInfo("🛜 Auto Mobile Hotspot \(HotspotFallbackSettings.isEnabled ? "on" : "off")")
     }
 
-    @objc private func togglePreferred() {
+    private func togglePreferred() {
         PreferredWifiSettings.isEnabled.toggle()
         netInfo("🛜 Prefer \(Config.values["PREFERRED_SSID"] ?? "") over \(Config.hotspotSSID) \(PreferredWifiSettings.isEnabled ? "on" : "off")")
     }

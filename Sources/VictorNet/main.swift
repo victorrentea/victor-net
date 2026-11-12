@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneCloud.start()
         phoneBatteryBar.reading = { [weak self] in self?.phoneBattery.current }
         menu.phoneBattery = { [weak self] in self?.phoneBattery.current }
-        phoneBatteryBar.start()
+        menu.lowBattery = { [weak self] in self?.phoneBatteryBar.showing }
         simLog.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         traffic.currentSim = { [weak self] in self?.simLog.currentSim }
         menu.simHere = { [weak self] in self?.simLog.here ?? [:] }
@@ -225,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return (200, roaming.diagnosticsJSON)
         case let p where p.hasPrefix("/test/phone-battery/simulate/"):
             let pct = Int(p.dropFirst("/test/phone-battery/simulate/".count))
-            onMain { self.phoneBatteryBar.simulate(pct) }
+            onMain { self.phoneBatteryBar.simulate(pct); self.menu?.refreshIcon() }
             return (200, HttpServer.json(["simulated": orNull(pct)]))
         case let p where p.hasPrefix("/test/sim-hint/simulate/"):
             let on = p.hasSuffix("/on")
