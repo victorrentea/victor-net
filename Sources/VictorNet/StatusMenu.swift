@@ -169,6 +169,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         rescanTimer?.invalidate()
         rescanTimer = nil
         networkItems = []
+        stopClimbingBars()
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -688,12 +689,38 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         switch state {
         case .stopping: row.setStatus("", spinning: true)
         case .stop: row.setStatus("", spinning: false)
-        // The countdown alone: the title already says what is going on.
+        // The countdown alone: the title already says what is going on. While starting, the
+        // climbing bars are the progress, so no wheel next to them.
         case .asking, .starting, .start: row.setStatus(status.text.replacingOccurrences(of: "asking phone ", with: "")
                                                            .replacingOccurrences(of: "joining ", with: ""),
-                                                       spinning: status.spinning)
+                                                       spinning: status.spinning && state != .starting)
         }
+        if state == .starting { startClimbingBars() } else { stopClimbingBars() }
         row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }
+    }
+
+    /// `HotspotRowPolicy.climbingBars`: its own timer, faster than the menu's 1 s one, in the
+    /// common modes so it keeps going while the menu tracks the mouse.
+    private var climbTimer: Timer?
+    private var climbStarted = Date()
+
+    private func startClimbingBars() {
+        guard climbTimer == nil else { return }
+        climbStarted = Date()
+        let tick = { [weak self] in
+            guard let self, let row = self.hotspotRow else { return }
+            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(self.climbStarted))
+            row.setIcon(Icons.cellular(level: level))
+        }
+        tick()
+        let t = Timer(timeInterval: HotspotRowPolicy.climbStep, repeats: true) { _ in tick() }
+        RunLoop.main.add(t, forMode: .common)
+        climbTimer = t
+    }
+
+    private func stopClimbingBars() {
+        climbTimer?.invalidate()
+        climbTimer = nil
     }
 
     private func join(_ ssid: String, password: String?) {

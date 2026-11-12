@@ -449,7 +449,7 @@ row at the very top**, above the Wi-Fi switch, where nothing above it changes he
 |---|---|---|
 | Start Hotspot | off; right corner = the automatic path (`retrying in 23s`, `checking`) | `startNow` |
 | Asking the phone… ◌ 38s | page + SDP + channel open | — |
-| Starting Hotspot… ◌ 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins | — |
+| ▂▄▆█ Starting Hotspot… 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins. The icon is the signal bars climbing 0→4 in a loop, 0.3 s a step (`HotspotRowPolicy.climbingBars`, Victor 12 Nov 2026: *„scara de gsm ca progress bar ciclic"*), instead of the wheel | — |
 | Stop Hotspot | on it, or it is in a scan | `stopHotspot` |
 | Stopping Hotspot… ◌ | stopped < 60 s ago and still on it | — |
 

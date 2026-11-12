@@ -98,4 +98,12 @@ final class HotspotRowPolicyTests: XCTestCase {
         XCTAssertTrue(HotspotRowPolicy.takesClick(shown: .start, now: .start, shownSince: now - 5, at: now))
         XCTAssertFalse(HotspotRowPolicy.takesClick(shown: .starting, now: .starting, shownSince: now - 5, at: now))
     }
+
+    /// Starting: the bars climb left to right, none to four, and over again.
+    func testBarsClimbInALoopWhileStarting() {
+        let step = HotspotRowPolicy.climbStep
+        let frames = (0..<11).map { HotspotRowPolicy.climbingBars(elapsed: Double($0) * step + step / 2) }
+        XCTAssertEqual(frames, [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0])
+        XCTAssertEqual(HotspotRowPolicy.climbingBars(elapsed: -1), 0)
+    }
 }

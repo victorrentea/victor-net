@@ -101,6 +101,14 @@ extension HotspotRowPolicy {
         return onHotspot || inScan ? .stop : .start
     }
 
+    /// While the hotspot comes up (the phone took the signal, `.starting`) the row's icon is the
+    /// phone's signal bars climbing: none, then one by one up to four, and over again (Victor,
+    /// 2026-11-12: "a cyclic progress bar"). The frame shown `elapsed` seconds into it.
+    static let climbStep: TimeInterval = 0.3
+    static func climbingBars(elapsed: TimeInterval) -> Int {
+        Int(max(0, elapsed) / climbStep) % 5
+    }
+
     /// A click does what the button said for at least a second before it: one on a label that
     /// just changed under the cursor is dropped, not turned into the opposite verb.
     static func takesClick(shown: HotspotButton, now: HotspotButton, shownSince: Date, at: Date) -> Bool {
