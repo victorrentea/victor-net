@@ -140,6 +140,17 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
             return finish(.failed("SDP query failed (\(status)) — is the phone in range?"))
         }
         guard let rec = self.device.getServiceRecord(for: service) else {
+            // 12 Nov 2026: 35 minutes of "not publishing" while the phone's own
+            // stack showed the record listening on channel 10 the whole time. With
+            // the link up, the query is answered from macOS's cache (see the
+            // refusal below), and that cache had been read during the few seconds
+            // the phone was re-creating its socket. A fresh link + query from a
+            // standalone tool listed it at once. So a missing record gets the same
+            // cure as a refused channel: drop the link and ask the phone itself.
+            if triesLeft > 0 {
+                netInfo("📵 no \(serviceName) record in the SDP answer — dropping the link to re-read it from the phone")
+                return dropLinkAndRequery()
+            }
             return finish(.failed("the phone is not publishing the \(serviceName) channel — is victor-phone-addons running (and up to date)?"))
         }
         var chID: BluetoothRFCOMMChannelID = 0

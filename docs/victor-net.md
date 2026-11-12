@@ -231,6 +231,14 @@ every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot
 The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
 lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
 
+**A missing SDP record is re-read before it is believed (2026-11-12).** For 35 minutes every
+pause and roaming poll failed with "not publishing the beacon channel", while the phone's own
+`dumpsys bluetooth_manager` showed `VictorPhoneAddons` listening on channel 10. With the link
+up, macOS answers the query from its cache, and that cache had been read while the phone was
+re-creating its socket. A standalone fresh link + query listed the record at once, and the
+next poll went through. `PhoneChannelOpener` now treats "no record" like a refused channel:
+drop the link, query the phone again, and only then report it missing.
+
 ## 📶 Which SIM, place by place (2026-11-08)
 
 `SimLog`: on the hotspot, every `LatencyProbe` handshake is filed under the place (the Mac's
