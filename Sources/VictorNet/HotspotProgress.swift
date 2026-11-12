@@ -19,6 +19,11 @@ struct HotspotProgress: Equatable {
     var nextRetryAt: Date?
     /// Why the last attempt failed; the row's tooltip.
     var lastFailure: String?
+    /// The phone answered the last request with `#airplane`: no data, so no hotspot until it
+    /// leaves airplane mode. The fallback keeps asking, every 20 s.
+    var phoneInAirplane = false
+
+    var isJoining: Bool { if case .joining = phase { return true } else { return false } }
 }
 
 /// When the next automatic attempt runs, and how the row words all of it.
@@ -70,7 +75,7 @@ enum HotspotRowPolicy {
 /// was one grey "Offline" row with no Start in it; when the hotspot came up the list grew under
 /// his cursor and his click landed on "Stop Hotspot").
 enum HotspotButton: String, Equatable {
-    case start, asking, starting, stop, stopping
+    case start, asking, starting, stop, stopping, airplane
 
     var title: String {
         switch self {
@@ -80,17 +85,21 @@ enum HotspotButton: String, Equatable {
         case .starting: return "Starting Hotspot…"
         case .stop: return "Stop Hotspot"
         case .stopping: return "Stopping Hotspot…"
+        // Not "Starting": the phone said it has no data to share (Victor, 2026-11-12, on a plane).
+        case .airplane: return "Hotspot after Airplane Mode"
         }
     }
 
-    static let allStates: [HotspotButton] = [.start, .asking, .starting, .stop, .stopping]
+    static let allStates: [HotspotButton] = [.start, .asking, .starting, .stop, .stopping, .airplane]
 
-    /// Only the two verbs act; the -ing states just show how far it got.
-    var clickable: Bool { self == .start || self == .stop }
+    /// Only the verbs act; the -ing states just show how far it got. Airplane asks again now.
+    var clickable: Bool { self == .start || self == .stop || self == .airplane }
 }
 
 extension HotspotRowPolicy {
     static func button(_ p: HotspotProgress, onHotspot: Bool, inScan: Bool, stoppedRecently: Bool) -> HotspotButton {
+        // Asking again every 20 s must not flash "Asking the phone…" each time.
+        if p.phoneInAirplane, !onHotspot, !p.isJoining { return .airplane }
         switch p.phase {
         case .askingPhone: return .asking
         case .joining: return .starting

@@ -85,6 +85,19 @@ final class HotspotRowPolicyTests: XCTestCase {
         XCTAssertEqual(button(scan: true), .stop)
     }
 
+    func testAPhoneInAirplaneModeIsNotStartingAnything() {
+        var p = HotspotProgress(phase: .idle, offline: true)
+        p.phoneInAirplane = true
+        XCTAssertEqual(button(p), .airplane)
+        // Asking again every 20 s does not flash "Asking the phone…".
+        p.phase = .askingPhone(deadline: now)
+        XCTAssertEqual(button(p), .airplane)
+        // Out of airplane mode the phone takes the signal: now it really is starting.
+        p.phase = .joining(deadline: now)
+        XCTAssertEqual(button(p), .starting)
+        XCTAssertTrue(HotspotButton.airplane.clickable, "a click asks again now")
+    }
+
     func testAfterAStopTheLingeringScanDoesNotBringStopBack() {
         XCTAssertEqual(button(on: true, stopped: true), .stopping)
         XCTAssertEqual(button(scan: true, stopped: true), .start)

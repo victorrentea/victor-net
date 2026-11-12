@@ -42,9 +42,10 @@ final class PhoneRoamingMonitor {
     /// Page + SDP + open + the phone's reading. The opener gives up on its own
     /// well inside this; the budget only guards against a callback that never comes.
     private static let pollBudget: TimeInterval = 45
-    private static let reopenSettle: TimeInterval = 5
-    /// On `queue`: when the last exchange hung up.
-    private var lastHangUp: Date?
+    /// `/clip?c=<ciphertext>&auth=…` is a page of noise in the log: the route is enough.
+    static func shortPath(_ path: String) -> String {
+        path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
+    }
 
     private let queue = DispatchQueue(label: "ro.victorrentea.phone-roaming", qos: .utility)
     private let bluetooth = RunLoopThread(name: "ro.victorrentea.victor-net.bluetooth-roaming")
@@ -120,6 +121,19 @@ final class PhoneRoamingMonitor {
         let current = _simulated ?? r
         lock.unlock()
         onReading?(current)
+    }
+
+    /// The phone just answered over Bluetooth (a hotspot request): a reading older than `age`
+    /// is refreshed now rather than at the 20-minute timer, so the menu does not say
+    /// "19 min ago · BT" while the phone is right there (Victor, 2026-11-12, on a plane).
+    func pollIfOlder(than age: TimeInterval, reason: String) {
+        guard Config.hasPhone else { return }
+        queue.async { [weak self] in
+            guard let self else { return }
+            let last = self.lock.withLock { self._lastPollAt }
+            guard last.map({ Date().timeIntervalSince($0) > age }) ?? true else { return }
+            self.poll(reason: reason)
+        }
     }
 
     /// `GET /test/roaming` — poll now (async), answer with the previous state.
@@ -220,14 +234,15 @@ final class PhoneRoamingMonitor {
     /// One question, one line: open the beacon's channel, write `R <path>`, read up
     /// to the newline, hang up. On `queue` (blocks it — one exchange at a time).
     private func exchange(_ path: String, budget: TimeInterval) -> (String?, String?) {
-        // The phone re-publishes its socket ~2 s after a hang-up; asked sooner, this
-        // Mac's SDP cache hands back the dead channel (21 Oct 2026: a `/config` sent
-        // right after a poll never reached the phone). Same as HotspotFallback's settle.
-        if let last = lastHangUp {
-            let wait = Self.reopenSettle - Date().timeIntervalSince(last)
-            if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+        // One socket on the phone, shared with the hotspot request: wait for our turn, which
+        // frees the channel that request may be holding and waits out the phone's re-listen
+        // (21 Oct 2026: a `/config` sent right after a poll never reached the phone).
+        // At least a slow hotspot turn (stale channel, re-page, verdict, settle): a clip that times
+        // out here is not sent again.
+        guard PhoneSocket.shared.take("beacon (\(Self.shortPath(path)))", timeout: max(budget, 45)) else {
+            return (nil, "the phone's channel stayed busy")
         }
-        defer { lastHangUp = Date() }
+        defer { PhoneSocket.shared.done() }
         var line: String?
         var error: String? = "the phone never answered"
         let done = DispatchSemaphore(value: 0)
@@ -247,7 +262,7 @@ final class PhoneRoamingMonitor {
             }
             self.buffer = Data()
             let opener = PhoneChannelOpener(device: dev, service: IOBluetoothSDPUUID(uuid16: Self.sppUUID),
-                                            serviceName: "beacon (\(path))") { outcome in
+                                            serviceName: "beacon (\(Self.shortPath(path)))") { outcome in
                 switch outcome {
                 case .opened(let ch, _):
                     self.channel = ch
@@ -262,7 +277,13 @@ final class PhoneRoamingMonitor {
                 guard let self else { return }
                 self.buffer.append(data)
                 if let nl = self.buffer.firstIndex(of: 0x0A) {
-                    finish(String(data: self.buffer[..<nl], encoding: .utf8), nil)
+                    let line = String(data: self.buffer[..<nl], encoding: .utf8)
+                    // `#go`/`#airplane`: the phone missed the `R` and took this for a hotspot
+                    // request. Not an answer — and `/clip` must not report "sent".
+                    if line?.hasPrefix("#") == true {
+                        return finish(nil, "the phone took the question for a hotspot request (\(line ?? ""))")
+                    }
+                    finish(line, nil)
                 }
             }
             opener.onClosed = { finish(nil, "the phone closed the channel without an answer") }

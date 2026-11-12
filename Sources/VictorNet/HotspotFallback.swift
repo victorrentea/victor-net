@@ -181,22 +181,6 @@ final class HotspotFallback {
     /// command; 3 s is that with room for a cold radio.
     private static let joinSettle: TimeInterval = 3
 
-    /// Breathing room for the phone to stand a new listening socket up after we
-    /// close a channel ourselves.
-    ///
-    /// Was 2 s, which is exactly the phone's own retry sleep — so the two
-    /// timers raced, and on 28 Aug 2026 the Mac lost by 60 ms: it closed the
-    /// channel at 03:00:32.056, queried SDP at 03:00:34.00, and the phone only
-    /// published its new record at 03:00:34.06. The query was answered from
-    /// macOS's cache with the dead socket's channel, and the open that followed
-    /// never came back at all — no `rfcommChannelOpenComplete`, not even the SDP
-    /// watchdog — so the attempt burned the whole 40 s budget and reported "the
-    /// phone never answered the channel open". The very next attempt, with no
-    /// channel to close first, connected in 0.3 s.
-    ///
-    /// It has to be *longer* than the phone's retry, not equal to it.
-    private static let reopenSettle: TimeInterval = 5
-
     /// Total budget for one SDP-query + open (+ one retry after a fresh query).
     /// Generous, because it is paid only when we already know we are offline.
     private static let channelOpenBudget: TimeInterval = 40
@@ -239,9 +223,17 @@ final class HotspotFallback {
     /// Transition-only logging: a path change that leaves us online is the
     /// overwhelmingly common case and must not write a line every time.
     private var lastKnownOnline: Bool?
+    /// Under `chanLock`: set on the Bluetooth thread, closed from `queue` or from a question's
+    /// turn (`PhoneSocket`), on whichever thread that runs.
     private var channel: IOBluetoothRFCOMMChannel?
     private let geofence = HomeGeofence()
     private var opener: PhoneChannelOpener?
+    private let chanLock = NSLock()
+    /// What the phone wrote on the held channel since it opened (`#airplane`, `#reserve`), under
+    /// `chanLock`. A phone app older than 13 Nov 2026 writes nothing.
+    private var phoneBytes = Data()
+    /// The held channel was closed by the phone or the link (under `chanLock`).
+    private var channelClosed = false
     /// What the last channel open did, for the test hook to report.
     private var lastChannelError: String?
     private var lastChannelAt: Date?
@@ -267,8 +259,24 @@ final class HotspotFallback {
                 "last_failure": orNull(p.lastFailure)]
     }
 
+    /// On the main thread, whenever the progress changes: the menu bar icon animates while the
+    /// hotspot comes up, menu open or not (Victor, 2026-11-12).
+    var onProgress: ((HotspotProgress) -> Void)?
+    /// The phone answered a hotspot request (`#go` / `#airplane`), on `queue`: it is right there,
+    /// so a stale battery / signal reading can be refreshed over Bluetooth.
+    var onPhoneAnswered: (() -> Void)?
+
     private func publish(_ change: (inout HotspotProgress) -> Void) {
-        progressLock.withLock { change(&currentProgress) }
+        let (before, after) = progressLock.withLock { () -> (HotspotProgress, HotspotProgress) in
+            let before = currentProgress
+            change(&currentProgress)
+            return (before, currentProgress)
+        }
+        guard before != after, let onProgress else { return }
+        // Not `DispatchQueue.main.async`: inside an open menu's tracking run loop it is not
+        // delivered until the menu closes (measured in review, 13 Nov 2026).
+        RunLoop.main.perform(inModes: [.common]) { onProgress(after) }
+        CFRunLoopWakeUp(CFRunLoopGetMain())
     }
 
     /// The geofence's last location fix — shared rather than a second
@@ -326,7 +334,7 @@ final class HotspotFallback {
             parts.append("\"last_channel_open\":\(lastChannelAt != nil && lastChannelError == nil)")
             parts.append("\"last_error\":\(Self.jsonString(lastChannelError ?? ""))")
             parts.append("\"last_attempt_at\":\(Self.jsonString(lastChannelAt.map { ISO8601DateFormatter().string(from: $0) } ?? ""))")
-            parts.append("\"channel_is_open\":\(channel?.isOpen() ?? false)")
+            parts.append("\"channel_is_open\":\(chanLock.withLock { channel?.isOpen() } ?? false)")
             parts.append("\"at_home\":\(geofence.isAtHome())")
             parts.append("\"enabled\":\(HotspotFallbackSettings.isEnabled)")
             return "{\(parts.joined(separator: ","))}"
@@ -437,20 +445,24 @@ final class HotspotFallback {
         guard HotspotFallbackSettings.isEnabled else {
             netInfo("📵 No internet (\(reason)) — but the hotspot fallback is switched off in the menu")
             cancelRetry()
+            publish { $0.phoneInAirplane = false }   // nothing will ask again, so promise nothing
             return
         }
         // Asked only once we already know there is no internet: a location fix
-        // costs radios and a menu-bar app sees network changes all day.
-        if geofence.isAtHome(wait: true) {
+        // costs radios and a menu-bar app sees network changes all day. Not waited for when
+        // re-asking a phone in airplane mode: offline there is never a fresh fix, and the
+        // 10 s wait made a 20 s cadence a 45 s one (review, 13 Nov 2026).
+        if geofence.isAtHome(wait: reason != "airplane") {
             netInfo("🏠 No internet (\(reason)) — but we are at home, so this stays manual")
             cancelRetry()
+            publish { $0.phoneInAirplane = false }
             return
         }
 
         // A wake or an opened menu gets the short floor, an armed retry already
         // kept its distance, everything else the ordinary one.
         let floor = reason == "wake" || reason == "menu open" ? Self.wakeCooldown
-            : reason == "retry" ? 0 : Self.cooldown
+            : reason == "retry" || reason == "airplane" ? 0 : Self.cooldown
         let since = Date().timeIntervalSince(lastAttemptAt)
         guard since >= floor else {
             netInfo("📵 No internet (\(reason)) but only \(Int(since))s of \(Int(floor))s since last attempt — holding")
@@ -471,12 +483,38 @@ final class HotspotFallback {
         attemptInFlight = true
         defer { attemptInFlight = false }
 
-        let settle = channel != nil ? Self.reopenSettle : 0
         publish {
             $0.lastFailure = nil
-            $0.phase = .askingPhone(deadline: Date() + Self.channelOpenBudget + settle)
+            $0.phase = .askingPhone(deadline: Date() + Self.channelOpenBudget + PhoneSocket.settle)
         }
-        if let err = openChannel() { return attemptFailed(err) }
+        if let err = openChannel() {
+            publish { $0.phoneInAirplane = false }   // unknown again: the phone did not answer
+            return attemptFailed(err)
+        }
+        switch lastVerdict {
+        case .airplane:
+            closeChannel()   // it starts nothing, and a question may want the socket
+            onPhoneAnswered?()
+            // Only promised when something will ask again: a click from another network, or
+            // with Auto-Start off, just says why in the tooltip.
+            let willRetry = lastKnownOnline == false && HotspotFallbackSettings.isEnabled && !geofence.isAtHome()
+            publish {
+                $0.phoneInAirplane = willRetry
+                $0.lastFailure = "the phone is in airplane mode"
+            }
+            netInfo("✈️ The phone is in airplane mode\(willRetry ? " — asking again in \(Int(Self.airplaneRetry))s, the hotspot comes once it is off" : "")")
+            if willRetry { armRetry(at: Date() + Self.airplaneRetry, reason: "airplane") }
+            return
+        case .reserve:
+            closeChannel()
+            publish { $0.phoneInAirplane = false }
+            return attemptFailed("the phone keeps its last roaming GB — no hotspot (Roaming: Stop under 1 GB)")
+        case .hungUp:   // openChannel already reported it as a failure
+            return attemptFailed("the phone hung up before answering")
+        case .goAhead:
+            onPhoneAnswered?()
+            publish { $0.phoneInAirplane = false }
+        }
         publish { $0.phase = .joining(deadline: Date() + TimeInterval(Self.waitAfterPlainConnect)) }
         if waitForInternet(seconds: Self.waitAfterPlainConnect, stage: forced ? "menu" : "rfcomm", forced: forced) {
             return markOnline()
@@ -494,21 +532,54 @@ final class HotspotFallback {
                                                   cooldown: Self.cooldown, pause: Self.retryPause))
     }
 
+    /// What the phone made of the channel. It waits 1.5 s for a question before treating the
+    /// open as the hotspot signal, then says `#go` (routine fired), `#airplane` or `#reserve`.
+    /// A phone app older than 13 Nov 2026 says nothing: `verdictWait` runs out and that is a go.
+    private enum PhoneVerdict { case goAhead, airplane, reserve, hungUp }
+    /// The phone's 1.5 s window, plus the roaming reading `#reserve` needs first.
+    private static let verdictWait: TimeInterval = 4
+    /// Set by `openChannel`, on `queue`.
+    private var lastVerdict = PhoneVerdict.goAhead
+    /// Asking a phone in airplane mode costs a page and a channel, no routine: cheap enough to
+    /// ask often, so the hotspot comes soon after landing (Victor, 2026-11-12). Plus the ~9 s
+    /// internet check and ~3 s of open + verdict: about every 30 s.
+    private static let airplaneRetry: TimeInterval = 15
+
+    private func awaitPhoneVerdict() -> PhoneVerdict {
+        let until = Date() + Self.verdictWait
+        func read() -> (PhoneVerdict?, Bool) {
+            let (said, closed) = chanLock.withLock { (String(decoding: phoneBytes, as: UTF8.self), channelClosed) }
+            if said.contains("#airplane") { return (.airplane, closed) }
+            if said.contains("#reserve") { return (.reserve, closed) }
+            if said.contains("#go") { return (.goAhead, closed) }
+            return (nil, closed)
+        }
+        while Date() < until {
+            let (verdict, closed) = read()
+            if let verdict { return verdict }
+            // Gone before answering: the phone never fired the routine (review, 13 Nov 2026).
+            if closed { return .hungUp }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return read().0 ?? .goAhead   // one last look: a verdict in the final 100 ms counts
+    }
+
     private func markOnline() {
         cancelRetry()
         publish {
+            $0.phoneInAirplane = false
             $0.offline = false
             $0.lastFailure = nil
         }
     }
 
-    private func armRetry(at date: Date) {
+    private func armRetry(at date: Date, reason: String = "retry") {
         retryWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.retryWork = nil
             self.publish { $0.nextRetryAt = nil }
-            self.evaluate(reason: "retry")
+            self.evaluate(reason: reason)
         }
         retryWork = work
         publish { $0.nextRetryAt = date }
@@ -760,12 +831,14 @@ final class HotspotFallback {
     /// closes it, and a closed channel is no signal at all.
     private func openChannel() -> String? {
         // A fresh open, so the phone sees a fresh connection. If we are the ones
-        // dropping the old channel, give the phone a moment: its accept loop
-        // closes the old socket and stands a new one up, and a query fired into
-        // that window reads a record that is about to stop being true.
-        let hadChannel = channel != nil
+        // dropping the old channel, give the phone a moment (`PhoneSocket.settle`): its
+        // accept loop closes the old socket and stands a new one up, and a query fired
+        // into that window reads a record that is about to stop being true.
         closeChannel()
-        if hadChannel { Thread.sleep(forTimeInterval: Self.reopenSettle) }
+        guard PhoneSocket.shared.take("hotspot request", timeout: Self.channelOpenBudget) else {
+            return "a question to the phone kept its channel busy"
+        }
+        chanLock.withLock { phoneBytes = Data(); channelClosed = false }
 
         var result: String? = "the phone never answered the channel open"
         let done = DispatchSemaphore(value: 0)
@@ -786,28 +859,65 @@ final class HotspotFallback {
                                             serviceName: "SPP") { [weak self] outcome in
                 switch outcome {
                 case .opened(let ch, let chID):
-                    self?.channel = ch
+                    self?.chanLock.withLock { self?.channel = ch }
                     netInfo("📶 RFCOMM channel open to the phone (channel \(chID))")
                     finish(nil)
                 case .failed(let why):
-                    self?.opener = nil
+                    self?.chanLock.withLock { self?.opener = nil }
                     finish(why)
                 }
             }
-            self.opener = opener
+            // The phone or the link dropped it: the next question has nothing to free.
+            opener.onClosed = { [weak self] in
+                self?.chanLock.withLock {
+                    self?.channelClosed = true
+                    self?.channel = nil
+                }
+                PhoneSocket.shared.hungUp()
+            }
+            opener.onData = { [weak self] data in
+                guard let self else { return }
+                self.chanLock.withLock { if self.phoneBytes.count < 256 { self.phoneBytes.append(data) } }
+            }
+            self.chanLock.withLock { self.opener = opener }
             opener.start()
         }
 
-        _ = done.wait(timeout: .now() + Self.channelOpenBudget)
+        if done.wait(timeout: .now() + Self.channelOpenBudget) == .timedOut {
+            // The opener may still be paging; dropped, so it cannot open behind the gate's back.
+            closeChannel()
+        }
         lastChannelAt = Date()
+        lastChannelError = result
+        // The turn is kept until the phone has said what it made of the channel: a question
+        // freeing it sooner loses `#airplane` and reads as a go (review, 13 Nov 2026).
+        lastVerdict = result == nil ? awaitPhoneVerdict() : .goAhead
+        if lastVerdict == .hungUp {
+            result = "the phone hung up before answering"
+            closeChannel()
+        }
+        if result == nil {
+            let said = chanLock.withLock { String(decoding: phoneBytes, as: UTF8.self) }
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            netInfo("📶 the phone's verdict: \(said.isEmpty ? "(silence — an older app, taken as a go)" : said)")
+        }
+        // Then held open until a question needs the socket or the next attempt reopens it.
+        PhoneSocket.shared.done(holding: result == nil ? { [weak self] in self?.closeChannel() } : nil)
         lastChannelError = result
         return result
     }
 
+    /// Any thread.
     private func closeChannel() {
-        channel?.close()
-        channel = nil
-        opener = nil
+        let (ch, had) = chanLock.withLock { () -> (IOBluetoothRFCOMMChannel?, Bool) in
+            let ch = channel
+            let had = ch != nil || opener != nil
+            channel = nil
+            opener = nil
+            return (ch, had)
+        }
+        ch?.close()
+        if had { PhoneSocket.shared.hungUp() }
     }
 
 }

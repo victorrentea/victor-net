@@ -140,6 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         traffic.onLatency = { [weak self] ms in self?.simLog.latency(ms) }
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
+        hotspot.onProgress = { [weak self] p in self?.menu?.hotspotProgressChanged(p) }
+        hotspot.onPhoneAnswered = { [weak self] in
+            self?.roaming.pollIfOlder(than: 5 * 60, reason: "the phone answered the hotspot request")
+        }
         hotspot.start()
         menu.onOpen = { [weak self] in
             self?.hotspot.menuOpened()

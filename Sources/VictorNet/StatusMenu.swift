@@ -112,17 +112,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let alert = roamingAlert
         let alertReason = roamingAlertReason
         button.title = ""
+        if iconClimbTimer != nil {
+            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(iconClimbStarted))
+            button.image = Icons.cellular(level: level)
+            button.toolTip = "Starting the phone's hotspot…"
+            return
+        }
         switch look {
         case .hotspot(let level, _): look = .hotspot(level: level, alert: alert)
         case .away(let level, _): look = .away(level: level, alert: alert)
         }
         guard case .hotspot = look else {
             button.image = Icons.image(for: look)
+            let airplane = hotspot.progress.phoneInAirplane
+                ? "✈️ The phone is in airplane mode: its hotspot starts once that is off" : nil
+            // In airplane mode it did answer, just not with a signal.
+            let silent = airplane == nil ? "The phone has not answered in the last 25 min" : nil
+            let lines: [String]
             if case .away(nil, _) = look {
-                button.toolTip = [alertReason, "The phone has not answered in the last 25 min"].compactMap { $0 }.joined(separator: "\n")
+                lines = [alertReason, airplane, silent].compactMap { $0 }
             } else {
-                button.toolTip = alertReason
+                lines = [alertReason, airplane].compactMap { $0 }
             }
+            button.toolTip = lines.isEmpty ? nil : lines.joined(separator: "\n")
             return
         }
         // On the hotspot with nothing behind it must not look connected (Victor, 2026-11-06).
@@ -496,7 +508,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// one (Victor, 2026-11-05). The menu stays open, to watch it.
     private func hotspotButtonItem() -> NSMenuItem {
         let state = hotspotButtonState
-        let row = MenuRowView(name: state.title, icon: state == .stop ? Icons.hotspotOff() : Icons.hotspot())
+        let row = MenuRowView(name: state.title, icon: Self.hotspotIcon(state))
         row.keepsMenuOpen = true
         row.onClick = { [weak self] in
             guard let self else { return }
@@ -570,7 +582,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             hotspotButtonShown = state
             hotspotButtonShownSince = Date()
             row.setName(state.title)
-            row.setIcon((state == .stop ? Icons.hotspotOff() : Icons.hotspot()) ?? NSImage())
+            row.setIcon(Self.hotspotIcon(state) ?? NSImage())
         }
         let p = hotspot.progress
         let status = HotspotRowPolicy.status(p, now: Date())
@@ -579,12 +591,45 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         case .stop: row.setStatus("", spinning: false)
         // The countdown alone: the title already says what is going on. While starting, the
         // climbing bars are the progress, so no wheel next to them.
+        // Re-asking every ~30 s: a countdown between asks, "asking" during one — never a bare
+        // number, which read as "hotspot in 45 s".
+        case .airplane: row.setStatus(p.phase == .idle ? status.text : "asking", spinning: p.phase != .idle)
         case .asking, .starting, .start: row.setStatus(status.text.replacingOccurrences(of: "asking phone ", with: "")
                                                            .replacingOccurrences(of: "joining ", with: ""),
                                                        spinning: status.spinning && state != .starting)
         }
         if state == .starting { startClimbingBars() } else { stopClimbingBars() }
         row.toolTip = p.lastFailure.map { "Last attempt: \($0)" }
+    }
+
+    private static func hotspotIcon(_ state: HotspotButton) -> NSImage? {
+        switch state {
+        case .stop: return Icons.hotspotOff()
+        case .airplane: return NSImage(systemSymbolName: "airplane", accessibilityDescription: "Airplane mode")
+        default: return Icons.hotspot()
+        }
+    }
+
+    // MARK: - Menu bar icon while the hotspot comes up
+
+    /// The menu bar icon climbs too while the row says "Starting Hotspot…", menu open or not
+    /// (Victor, 2026-11-12: the row climbed and the icon sat still). `HotspotFallback.onProgress`.
+    private var iconClimbTimer: Timer?
+    private var iconClimbStarted = Date()
+
+    func hotspotProgressChanged(_ p: HotspotProgress) {
+        // The row's own predicate (`.joining` → "Starting Hotspot…"), on the hotspot or not.
+        let climbing = p.isJoining
+        if climbing, iconClimbTimer == nil {
+            iconClimbStarted = Date()
+            let t = Timer(timeInterval: HotspotRowPolicy.climbStep, repeats: true) { [weak self] _ in self?.refreshIcon() }
+            RunLoop.main.add(t, forMode: .common)
+            iconClimbTimer = t
+        } else if !climbing, let t = iconClimbTimer {
+            t.invalidate()
+            iconClimbTimer = nil
+        }
+        refreshIcon()
     }
 
     /// `HotspotRowPolicy.climbingBars`: its own timer, faster than the menu's 1 s one, in the
@@ -597,7 +642,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         climbStarted = Date()
         let tick = { [weak self] in
             guard let self, let row = self.hotspotRow else { return }
-            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(self.climbStarted))
+            // One clock with the menu bar icon, so the two climb in step.
+            let since = self.iconClimbTimer != nil ? self.iconClimbStarted : self.climbStarted
+            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(since))
             row.setIcon(Icons.cellular(level: level))
         }
         tick()
@@ -777,8 +824,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         func views() -> [NSView] {
             // The hotspot button at the top, in each of its states.
             var out: [NSView] = HotspotButton.allStates.map { b in
-                let row = MenuRowView(name: b.title, icon: b == .stop ? Icons.hotspotOff() : Icons.hotspot())
-                row.setStatus(b == .asking ? "18s" : b == .starting ? "41s" : "", spinning: !b.clickable)
+                let row = MenuRowView(name: b.title, icon: Self.hotspotIcon(b))
+                row.setStatus(b == .asking ? "18s" : b == .starting ? "41s" : b == .airplane ? "retrying in 12s" : "", spinning: !b.clickable)
                 return row
             }
             out += networkRows().compactMap(\.view)

@@ -204,6 +204,9 @@ final class PhoneChannelOpener: NSObject, IOBluetoothRFCOMMChannelDelegate {
     }
 
     func rfcommChannelClosed(_ ch: IOBluetoothRFCOMMChannel!) {
+        // Only the channel this opener handed out: a late close of one it abandoned (stale
+        // number, dropped link) must not end the live one's exchange or hold.
+        guard let ch, ch === channel else { return }
         netInfo("📵 \(serviceName) channel to the phone closed")
         onClosed?()
     }

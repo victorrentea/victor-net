@@ -150,6 +150,34 @@ work now runs on a dedicated `RunLoopThread`. Not the main thread: an SDP query
 plus an open plus a retry is up to 20 s, and the main thread serves the menu bar
 and the `/test/*` hooks.
 
+## One socket on the phone, two users here (`PhoneSocket`, 13 Nov 2026)
+
+The phone serves **one** RFCOMM connection at a time, and RFCOMM allows one per server channel
+between two devices anyway. The hotspot request holds its channel open; `PhoneRoamingMonitor`
+(every `/status`, `/clip`, `/media`, `/hotspot/off` over Bluetooth) opens another. On 12 Nov 2026,
+offline on a plane for 1 h 25 min, each of those second opens never answered: 8 s later the opener
+dropped the whole link to re-read SDP, which also killed the held channel ("bt socket closed" in the
+phone's notification), and the question was lost anyway. Not one Bluetooth clip had ever gone
+through, and the menu said the phone was last seen 19 min ago while the channel was open every 2 min.
+
+`PhoneSocket` makes them take turns: one open or question at a time, a question first frees the
+channel the hotspot request holds (the phone has already fired the routine), and nobody opens within
+5 s of a hang-up. The hotspot request keeps its turn until the phone has answered what it made of
+the channel, so a question cannot close it before the answer.
+
+### The phone's answer: `#go`, `#airplane`, `#reserve`
+
+After its 1.5 s query window the phone writes one line on the hotspot channel: `#go` (routine
+fired), `#airplane` (no data to share: the row says **Hotspot after Airplane Mode**, not "Starting
+Hotspot…", and the Mac asks again about every 30 s — 15 s, then the internet check, without the
+geofence's 10 s wait for a fix that never comes offline — so the hotspot comes within ~30 s of
+landing) or `#reserve` (the last roaming GB is kept). A phone app older than this says nothing;
+after 4 s that counts as a go. The join clock starts after the verdict: 1.5 s later than before
+with this phone app, 4 s with an older one. Any answer (`#go`, `#airplane`) also refreshes a
+`/status` reading older than 5 min, so the battery row's "· BT" age stays current while offline.
+The menu bar icon climbs with the row whenever it says "Starting Hotspot…", menu open or not
+(`HotspotFallback.onProgress`, delivered in the common run loop modes).
+
 ## Testing it without waiting for a real outage
 
 `GET /test/hotspot` opens the channel now, whatever the Mac's connectivity, the
@@ -450,6 +478,7 @@ row at the very top**, where nothing above it changes height:
 | Start Hotspot | off; right corner = the automatic path (`retrying in 23s`, `checking`) | `startNow` |
 | Asking the phone… ◌ 38s | page + SDP + channel open | — |
 | ▂▄▆█ Starting Hotspot… 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins. The icon is the signal bars climbing 0→4 in a loop, 0.3 s a step (`HotspotRowPolicy.climbingBars`, Victor 12 Nov 2026: *„scara de gsm ca progress bar ciclic"*), instead of the wheel | — |
+| ✈️ Hotspot after Airplane Mode | the phone answered `#airplane`; corner = `retrying in 12s` or `asking ◌` | `startNow` (asks now, when idle) |
 | Stop Hotspot | on it, or it is in a scan | `stopHotspot` |
 | Stopping Hotspot… ◌ | stopped < 60 s ago and still on it | — |
 
