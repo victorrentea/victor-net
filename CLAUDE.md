@@ -1,16 +1,18 @@
 # Victor Net
 
-Menu bar app: **the network icon** (cable ⇄ / the phone's bars on its hotspot / Wi-Fi), the
-traffic and latency of the current network compared with the others, and everything this Mac
-does with Victor's Android phone (`victor-phone-addons`): asking it for its hotspot over
-Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123#), ⏸ Claude on roaming data. Extracted from
+Menu bar app: **the phone's icon** (its cellular bars: full on its hotspot, faded from its last
+answer otherwise), the traffic and latency of the network in use next to the phone's SIMs, and
+everything this Mac does with Victor's Android phone (`victor-phone-addons`): asking it for its
+hotspot over Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123#),
+⏸ Claude on roaming data. **Not the Wi-Fi menu** (2026-11-12): listing and joining networks is
+macOS's own item again. Extracted from
 `victor-macos-addons` on 2026-10-20; public repo `victorrentea/victor-net`, branch `main`.
 
 **Read the doc of the zone before touching its code** — the details there are load-bearing:
 
 | doc | covers |
 |---|---|
-| [docs/victor-net.md](docs/victor-net.md) | the icon, `PhoneLink` (signal every 5 s over the hotspot), the menu: 5 s average + 10-min best, latency probe, ⚡ speed test, other networks, busiest apps |
+| [docs/victor-net.md](docs/victor-net.md) | the icon, `PhoneLink` (signal every 5 s over the hotspot), the menu: this network + the SIMs (5 s average, best of the hour), latency probe, ⚡ speed test |
 | [docs/hotspot-fallback.md](docs/hotspot-fallback.md) | 🛜 asking the phone for its hotspot when offline (Bluetooth as the trigger, the Samsung routine, the home geofence) |
 | [docs/clipboard.md](docs/clipboard.md) | 📋 the clipboard shared with the phone: the three ways, the mailbox, `CLIP_KEY` |
 | [docs/roaming-warning.md](docs/roaming-warning.md) | 📶 roaming allowance: the phone's reading, the reserve, the meter, ⏸ Pause Claude (`~/.victor-net/roaming-data.json`, read by `~/.claude/hooks/roaming-gate.sh`) |

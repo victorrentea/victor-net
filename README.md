@@ -1,14 +1,13 @@
 # Victor Net
 
-A macOS menu bar app that shows **how this Mac is online** and **how well**:
+A macOS menu bar app for **the Android phone this Mac tethers to**. Picking a Wi-Fi stays with
+macOS's own menu.
 
-- the icon is a dashed ⇄ on a cable, the Wi-Fi arcs on Wi-Fi, or — on your Android phone's
-  hotspot — **the phone's own cellular signal**, with the Wi-Fi to the phone shown only when
-  that link is weak;
-- the menu shows download/upload as a 5-second average with a 20-second bar chart and the
-  best of the last 10 minutes, latency (a TCP handshake every 5 s), an on-demand speed test,
-  the busiest apps (only while the menu is open), and the same figures for **every network
-  it has seen**, so the hotel Wi-Fi and the phone's hotspot can be compared side by side.
+- the icon is **the phone's own cellular signal**: full while the Mac is on its hotspot, faded
+  from its last answer otherwise;
+- the menu shows the network in use — best download/upload (5-second average), latency (a TCP
+  handshake every 5 s), an on-demand speed test — next to the same figures for each of the
+  phone's SIMs, so the hotel Wi-Fi and the hotspot can be held side by side.
 
 With the companion Android app (not published), it also asks the phone for its hotspot over
 Bluetooth when the Mac is offline, and tracks the roaming allowance.

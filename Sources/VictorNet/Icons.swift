@@ -8,8 +8,7 @@ enum Icons {
 
     /// A cable: **open angle brackets** pointing apart with two dashes between
     /// them — `< ‐ ‐ >` (Victor, 2026-10-20, after filled and then hollow
-    /// triangles). The same glyph is the menu bar icon on a cable and, tinted, the
-    /// Ethernet row's icon in the menu.
+    /// triangles): the Ethernet row's icon in the menu.
     static func wired() -> NSImage {
         let image = NSImage(size: NSSize(width: 20, height: barHeight), flipped: false) { rect in
             NSColor.black.set()
@@ -142,49 +141,19 @@ enum Icons {
         return image
     }
 
-    /// The phone's own network in the list (Victor: "keep displaying the phone icon").
-    static func phone() -> NSImage? {
-        let image = NSImage(systemSymbolName: "iphone", accessibilityDescription: "Phone")?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-        image?.isTemplate = true
-        return image
-    }
-
-    /// Wi-Fi switched off, as macOS draws it: the arcs greyed, the slash across
-    /// them in full text colour (white on a dark bar). Not a template — two tones.
-    static func wifiOff() -> NSImage? {
-        guard let arcs = wifi(strength: 1) else { return nil }
-        let size = NSSize(width: arcs.size.width + 2, height: max(arcs.size.height, barHeight))
-        let image = NSImage(size: size, flipped: false) { r in
-            let a = NSRect(x: 1, y: (size.height - arcs.size.height) / 2, width: arcs.size.width, height: arcs.size.height)
-            tinted(arcs, NSColor.labelColor.withAlphaComponent(0.35)).draw(in: a)
-            let slash = NSBezierPath()
-            slash.move(to: NSPoint(x: a.minX + 1, y: a.maxY - 0.5))
-            slash.line(to: NSPoint(x: a.maxX - 1, y: a.minY + 0.5))
-            slash.lineWidth = 1.6
-            slash.lineCapStyle = .round
+    /// On the hotspot with nothing behind it: the bars empty, a red "!" in the corner they leave
+    /// free. Not a template — two tones.
+    static func noInternet(_ bars: NSImage) -> NSImage {
+        let image = NSImage(size: bars.size, flipped: false) { r in
+            bars.draw(in: r)
             NSColor.labelColor.set()
-            slash.stroke()
+            r.fill(using: .sourceAtop)
+            NSAttributedString(string: "!", attributes: [
+                .font: NSFont.systemFont(ofSize: 10, weight: .heavy), .foregroundColor: NSColor.systemRed,
+            ]).draw(at: NSPoint(x: 1.5, y: r.height - 11.5))
             return true
         }
         image.isTemplate = false
-        return image
-    }
-
-    /// Wi-Fi joined but with nothing behind it: the arcs white like any Wi-Fi, only the "!" red
-    /// (Victor, 2026-11-11; it was all red). Palette order is the symbol's layers: "!" first, arcs second.
-    static func wifiNoInternet() -> NSImage? {
-        NSImage(systemSymbolName: "wifi.exclamationmark", accessibilityDescription: "No internet")?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold)
-                .applying(.init(paletteColors: [.systemRed, .labelColor])))
-    }
-
-    /// Wi-Fi on but joined to nothing: the full symbol, white like the other states (Victor,
-    /// 2026-11-11: macOS greys it, he wants it white always).
-    static func wifiIdle() -> NSImage? {
-        let image = NSImage(systemSymbolName: "wifi", variableValue: 1, accessibilityDescription: "Wi-Fi")?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
-        image?.isTemplate = true
         return image
     }
 
@@ -225,40 +194,21 @@ enum Icons {
         return image
     }
 
-    static func offline() -> NSImage? {
-        let image = NSImage(systemSymbolName: "wifi.slash", accessibilityDescription: "Offline")?
-            .withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
-        image?.isTemplate = true
-        return image
-    }
-
-    /// Two template glyphs side by side, as one template image.
-    static func pair(_ a: NSImage, _ b: NSImage) -> NSImage {
-        let gap: CGFloat = 3
-        let size = NSSize(width: a.size.width + gap + b.size.width, height: max(a.size.height, b.size.height))
-        let image = NSImage(size: size, flipped: false) { _ in
-            a.draw(in: NSRect(x: 0, y: (size.height - a.size.height) / 2, width: a.size.width, height: a.size.height))
-            b.draw(in: NSRect(x: a.size.width + gap, y: (size.height - b.size.height) / 2,
-                              width: b.size.width, height: b.size.height))
-            return true
-        }
-        image.isTemplate = true
-        return image
-    }
+    /// How strong the bars are drawn off the hotspot.
+    static let awayAlpha: CGFloat = 0.45
 
     /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
     static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
         switch look {
-        case .wired: return wired()
-        case .hotspot(let level, let weakWifi, let alert):
+        case .hotspot(let level, let alert):
             // The roaming badge takes the same corner, and says more.
-            var image = cellular(level: level, network: alert == nil ? network : nil,
+            let image = cellular(level: level, network: alert == nil ? network : nil,
                                  switchHint: switchHint && alert == nil)
-            if let weakWifi, let wifi = wifi(strength: weakWifi) { image = pair(image, wifi) }
-            guard let alert else { return image }
-            return badged(image, alert)
-        case .wifi(let s): return wifi(strength: s)
-        case .offline: return offline()
+            return alert.map { badged(image, $0) } ?? image
+        case .away(let level, let alert):
+            // Only the bars fade: the warning stays as loud as on the hotspot.
+            let image = faded(cellular(level: level), awayAlpha)
+            return alert.map { badged(image, $0) } ?? image
         }
     }
 

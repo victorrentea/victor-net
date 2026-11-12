@@ -1,23 +1,14 @@
 import CoreWLAN
 import Foundation
 
-/// Which way this Mac reaches the internet right now, and how well — the one
-/// question the menu bar icon answers (2026-10-20, Victor: replaces the system
-/// Wi-Fi item, which he takes out of the menu bar).
-///
-/// | on…              | icon                                   |
-/// |------------------|----------------------------------------|
-/// | a cable          | dashed ⇄                               |
-/// | the phone's hotspot | the phone's cellular bars (the phone says, every 5 s) — plus a Wi-Fi glyph **only when the Mac↔phone Wi-Fi is weak**: the phone is usually next to the laptop, and a second icon that always says "fine" is clutter |
-/// | any other Wi-Fi  | Wi-Fi with its strength                |
-/// | nothing          | Wi-Fi slashed                          |
+/// What the menu bar icon shows: **the phone's bars, always** (Victor, 2026-11-12). The Wi-Fi
+/// is macOS's own icon again; this one says how the phone is doing, on its hotspot or not.
 enum NetworkLook: Equatable {
-    case wired
-    /// `level` 0…4 from the phone; nil = no fresh word from it. `weakWifi`
-    /// carries the Mac↔phone Wi-Fi strength (0…1) when it is worth showing.
-    case hotspot(level: Int?, weakWifi: Double?, alert: RoamingAlert? = nil)
-    case wifi(strength: Double)
-    case offline
+    /// On the phone's hotspot: the data SIM's bars, 0…4, read every 5 s; nil = no fresh word from it.
+    case hotspot(level: Int?, alert: RoamingAlert? = nil)
+    /// On anything else, or on nothing: the bars of the phone's last answer, drawn faded;
+    /// nil = none in the last 15 minutes.
+    case away(level: Int?, alert: RoamingAlert? = nil)
 }
 
 /// The badge next to the phone's bars (Victor, 2026-10-20): the GB stay in the
@@ -58,40 +49,21 @@ enum RoamingAlertPolicy {
 }
 
 enum NetworkLookPolicy {
-    /// Below this the Mac↔phone link itself is the bottleneck: the phone has
-    /// been left in another room, or in a bag across the hall.
-    static let weakHotspotRSSI = -70
+    /// Off the hotspot the phone is asked every 10 min over the home Wi-Fi, every 20 over Bluetooth.
+    static let awayFreshFor: TimeInterval = 900
 
-    static func look(wired: WiredLinkState, ssid: String?, rssi: Int?, hotspotSSID: String,
-                     phoneLevel: Int?) -> NetworkLook {
-        if case .connected = wired { return .wired }
-        guard let rssi, rssi != 0 else { return .offline }
-        if let ssid, !hotspotSSID.isEmpty, ssid == hotspotSSID {
-            return .hotspot(level: phoneLevel, weakWifi: rssi < weakHotspotRSSI ? strength(rssi: rssi) : nil, alert: nil)
-        }
-        return .wifi(strength: strength(rssi: rssi))
+    static func look(onHotspot: Bool, live: PhoneSignal?, away: PhoneSignal?, now: Date) -> NetworkLook {
+        if onHotspot { return .hotspot(level: live?.level) }
+        let last = [live, away].compactMap { $0 }
+            .filter { now.timeIntervalSince($0.readAt) < awayFreshFor }
+            .max { $0.readAt < $1.readAt }
+        return .away(level: last?.level)
     }
 
     /// RSSI → the 0…1 of an SF Symbol's variable value: −50 dBm and better is
     /// full, −90 empty; the system item's three arcs land about where its own do.
     static func strength(rssi: Int) -> Double {
         max(0, min(1, Double(rssi + 90) / 40))
-    }
-
-    static func wifiRow(ssid: String?, rssi: Int?) -> String {
-        guard let rssi, rssi != 0 else { return "🛜 Wi-Fi: not connected" }
-        let name = ssid ?? "connected (allow Location to see its name)"
-        return "🛜 Wi-Fi: \(name) · \(rssi) dBm"
-    }
-
-    static func phoneRow(_ s: PhoneSignal?, onHotspot: Bool) -> String {
-        guard onHotspot else { return "📱 Phone: not on its hotspot" }
-        guard let s else { return "📱 Phone: on its hotspot, no signal report (is the phone app up to date?)" }
-        var parts = ["\(s.level)/4"]
-        if let n = s.network { parts.insert(n, at: 0) }
-        if let d = s.dbm { parts.append("\(d) dBm") }
-        if let o = s.operatorName, !o.isEmpty { parts.append(o) }
-        return "📱 Phone: " + parts.joined(separator: " · ")
     }
 }
 
@@ -102,6 +74,8 @@ final class NetworkState {
     var ssid: String? { snapshot.ssid }
     var rssi: Int? { snapshot.rssi }
     var phoneSignal: PhoneSignal?
+    /// The phone's `/status` off the hotspot: over the home Wi-Fi (`PhoneLan`) or Bluetooth.
+    var offHotspotSignal: PhoneSignal?
 
     /// Everything read from CoreWLAN, as of the last background read.
     ///
@@ -114,9 +88,7 @@ final class NetworkState {
     struct WifiSnapshot {
         var ssid: String?
         var rssi: Int?
-        var power = false
         var scan: [(ssid: String, rssi: Int, secure: Bool)] = []
-        var known: Set<String> = []
         var at: Date?
     }
 
@@ -148,7 +120,6 @@ final class NetworkState {
             let r = iface?.rssiValue() ?? 0
             s.rssi = r == 0 ? nil : r
             s.ssid = s.rssi == nil ? nil : iface?.ssid()
-            s.power = iface?.powerOn() ?? false
             var best: [String: (Int, Bool)] = [:]
             for n in iface?.cachedScanResults() ?? [] {
                 guard let ssid = n.ssid, !ssid.isEmpty else { continue }
@@ -156,7 +127,6 @@ final class NetworkState {
                 if best[ssid].map({ n.rssiValue > $0.0 }) ?? true { best[ssid] = (n.rssiValue, secure) }
             }
             s.scan = best.map { ($0.key, $0.value.0, $0.value.1) }.sorted { $0.1 > $1.1 }
-            s.known = Set((iface?.configuration()?.networkProfiles.array as? [CWNetworkProfile] ?? []).compactMap { $0.ssid })
             s.at = Date()
             guard let self else { return }
             self.lock.lock()
@@ -173,8 +143,7 @@ final class NetworkState {
     }
 
     var look: NetworkLook {
-        NetworkLookPolicy.look(wired: wired, ssid: ssid, rssi: rssi, hotspotSSID: Config.hotspotSSID,
-                               phoneLevel: phoneSignal?.level)
+        NetworkLookPolicy.look(onHotspot: onHotspot, live: phoneSignal, away: offHotspotSignal, now: Date())
     }
 
     /// For `TrafficMonitor` and the book: the wire wins, as it does for routing.
@@ -186,40 +155,22 @@ final class NetworkState {
         return NetworkID(key: "wifi:\(name)", name: "🛜 \(name)", kind: "wifi")
     }
 
-    /// SSIDs in range, from the **last** scan (`cachedScanResults`, as of the
-    /// last background read). Scans are asked for while the menu is open.
-    func reachableSSIDs() -> Set<String> { Set(snapshot.scan.map(\.ssid)) }
-
     /// Every network in range from the last scan, one per SSID (the strongest),
-    /// strongest first — for *More*.
+    /// strongest first: is the hotspot up (`StatusMenu`), is home in range (`PreferredWifi`).
     func scanResults() -> [(ssid: String, rssi: Int, secure: Bool)] { snapshot.scan }
 
-    var wifiPower: Bool { snapshot.power }
-
-    /// `networksetup -setairportpower`, which needs no admin, unlike CoreWLAN's `setPower`.
-    func setWifiPower(_ on: Bool, done: @escaping (String?) -> Void) {
-        run(["-setairportpower", Config.wifiInterface, on ? "on" : "off"], done: done)
-    }
-
-    /// The networks this Mac remembers (System Settings › Wi-Fi › Known networks).
-    func knownSSIDs() -> Set<String> { snapshot.known }
-
     private let scanQueue = DispatchQueue(label: "ro.victorrentea.victor-net.scan", qos: .utility)
-    /// A scan is in flight now — the menu's spinner (Victor, 2026-10-21: "prove
-    /// me that you're searching").
+    /// A scan is in flight now.
     private(set) var scanning = false
     /// The last scan that finished: when, how long it took, how many SSIDs it saw.
     private(set) var lastScan: (at: Date, took: TimeInterval, found: Int, error: String?)?
     private(set) var lastScanStarted: Date?
-    /// Main thread, when a scan starts and when it ends.
-    var onScan: (() -> Void)?
 
     func scanInBackground() {
         guard !scanning else { return }
         scanning = true
         let began = Date()
         lastScanStarted = began
-        onScan?()
         scanQueue.async { [weak self] in
             var found = 0
             var error: String?
@@ -237,13 +188,11 @@ final class NetworkState {
             }
             self?.readWifi()
             // Through the run loop, not `DispatchQueue.main`: nothing reaches that
-            // while a submenu tracks, so the scan would stay "running" and More's
-            // list would freeze for as long as it is open.
+            // while a menu tracks, so the scan would stay "running" for as long as it is open.
             RunLoop.main.perform(inModes: [.common]) {
                 guard let self else { return }
                 self.scanning = false
                 self.lastScan = (Date(), Date().timeIntervalSince(began), found, error)
-                self.onScan?()
             }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }
@@ -260,14 +209,8 @@ final class NetworkState {
         return o
     }
 
-    /// Joins a network — a known one with the password the keychain already
-    /// holds (`password` nil), as the hotspot fallback does — via `networksetup`.
-    /// Adds a network to macOS's preferred list with its password (keychain), at
-    /// the top, as System Settings would after a join.
-    func remember(_ ssid: String, password: String, done: @escaping (String?) -> Void) {
-        run(["-addpreferredwirelessnetworkatindex", Config.wifiInterface, ssid, "0", "WPA2", password], done: done)
-    }
-
+    /// Joins a network this Mac knows, with the password the keychain holds or the one in
+    /// `WifiPasswords` — `PreferredWifi` moving between the hotspot and home — via `networksetup`.
     func join(_ ssid: String, password: String? = nil, done: @escaping (String?) -> Void) {
         let password = password ?? WifiPasswords.password(for: ssid)
         run(["-setairportnetwork", Config.wifiInterface, ssid] + (password.map { [$0] } ?? []), done: done)
@@ -309,11 +252,9 @@ final class NetworkState {
     var stateJSON: [String: Any] {
         let lookName: String
         switch look {
-        case .wired: lookName = "wired"
-        case .hotspot(let l, let w, let a):
-            lookName = "hotspot(level:\(l.map(String.init) ?? "?"),weakWifi:\(w != nil),alert:\(a.map { "\($0)" } ?? "none"))"
-        case .wifi(let s): lookName = String(format: "wifi(%.2f)", s)
-        case .offline: lookName = "offline"
+        case .hotspot(let l, let a):
+            lookName = "hotspot(level:\(l.map(String.init) ?? "?"),alert:\(a.map { "\($0)" } ?? "none"))"
+        case .away(let l, _): lookName = "away(level:\(l.map(String.init) ?? "?"))"
         }
         return ["look": lookName, "ssid": orNull(ssid), "rssi": orNull(rssi),
                 "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot, "scan": scanJSON,

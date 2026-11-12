@@ -1,24 +1,5 @@
 import AppKit
 
-/// The menu bar switches: state in the title (a trailing ✓), not the item's
-/// native tick — one ticked row makes AppKit reserve a check column for the
-/// whole menu and nudges every row's emoji to the right.
-enum HotspotMenu {
-    static func title(enabled: Bool) -> String { "🛜 Auto-Start Hotspot" + (enabled ? "  ✓" : "") }
-}
-
-enum RoamingSuspendMenu {
-    static func title(enabled: Bool) -> String { "⏸️ Pause Claude on roaming data" + (enabled ? "  ✓" : "") }
-}
-
-enum JoinFailure {
-    /// `networksetup`'s tmpErr with no password given. It can also mean a join raced by
-    /// auto-join, so the worst case is one needless password dialog.
-    static func lacksPassword(_ error: String, typedOne: Bool) -> Bool {
-        !typedOne && error.contains("-3900")
-    }
-}
-
 /// The one status item. **The menu bar shows the route and whether to worry,
 /// nothing else** (Victor, 2026-10-20): the phone's bars on its hotspot, with
 /// ⚠ under 5 GB of roaming left or a red ✕ once it is gone; the GB themselves
@@ -122,68 +103,66 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return RoamingAlertPolicy.reason(a, left: roamingLeft ?? r.remaining, sim: r.simName)
     }
 
+    /// **The phone's bars, always** (Victor, 2026-11-12: the Wi-Fi is macOS's own icon again, this
+    /// one is the phone): full on its hotspot, faded off it, from its last answer (≤ 15 min).
     func refreshIcon() {
         guard let button = statusItem.button else { return }
         var look = net.look
-        let alertReason: String?
-        if case .hotspot(let level, let weak, _) = look {
-            look = .hotspot(level: level, weakWifi: weak, alert: roamingAlert)
-            alertReason = roamingAlertReason
-        } else {
-            alertReason = nil
+        let alert = roamingAlert
+        let alertReason = roamingAlertReason
+        button.title = ""
+        switch look {
+        case .hotspot(let level, _): look = .hotspot(level: level, alert: alert)
+        case .away(let level, _): look = .away(level: level, alert: alert)
         }
-        // Connected but with nothing behind it must not look connected (Victor, 2026-11-06).
-        let noInternet = offlineSince != nil || hotspot.progress.offline
-        if look == .offline, !net.wifiPower {
-            button.image = Icons.wifiOff()
-        } else if noInternet {
-            button.image = Icons.wifiNoInternet()
-        } else if case .hotspot = look, let hint = switchHint {
+        guard case .hotspot = look else {
+            button.image = Icons.image(for: look)
+            button.toolTip = [alertReason, "Not on the phone's hotspot"].compactMap { $0 }.joined(separator: "\n")
+            return
+        }
+        // On the hotspot with nothing behind it must not look connected (Victor, 2026-11-06).
+        if offlineSince != nil || hotspot.progress.offline {
+            button.image = Icons.noInternet(Icons.cellular(level: nil))
+            button.toolTip = "On the phone's hotspot, but no internet behind it"
+        } else if let hint = switchHint {
             // Blinks (Victor, 2026-11-11): a nudge to switch the data SIM by hand on the phone.
             let image = Icons.image(for: look, switchHint: true, network: barsNetwork)
             button.image = image.map { blinkBright ? $0 : Icons.faded($0, 0.3) }
             let hintText = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
             button.toolTip = [alertReason, hintText].compactMap { $0 }.joined(separator: "\n")
-            button.title = ""
-            return
         } else {
-            button.image = look == .offline ? Icons.wifiIdle() : Icons.image(for: look, network: barsNetwork)
+            button.image = Icons.image(for: look, network: barsNetwork)
+            button.toolTip = alertReason
         }
-        button.toolTip = alertReason
-        button.title = ""
     }
 
     // MARK: - Menu
 
     func menuWillOpen(_ menu: NSMenu) {
         onOpen?()
-        net.onScan = { [weak self] in
-            self?.updateMoreStatus()
-            self?.updateWifiArcs()
-            if self?.net.scanning == false { self?.refreshOthers() }
-        }
-        net.scanInBackground()
-        // Every second while open: the "More" row's status, and a new scan as soon
-        // as the last one is over, at most every 2 s from its start (Victor,
-        // 2026-10-21: "every two, three seconds"). A scan itself takes ~5 s and
-        // briefly stalls the link, so while the menu is open it is near-continuous.
+        scanForHotspot()
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
-            self.updateMoreStatus()
             self.updateHotspotRow()
             if let item = self.batteryItem, let b = self.phoneBattery?() { item.title = b.menuTitle(now: Date()) }
             self.updateSimBars()
             self.refreshNetworksIfChanged()
-            if !self.net.scanning, Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= 2 {
-                self.net.scanInBackground()
-            }
+            if Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= Self.scanEvery { self.scanForHotspot() }
         }
         RunLoop.main.add(t, forMode: .common)
         rescanTimer = t
     }
 
+    /// The only scan left (Victor, 2026-11-12: the networks are macOS's menu again): whether the
+    /// phone's hotspot is up, for Start / Stop, and only while this Mac is not on it. A scan
+    /// takes ~5 s and briefly stalls the link, so not back to back.
+    private static let scanEvery: TimeInterval = 5
+    private func scanForHotspot() {
+        guard Config.hasPhone, !Config.hotspotSSID.isEmpty, !net.onHotspot, !net.scanning else { return }
+        net.scanInBackground()
+    }
+
     func menuDidClose(_ menu: NSMenu) {
-        net.onScan = nil
         rescanTimer?.invalidate()
         rescanTimer = nil
         networkItems = []
@@ -194,26 +173,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         net.refresh()
 
-        // Networks, the way macOS lists them: the switch, the ones worth
-        // comparing (✓ = in use, click = join), everything else in range, the
-        // settings. Offline, a greyed "Offline N min" stands where the list was.
-        // The network rows first: their numbers set the menu's width, which the switch row uses.
+        // The hotspot button, the network in use with its numbers, the phone's SIMs with
+        // theirs. Picking a Wi-Fi is macOS's own menu (Victor, 2026-11-12).
         MenuRowLayout.cellWidth = 0
         networkItems = networkSection()
         if Config.hasPhone, !Config.hotspotSSID.isEmpty {
             menu.addItem(hotspotButtonItem())
             menu.addItem(.separator())
         }
-        menu.addItem(wifiSwitchRow())
-        menu.addItem(.separator())
         networkItems.forEach(menu.addItem)
-        menu.addItem(otherNetworksRow())
 
-        // Everything about the network that is not roaming, under its settings.
         menu.addItem(.separator())
-        let settings = action("Wi-Fi Settings…", #selector(openWifiSettings))
-        settings.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings")
-        menu.addItem(settings)
         if Config.hasPhone { addAutoJoinRows() }
         let speed = action(speedTitle(), #selector(speedTestAction))
         speed.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "Speed test")
@@ -245,9 +215,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return "Run speed test (\(mb)MB)"
     }
 
-    // MARK: - Networks, like macOS's Wi-Fi menu
+    // MARK: - This network and the phone's SIMs
 
-    /// The rows between the switch and *More*, and which network they were drawn for.
+    /// The network rows, and which network they were drawn for.
     private var networkItems: [NSMenuItem] = []
     private var drawnFor = ""
 
@@ -257,12 +227,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func networkSection() -> [NSMenuItem] {
         drawnFor = networkSignature
-        if let since = offlineSince {
-            return [NSMenuItem(view: MenuRowView(
-                name: "Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))",
-                icon: Icons.noTraffic(), enabled: false, dimmed: true))]
-        }
-        return networkRows()
+        guard let since = offlineSince else { return networkRows() }
+        let offline = NSMenuItem(view: MenuRowView(
+            name: "Offline \(NetworkBookPolicy.duration(Date().timeIntervalSince(since)))",
+            icon: Icons.noTraffic(), enabled: false, dimmed: true))
+        return [offline] + networkRows(current: false)
     }
 
     private var networkSignature: String {
@@ -280,21 +249,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         networkItems.forEach { menu.removeItem($0) }
         networkItems = networkSection()
         for (k, item) in networkItems.enumerated() { menu.insertItem(item, at: at + k) }
-        refreshOthers()
     }
 
-    private weak var othersMenu: NSMenu?
-    private var othersDrawn: String?
     private var rescanTimer: Timer?
 
-    /// The networks worth comparing — the one in use, those of today, every Wi-Fi
-    /// in range this Mac knows or has measured — with their best numbers. ✓ = in
-    /// use; a click on another joins it. Out of range: greyed if it was today,
-    /// off the list otherwise, numbers kept.
-    private func networkRows() -> [NSMenuItem] {
+    /// **This network, now** — one row, so the hotel Wi-Fi can still be held against the hotspot
+    /// (Victor, 2026-11-12: the list of other networks went back to macOS) — then the phone's
+    /// hotspot framed with its SIMs. On the hotspot the first row is left out: its numbers are
+    /// the data SIM's. `current: false` while offline, when "Offline N min" stands in its place.
+    private func networkRows(current showCurrent: Bool = true) -> [NSMenuItem] {
         let now = Date()
-        let reachable = net.reachableSSIDs()
-        let known = net.knownSSIDs()
         var records = traffic.book.records
         if let cur = traffic.network, cur.key != NetworkState.unnamedKey {
             var r = records[cur.key] ?? NetworkRecord(name: cur.name, kind: cur.kind, lastSeen: now)
@@ -313,35 +277,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 records[key] = s
             }
         }
-        for ssid in reachable.intersection(known) where records["wifi:\(ssid)"] == nil {
-            records["wifi:\(ssid)"] = NetworkRecord(name: ssid, kind: ssid == Config.hotspotSSID ? "hotspot" : "wifi",
-                                                    lastSeen: .distantPast)
-        }
-        var shown = NetworkBookPolicy.listed(records, current: traffic.network?.key, reachable: reachable, now: now)
-        // The cable first, a line under it, then the Wi-Fis (Victor, 2026-11-09).
-        if let k = shown.firstIndex(where: { $0.key == "wired" }) { shown.insert(shown.remove(at: k), at: 0) }
-        // The hotspot's row is also its Start button, so it is always there.
-        let hotspotKey = "wifi:\(Config.hotspotSSID)"
-        if Config.hasPhone, !Config.hotspotSSID.isEmpty, !shown.contains(where: { $0.key == hotspotKey }) {
-            shown.append((key: hotspotKey, value: records[hotspotKey]
-                          ?? NetworkRecord(name: Config.hotspotSSID, kind: "hotspot", lastSeen: .distantPast)))
-        }
+        let hasHotspot = Config.hasPhone && !Config.hotspotSSID.isEmpty
+        let hotspotJoined = hasHotspot && net.ssid == Config.hotspotSSID
         // The SIM rows under the hotspot: live while it is in use, what each gave before while it is off.
-        let hotspotJoined = Config.hasPhone && !Config.hotspotSSID.isEmpty && net.ssid == Config.hotspotSSID
-        // On another Wi-Fi with the hotspot still on too (Victor, 2026-11-12: "to compare them"): the
-        // Stop that once closed this frame is the button at the top since 2026-11-11.
         let simEntries = hotspotJoined ? liveSimEntries(records: records) : idleSimEntries(records: records)
-        // One unit for the whole list, so the column reads straight down: KB/s
+        let here: (id: NetworkID, record: NetworkRecord)? = showCurrent && !hotspotJoined
+            ? traffic.network.flatMap { id in records[id.key].map { (id, $0) } } : nil
+        // One unit for all rows, so the column reads straight down: KB/s
         // while nothing reaches 1 MB/s, MB/s otherwise (Victor, 2026-10-20).
-        let unit = TrafficPolicy.listUnit((shown.map(\.value) + simEntries.compactMap(\.record))
+        let unit = TrafficPolicy.listUnit(((here.map { [$0.record] } ?? []) + simEntries.compactMap(\.record))
             .flatMap { [$0.maxDown, $0.maxUp, $0.speedDown ?? 0] })
         let rate: (Double) -> String = { $0 > 0 ? unit.format($0) : "—" }
-        func isCurrent(_ key: String) -> Bool {
-            key == traffic.network?.key || (key.hasPrefix("wifi:") && String(key.dropFirst(5)) == net.ssid)
-        }
         // Each number with its unit, the arrow before the unit (Victor, 2026-11-08):
         // "2.9↓MB/s ⋅ 2.5↑MB/s ⋅ 5↕︎ms" — the header that labelled them is gone.
-        // A network not in use shows its speed test as ↓ when it had one, after a ⚡ (Victor, 2026-11-09).
+        // A SIM not in use shows its speed test as ↓ when it had one, after a ⚡ (Victor, 2026-11-09).
         func cell(_ r: NetworkRecord, _ seen: String, unused: Bool) -> String {
             let test = unused ? r.speedDown : nil
             // Thin spaces around the dot: the full ones cost the menu 14 pt.
@@ -349,12 +298,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 + "\(rate(test ?? r.maxDown))↓\(unit.name)\u{2009}⋅\u{2009}\(rate(r.maxUp))↑\(unit.name)\u{2009}⋅\u{2009}"
                 + (r.latencyMs.map { String(format: "%.0f", $0) } ?? "—") + "↕︎ms\u{2009}⋅\u{2009}\(seen)"
         }
-        func seen(_ key: String, _ r: NetworkRecord) -> String {
-            let joined = key.hasPrefix("wifi:") && String(key.dropFirst(5)) == net.ssid
-            return joined ? "now" : r.lastSeen == .distantPast ? "—" : NetworkBookPolicy.since(r.lastSeen, now: now)
-        }
         // Only grows: rows redrawn while the menu is open keep the width it opened with.
-        let texts = shown.map { cell($0.value, seen($0.key, $0.value), unused: !isCurrent($0.key)) }
+        let texts = (here.map { [cell($0.record, "now", unused: false)] } ?? [])
             + simEntries.compactMap { e in e.record.map { cell($0, e.seen, unused: !e.isData) } }
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, texts.map(MenuRowView.cellWidth).max() ?? 0)
         // The roaming rows under the SIMs whole, not cut ("… - resets Dec 2"): the menu widens for them.
@@ -362,53 +307,29 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let roamingNeed = simEntries.compactMap { simRoamingRow($0.name)?.nameWidth }.max() ?? 0
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth,
                                       roamingNeed + MenuRowLayout.simIndent + 30 - (MenuRowLayout.nameMin + 4 + 12))
-        let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
 
         var items: [NSMenuItem] = []
-        wifiRows = []
         roamingPlaced = []
-        for (key, r) in shown {
-            let ssid = key.hasPrefix("wifi:") ? String(key.dropFirst(5)) : nil
-            // ✓ on every network this Mac is on: the route (the cable, say) *and*
-            // the Wi-Fi it is joined to — both are "active" (Victor, 2026-10-21).
-            let joined = ssid != nil && ssid == net.ssid
-            let current = key == traffic.network?.key || joined
-            let inRange = ssid.map(reachable.contains) ?? false
-            let icon: NSImage?
-            if key == "wired" { icon = Icons.wired() }
-            else if ssid == Config.hotspotSSID { icon = Icons.hotspot() }
-            else {
-                let level = ssid == net.ssid ? net.rssi : ssid.flatMap { rssi[$0] }
-                icon = Icons.wifi(strength: level.map(NetworkLookPolicy.strength(rssi:)) ?? 0)
-            }
-            let isHotspot = ssid == Config.hotspotSSID && Config.hasPhone
-            // The hotspot's numbers are its SIMs', shown on their rows under it (Victor, 2026-11-08).
-            // Start/Stop is no longer here but the button at the top (Victor, 2026-11-11): this row
-            // is a network like the others, a click joins it when it is in range.
-            // Each SIM's roaming allowance right under it, in the same frame (Victor, 2026-11-12).
-            let sims = isHotspot ? zip(simEntries, simRowViews(simEntries, cell: cell)).flatMap { e, row in
-                [NSMenuItem(view: row)] + (simRoamingRow(e.name).map { [NSMenuItem(view: $0)] } ?? [])
-            } : []
-            let row = MenuRowView(name: ssid ?? "Ethernet",
-                                  columns: isHotspot ? [] : [cell(r, seen(key, r), unused: !current)],
-                                  icon: icon, checked: current,
-                                  enabled: !current && inRange,
-                                  dimmed: !isHotspot && !current && !inRange,
-                                  staleNumbers: !current)
-            if let ssid, key != "wired", ssid != Config.hotspotSSID { wifiRows.append((row, ssid)) }
-            if isHotspot { frame(row, sims.compactMap { $0.view as? MenuRowView }) }
-            if !current, inRange, let ssid, key != "wired" { row.onClick = { [weak self] in self?.join(ssid, password: nil) } }
-            // The header said what the numbers are; the tooltip says it now (Victor, 2026-11-08).
-            row.toolTip = r.maxDown == 0 && r.maxUp == 0 && r.latencyMs == nil && r.speedDown == nil ? "Not measured yet"
-                : !current && r.speedDown != nil
-                ? "⚡ ↓ from the last speed test on it; ↑ upload (5 s average) and ↕︎ latency to 1.1.1.1, best over the last hour spent on it"
-                : (current ? "Best over the last hour" : "Best over the last hour spent on it")
-                + ": ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
+        if let here {
+            let wired = here.id.kind == "wired"
+            let row = MenuRowView(name: wired ? "Ethernet" : net.ssid ?? "Wi-Fi",
+                                  columns: [cell(here.record, "now", unused: false)],
+                                  icon: wired ? Icons.wired() : Icons.wifi(strength: net.rssi.map(NetworkLookPolicy.strength(rssi:)) ?? 0),
+                                  checked: true, enabled: false)
+            row.toolTip = "The network this Mac is on, best over the last hour: ↓ download and ↑ upload (5 s average), ↕︎ latency to 1.1.1.1"
             items.append(NSMenuItem(view: row))
-            items += sims
-            if key == "wired", shown.count > 1 { items.append(.separator()) }
         }
-        return items
+        guard hasHotspot else { return items }
+        // The hotspot's numbers are its SIMs', on their rows under it (Victor, 2026-11-08), each
+        // SIM's roaming allowance right under it, in the same frame (Victor, 2026-11-12). Not
+        // clickable: Start / Stop is the button at the top, joining it is macOS's Wi-Fi menu.
+        let sims = zip(simEntries, simRowViews(simEntries, cell: cell)).flatMap { e, row in
+            [NSMenuItem(view: row)] + (simRoamingRow(e.name).map { [NSMenuItem(view: $0)] } ?? [])
+        }
+        let head = MenuRowView(name: Config.hotspotSSID, icon: Icons.hotspot(), checked: hotspotJoined, enabled: false)
+        frame(head, sims.compactMap { $0.view as? MenuRowView })
+        items.append(NSMenuItem(view: head))
+        return items + sims
     }
 
     /// One SIM row under the hotspot, worked out before any row is drawn: its numbers set the menu's width.
@@ -428,7 +349,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// The SIMs' signal from the phone's `/status` off the hotspot: over the home Wi-Fi (`PhoneLan`)
     /// or Bluetooth (`PhoneRoamingMonitor`), every 10 / 20 min and once more at each menu opening.
-    var offHotspotSignal: PhoneSignal?
+    var offHotspotSignal: PhoneSignal? {
+        get { net.offHotspotSignal }
+        set { net.offHotspotSignal = newValue; refreshIcon() }
+    }
 
     /// Under the hotspot while it is in use: the phone's SIMs, in the same bars as the menu bar,
     /// ✓ on the one carrying the data (Victor, 2026-11-08). The switch stays his, on the phone.
@@ -509,93 +433,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    /// "More…" — a real submenu with every other Wi-Fi in range (Victor,
-    /// 2026-11-05; it unfolded inline until then), redrawn as the scans come in.
-    /// Before the name, proof that it is really looking: a spinner while a scan
-    /// runs, then the networks in that submenu in the same spot — "5 More…"
-    /// (Victor, 2026-11-06: nothing on the right, no "in range", no "now").
-    private func otherNetworksRow() -> NSMenuItem {
-        let row = MenuRowView(name: "More…",
-                              trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
-        row.statusBeforeName = true
-        moreRow = row
-        updateMoreStatus()
-        let item = NSMenuItem(view: row)
-        let others = NSMenu()
-        others.autoenablesItems = false
-        item.submenu = others
-        othersMenu = others
-        othersDrawn = nil
-        refreshOthers()
-        return item
-    }
-
-    private weak var moreRow: MenuRowView?
-
-    private func updateMoreStatus() {
-        guard let row = moreRow else { return }
-        let failure = net.scanning ? nil : net.lastScan?.error
-        row.toolTip = failure.map { "Scan failed: \($0)" }
-        if net.scanning {
-            row.setStatus("", spinning: true)
-        } else if let l = net.lastScan {
-            row.setStatus(l.error != nil ? "⚠︎" : "\(otherNetworks().count)", spinning: false)
-        } else {
-            row.setStatus("", spinning: false)
-        }
-    }
-
-    /// In range and not already in the list above.
-    private func otherNetworks() -> [(ssid: String, rssi: Int, secure: Bool)] {
-        let listed = Set(traffic.book.records.keys.filter { $0.hasPrefix("wifi:") }.map { String($0.dropFirst(5)) })
-            .union(net.knownSSIDs()).intersection(net.reachableSSIDs())
-        return net.scanResults().filter { !listed.contains($0.ssid) && $0.ssid != net.ssid }
-    }
-
-    /// Redrawn only when the list changed: replacing a row takes the highlight off
-    /// the one under the pointer.
-    private func refreshOthers() {
-        guard let othersMenu else { return }
-        let others = otherNetworks()
-        let drawn = "\(net.wifiPower)|" + others.map {
-            "\($0.ssid)|\(NetworkLookPolicy.strength(rssi: $0.rssi))|\($0.secure)"
-        }.joined(separator: "|")
-        guard drawn != othersDrawn else { return }
-        othersDrawn = drawn
-        netInfo("🛜 More: \(others.count) other networks in range")
-        othersMenu.removeAllItems()
-        if others.isEmpty {
-            othersMenu.addItem(NSMenuItem(view: MenuRowView(name: net.wifiPower ? "Searching…" : "Wi-Fi is off",
-                                                            enabled: false, dimmed: true, width: 160)))
-        }
-        // As narrow as its longest name (Victor, 2026-11-08): no numbers here to line up.
-        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        let longest = others.map { ($0.ssid as NSString).size(withAttributes: [.font: font]).width }.max() ?? 80
-        let width = (MenuRowLayout.nameX + longest + 40).rounded(.up)
-        for n in others {
-            let lock = n.secure ? NSImage(systemSymbolName: "lock.fill", accessibilityDescription: "secured") : nil
-            let row = MenuRowView(name: n.ssid, icon: Icons.wifi(strength: NetworkLookPolicy.strength(rssi: n.rssi)),
-                                  trailing: lock, width: width)
-            row.onClick = { [weak self] in self?.joinOther(n.ssid, secure: n.secure) }
-            othersMenu.addItem(NSMenuItem(view: row))
-        }
-    }
-
     private func frame(_ head: MenuRowView, _ children: [MenuRowView]) {
         head.groupEdge = children.isEmpty ? .single : .top
         for (i, c) in children.enumerated() { c.groupEdge = i == children.count - 1 ? .bottom : .middle }
-    }
-
-    /// The Wi-Fi rows on screen, whose arcs follow each scan: the menu opens before the first
-    /// scan of its own is back, so a network not joined had no strength yet (Victor, 2026-11-08).
-    private var wifiRows: [(row: MenuRowView, ssid: String)] = []
-
-    private func updateWifiArcs() {
-        let rssi = Dictionary(net.scanResults().map { ($0.ssid, $0.rssi) }, uniquingKeysWith: max)
-        for (row, ssid) in wifiRows {
-            guard let level = ssid == net.ssid ? net.rssi : rssi[ssid] else { continue }
-            row.setIcon(Icons.wifi(strength: NetworkLookPolicy.strength(rssi: level)) ?? NSImage())
-        }
     }
 
     /// What each SIM gave this Mac where it is now (`SimLog`), by the SIM's own name.
@@ -741,59 +581,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         climbTimer = nil
     }
 
-    private func join(_ ssid: String, password: String?) {
-        netInfo("🛜 joining \(ssid)")
-        net.join(ssid, password: password) { [weak self] error in
-            if let error {
-                // macOS lists the network but gives `networksetup` no password for it
-                // (airportd: "Missing password", tmpErr): asked once, then `WifiPasswords`.
-                if JoinFailure.lacksPassword(error, typedOne: password != nil), let pw = Prompt.wifiPassword(ssid) {
-                    self?.join(ssid, password: pw)
-                    return
-                }
-                return Prompt.show("Could not join \(ssid)", error)
-            }
-            netInfo("🛜 joined \(ssid)")
-            // A new network must stay known to macOS (Known Networks + keychain),
-            // so it auto-joins later with or without this app (Victor, 2026-10-21).
-            // Checked, not assumed: if the join did not remember it, add it.
-            guard let password else { return }
-            WifiPasswords.store(password, for: ssid)
-            self?.net.refresh()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                guard let self else { return }
-                netInfo("🛜 storing \(ssid) in the known networks")
-                self.net.remember(ssid, password: password) { error in
-                    netInfo("🛜 remember \(ssid): \(error ?? "ok")")
-                }
-            }
-        }
-    }
-
-    /// A network this Mac does not know: an open one is joined straight away, a
-    /// secured one asks for its password first (`Prompt.wifiPassword`); macOS
-    /// keeps it in the keychain once joined. System Settings › Wi-Fi was tried
-    /// for one evening (2026-10-21) and rejected: Victor wants the join right here.
-    private func joinOther(_ ssid: String, secure: Bool) {
-        guard secure else { return join(ssid, password: nil) }
-        guard let pw = Prompt.wifiPassword(ssid) else { return }
-        join(ssid, password: pw)
-    }
-
-    private func wifiSwitchRow() -> NSMenuItem {
-        let row = MenuSwitchRow(title: "Wi-Fi", on: net.wifiPower)
-        row.onChange = { [weak self] on in
-            self?.net.setWifiPower(on) { error in
-                netInfo("🛜 Wi-Fi \(on ? "on" : "off")\(error.map { " — \($0)" } ?? "")")
-            }
-        }
-        return NSMenuItem(view: row)
-    }
-
-    @objc private func openWifiSettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.wifi-settings-extension")!)
-    }
-
     // MARK: - Roaming
 
     /// Only roaming counts (at home the data is unlimited): what is left, of how
@@ -845,7 +632,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
     }
 
-    /// The two rows that pick a network by themselves, roaming or not.
+    /// The two rows that move this Mac on or off the phone's hotspot by themselves, roaming or not.
     private func addAutoJoinRows() {
         if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
             let prefer = action("Prefer \(home) over \(Config.hotspotSSID)", #selector(togglePreferred))
@@ -938,17 +725,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
-    /// The menu bar's cable glyph (◀ ‐ ‐ ▶), tinted with the link's state:
-    /// green with an address, yellow cable-in-no-IP, grey unplugged.
-    static func wiredRowIcon(_ state: WiredLinkState) -> NSImage? {
-        let color: NSColor = switch WiredLinkPolicy.tint(state) {
-        case .green: .systemGreen
-        case .yellow: .systemYellow
-        case .gray: .systemGray
-        }
-        return Icons.tinted(Icons.wired(), color)
-    }
-
     /// `GET /test/menu/open?close=N` — open as a click would, closing itself:
     /// the close is armed before opening, since nothing else reaches the main
     /// thread while the menu tracks.
@@ -964,12 +740,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return menu.items.map(\.title)
     }
 
-    /// `GET /test/more-row` — the Wi-Fi switch, the network rows as they are now plus
-    /// sample ones, and the rows with a status, drawn off-screen in each state on a
-    /// light and a dark menu, to look at without opening the menu.
-    func renderMoreRowForTest() -> String? {
+    /// `GET /test/menu/render` — the hotspot button in each state, the rows as they are now plus
+    /// sample ones, drawn off-screen on a light and a dark menu, to look at without opening the menu.
+    func renderRowsForTest() -> String? {
         let rows: [(name: String, status: String, spinning: Bool)] = [
-            ("More…", "", true), ("More…", "5", false), ("More…", "14", false), ("More…", "⚠︎", false),
             ("Start Hotspot", "asking phone 38s", true), ("Start Hotspot", "joining 47s", true),
             ("Start Hotspot", "retrying in 23s", false), ("Start Hotspot", "Start Hotspot", false),
         ]
@@ -986,7 +760,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 row.setStatus(b == .asking ? "18s" : b == .starting ? "41s" : "", spinning: !b.clickable)
                 return row
             }
-            out += [MenuSwitchRow(title: "Wi-Fi", on: true), MenuSwitchRow(title: "Wi-Fi", on: false)]
             out += networkRows().compactMap(\.view)
             let head = MenuRowView(name: "victor", icon: Icons.hotspot(), checked: true)
             out.append(head)
@@ -1014,14 +787,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             }
             frame(off, Array(out.suffix(2)).compactMap { $0 as? MenuRowView })
             out.append(MenuRowView(name: "Hotel-Guest-Wireless-5G", columns: [samples[0]],
-                                   icon: Icons.wifi(strength: 2)))
-            out.append(MenuRowView(name: "tzutze", columns: [samples[1]],
-                                   icon: Icons.wifi(strength: 3), dimmed: true))
+                                   icon: Icons.wifi(strength: 0.5), checked: true, enabled: false))
+            out.append(MenuRowView(name: "Ethernet", columns: [samples[1]],
+                                   icon: Icons.wired(), checked: true, enabled: false))
             for r in rows {
-                let row = r.name == "More…"
-                    ? MenuRowView(name: r.name, trailing: NSImage(systemSymbolName: "chevron.right", accessibilityDescription: nil))
-                    : MenuRowView(name: Config.hotspotSSID, icon: Icons.hotspot())
-                row.statusBeforeName = r.name == "More…"
+                let row = MenuRowView(name: Config.hotspotSSID, icon: Icons.hotspot())
                 row.setStatus(r.status, spinning: r.spinning)
                 out.append(row)
             }
@@ -1054,16 +824,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         guard let rep = board.bitmapImageRepForCachingDisplay(in: board.bounds) else { return nil }
         board.cacheDisplay(in: board.bounds, to: rep)
         guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
-        let url = Config.directory.appendingPathComponent("more-row-test.png")
+        let url = Config.directory.appendingPathComponent("menu-render-test.png")
         try? png.write(to: url)
         return url.path
     }
 
     /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.
-    /// `wired=1` renders the cable glyph and the three tinted row icons instead.
-    func renderIconForTest(wired: Bool = false) -> String? {
-        guard let current = statusItem.button?.image else { return nil }
-        let icon = wired ? Icons.wired() : current
+    func renderIconForTest() -> String? {
+        guard let icon = statusItem.button?.image else { return nil }
         let scale: CGFloat = 8, pad: CGFloat = 4
         let cell = NSSize(width: (icon.size.width + 2 * pad) * scale, height: (icon.size.height + 2 * pad) * scale)
         let out = NSImage(size: NSSize(width: cell.width * 2, height: cell.height))
@@ -1076,13 +844,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 let img = icon.isTemplate ? Icons.tinted(icon, .labelColor) : icon
                 img.draw(in: NSRect(x: r.minX + pad * scale, y: pad * scale,
                                     width: icon.size.width * scale, height: icon.size.height * scale))
-                if wired {
-                    for (k, state) in [WiredLinkState.connected(ip: ""), .noAddress, .disconnected].enumerated() {
-                        Self.wiredRowIcon(state)?.draw(in: NSRect(x: r.minX + 6 + CGFloat(k) * 62, y: 6, width: 40, height: 32))
-                    }
-                    Icons.hotspot().map { Icons.tinted($0, .labelColor) }?
-                        .draw(in: NSRect(x: r.maxX - 60, y: 4, width: 48, height: 48))
-                }
             }
         }
         out.unlockFocus()
@@ -1184,62 +945,4 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func quitAction() { NSApp.terminate(nil) }
-}
-
-/// Small modal questions. The app has no window, so it is brought forward first.
-enum Prompt {
-    /// The Wi-Fi password, **in clear by default** with a "Hide password" box
-    /// (Victor, 2026-10-21: the other way round from macOS), in big type.
-    static func wifiPassword(_ ssid: String) -> String? {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Join “\(ssid)”"
-        alert.informativeText = ""
-        let font = NSFont.systemFont(ofSize: 18)
-        let box = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 92))
-        let caption = NSTextField(labelWithString: "Password")
-        caption.font = .systemFont(ofSize: 16, weight: .medium)
-        caption.frame = NSRect(x: 0, y: 66, width: 340, height: 22)
-        let plain = NSTextField(frame: NSRect(x: 0, y: 30, width: 340, height: 30))
-        let secret = NSSecureTextField(frame: plain.frame)
-        for f in [plain, secret] { f.font = font; f.placeholderString = "Wi-Fi password" }
-        secret.isHidden = true
-        let hide = NSButton(checkboxWithTitle: "Hide password", target: nil, action: nil)
-        hide.font = .systemFont(ofSize: 15)
-        hide.frame = NSRect(x: 0, y: 0, width: 340, height: 22)
-        let toggler = HideToggler(plain: plain, secret: secret)
-        hide.target = toggler
-        hide.action = #selector(HideToggler.toggle(_:))
-        [caption, plain, secret, hide].forEach(box.addSubview)
-        alert.accessoryView = box
-        alert.addButton(withTitle: "Join")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = plain
-        let ok = alert.runModal() == .alertFirstButtonReturn
-        _ = toggler
-        return ok ? (secret.isHidden ? plain.stringValue : secret.stringValue) : nil
-    }
-
-    /// Swaps the clear field for the secure one, keeping what was typed.
-    private final class HideToggler: NSObject {
-        let plain: NSTextField, secret: NSSecureTextField
-        init(plain: NSTextField, secret: NSSecureTextField) { self.plain = plain; self.secret = secret }
-        @objc func toggle(_ sender: NSButton) {
-            let hide = sender.state == .on
-            if hide { secret.stringValue = plain.stringValue } else { plain.stringValue = secret.stringValue }
-            plain.isHidden = hide
-            secret.isHidden = !hide
-            (hide ? secret : plain).window?.makeFirstResponder(hide ? secret : plain)
-        }
-    }
-
-    static func show(_ title: String, _ text: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = text
-        alert.runModal()
-    }
-
-
 }

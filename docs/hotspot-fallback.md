@@ -443,7 +443,7 @@ the cursor, and a click 9 s later landed on "Stop Hotspot" (the second Stop in t
 
 Victor: *„scoate separat acțiunea de Start hotspot, și după ce app-ul de pe tel a recepționat
 comanda, să se vadă Starting Hotspot … în afara listei de rețele"*. So Start/Stop is now **one
-row at the very top**, above the Wi-Fi switch, where nothing above it changes height:
+row at the very top**, where nothing above it changes height:
 
 | title | when | click |
 |---|---|---|

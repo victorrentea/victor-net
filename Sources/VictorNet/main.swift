@@ -240,14 +240,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // outcome in the log (`📶 *123# →`, then `📶 Vodafone says`).
             DispatchQueue.main.async { self.menu?.askVodafoneNow() }
             return (200, "{\"ok\":true}")
-        case "/test/more-row":
+        case "/test/menu/render":
             var path = ""
-            onMain { path = self.menu?.renderMoreRowForTest() ?? "" }
+            onMain { path = self.menu?.renderRowsForTest() ?? "" }
             return (200, HttpServer.json(["png": path]))
         case "/test/icon":
             // The current icon, 8× on a light and a dark bar, to look at.
             var path = ""
-            onMain { path = self.menu?.renderIconForTest(wired: query["wired"] == "1") ?? "" }
+            onMain { path = self.menu?.renderIconForTest() ?? "" }
             return (200, HttpServer.json(["png": path]))
         case "/test/menu/rows":
             var rows: [String] = []

@@ -254,66 +254,6 @@ final class MenuRowView: NSView {
     }
 }
 
-/// "Wi-Fi" in bold with a switch on the right — macOS's first line.
-final class MenuSwitchRow: NSView {
-    private let toggle = AccentSwitch()
-    var onChange: ((Bool) -> Void)?
-
-    init(title: String, on: Bool) {
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuRowLayout.width, height: 34))
-        let l = NSTextField(labelWithString: title)
-        l.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        l.frame = NSRect(x: MenuRowLayout.checkX + 4, y: 9, width: 150, height: 17)
-        addSubview(l)
-        toggle.state = on ? .on : .off
-        toggle.frame.origin = NSPoint(x: MenuRowLayout.width - toggle.frame.width - 14, y: (34 - toggle.frame.height) / 2)
-        toggle.target = self
-        toggle.action = #selector(changed)
-        addSubview(toggle)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    @objc private func changed() { onChange?(toggle.state == .on) }
-}
-
-/// NSSwitch drawn by hand: in a menu, whose window is never key, NSSwitch shows its
-/// inactive grey even when on. This one is blue when on, like macOS's own Wi-Fi menu (Victor, 2026-10-26),
-/// and shaped like macOS 26's small NSSwitch: 44×20, a flattened capsule knob 26×16 inset by 2
-/// (Victor, 2026-11-08: the round knob looked unlike the system's), measured off a rendered NSSwitch.
-final class AccentSwitch: NSControl {
-    var state: NSControl.StateValue = .off { didSet { needsDisplay = true } }
-
-    init() { super.init(frame: NSRect(x: 0, y: 0, width: 44, height: 20)) }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let on = state == .on
-        let track = bounds
-        (on ? NSColor.controlAccentColor : NSColor.labelColor.withAlphaComponent(0.15)).setFill()
-        NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
-        let h = track.height - 4, w = (h * 26 / 16).rounded()
-        let knob = NSRect(x: on ? track.maxX - w - 2 : track.minX + 2, y: track.minY + 2, width: w, height: h)
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 2
-        shadow.shadowOffset = NSSize(width: 0, height: -0.5)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.3)
-        shadow.set()
-        NSColor.white.setFill()
-        NSBezierPath(roundedRect: knob, xRadius: h / 2, yRadius: h / 2).fill()
-        NSGraphicsContext.restoreGraphicsState()
-    }
-
-    override func mouseDown(with event: NSEvent) {}
-
-    override func mouseUp(with event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        state = state == .on ? .off : .on
-        sendAction(action, to: target)
-    }
-}
-
 extension NSMenuItem {
     convenience init(view: NSView) {
         self.init()

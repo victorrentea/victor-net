@@ -1,28 +1,34 @@
-# Victor Net — the menu bar network icon
+# Victor Net — the phone's icon in the menu bar
 
 Extracted from Victor Addons on 2026-10-20 (Victor: *"not enough features to deserve its
-own project … call it Victor Net"* — and then, about them, that they did). It replaces the
-system Wi-Fi item, which Victor takes out of the menu bar.
+own project … call it Victor Net"* — and then, about them, that they did).
 
-## The icon
+**Only the phone since 2026-11-12.** For three weeks it also stood in for the system Wi-Fi item
+(the list of networks, joining them, the Wi-Fi switch). Victor: *"we are overburdening the same
+application with too many responsibilities … the selection of Wi-Fi networks will be done from the
+classical menu in Mac, and this application will remain only responsible for the integration with
+the phone."* The system Wi-Fi item is back in the menu bar; what went: the networks of today and in
+range, *More…*, joining with its password dialog, the Wi-Fi switch, *Wi-Fi Settings…*, the cable /
+Wi-Fi / offline icons. It stays its own app, not merged back into Victor Addons: each one's
+deploys would restart the other.
+
+## The icon: the phone's bars, always
 
 | the Mac is on…        | icon |
 |-----------------------|------|
-| a cable with an address | `< ‐ ‐ >` — open angle brackets, two dashes |
-| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s, with the data SIM's type small over the short bars like on the phone (`5G`, `4G` — the phone's `LTE` shown as Samsung does, `3G`, `2G`; Victor, 2026-11-11); while the phone roams, a small yellow ⚠ in their top-left corner under 5 GB left, a red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot) |
-| any other Wi-Fi       | the system Wi-Fi symbol, arcs filled by RSSI (−50 dBm full, −90 empty) |
-| nothing               | Wi-Fi slashed |
+| the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s, with the data SIM's type small over the short bars like on the phone (`5G`, `4G` — the phone's `LTE` shown as Samsung does, `3G`, `2G`; Victor, 2026-11-11) |
+| the hotspot, with no internet behind it | the bars empty, a red **!** in their corner |
+| anything else, or nothing | the bars of the phone's **last answer, faded** (45 %): `/status` over the home Wi-Fi or Bluetooth, at most 15 min old (`NetworkLookPolicy.awayFreshFor`); without one, four faint bars |
 
-**On the hotspot, the Mac↔phone Wi-Fi gets a glyph of its own only when it is weak**
-(RSSI < −70 dBm, `NetworkLookPolicy.weakHotspotRSSI`). The phone is normally beside the
-laptop; a second icon that always says "fine" is menu bar clutter. When the phone has been
-left in another room, that link is the bottleneck, and then it shows.
+On both, while the phone roams: a small yellow ⚠ in the bars' top-left corner under 5 GB left, a
+red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot). The route
+itself (which Wi-Fi, how strong, the cable) is macOS's icon next to it.
 
 **No GB in the menu bar, and no pill on screen** (Victor, 2026-10-20): the badge says whether
 to worry; the numbers are in the menu. The red bottom-left pill of Victor Addons was dropped.
 
-A cable without an address (DHCP never answered) is not "wired": the icon follows the route
-the bytes actually take.
+A cable without an address (DHCP never answered) is not "wired": the menu's *this network*
+row and the book follow the route the bytes actually take.
 
 ## How the phone's bars get here
 
@@ -50,30 +56,25 @@ has a larger bandwidth and a lower latency than my hotspot."*
 me."*): every number is read when the menu opens and does not move while it is open. No
 charts. **One exception** (Victor, 2026-10-29): when the Mac moves to another network while
 the menu is open — the hotspot comes up, say — the network rows are redrawn in place
-(`refreshNetworksIfChanged`, checked every second), so the ✓ and the new row show up. The
-figures sit in **real tables** — an `NSGridView` as the row's view
-(`MenuTable`), numbers right-aligned in monospaced digits.
+(`refreshNetworksIfChanged`, checked every second), so the ✓ and the new row show up.
 
 ```
 ((o)) Start Hotspot                     retrying in 23s  ← the hotspot button, alone at the top (2026-11-11), see below
 ──────────
-Wi-Fi                                         [ON]  ← macOS's first line: switch drawn like macOS 26's small one (44×20, capsule knob)
-╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its SIMs (2026-11-08); a network like the others: in range and not in use, click = join
+✓ wifi Hotel-G…   3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ now │  ← **this network, now**: the one row left of the list, to hold against the SIMs;
+                                                        Ethernet with the cable glyph; not there on the hotspot (its numbers are the data SIM's);
+                                                        "Offline 4 min" in its place when offline; never clickable
+╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its SIMs (2026-11-08); ✓ while this Mac is on it; not clickable
 │   ✓ ⁴ᴳ▂▄▆₃ₛ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
 ╰     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
-   (off, on any other Wi-Fi or the cable too: under victor, both SIMs always, numbers in grey — measured here
-    before (`SimLog`, by GPS place), else its best anywhere (`sim:<name>`), else none; bars only from a real
-    reading ≤ 15 min old — the phone's `/status` off the hotspot — else no icon. Each opening asks for it
-    (at most once in 30 s): over the home Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars and their
-    age then update in the open menu)
+   (off the hotspot, on any Wi-Fi or the cable: both SIMs always, numbers in grey — only what was measured here
+    before (`SimLog`, by GPS place), else none; bars only from a real reading ≤ 15 min old — the phone's
+    `/status` off the hotspot — else no icon. Each opening asks for it (at most once in 30 s): over the home
+    Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars and their age then update in the open menu)
    the SIM bars like the phone's (Victor, 2026-11-11): its type (5G / 4G) over the short bars, the reading's age
     ("3s") at their bottom-right, after them; the name moves right by that much (`Icons.cellularWithAgeWidth`)
-   ⚡ before a row's numbers (any network or SIM not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
-  wifi tzutze    3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 2 h    ← today, out of range: greyed, not clickable
-  wifi Hotel-G…  3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ 3 days ← Wi-Fi arcs at its strength; click = join; tooltip: best over the last hour (spent on it)
-5 More…                                        ›   ← submenu: all others in range, live; ◌ instead of 5 while scanning
+   ⚡ before a SIM's numbers (not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
 ──────────
-⚙ Wi-Fi Settings…
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
 ✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
 ⚡ Run speed test (25MB)                             ← 10MB on the hotspot
@@ -93,24 +94,10 @@ Quit                                                ← no ⌘Q: its column wide
   acts — none of which AppKit gives a view-backed item. 320 pt wide like the native menu, wider
   only as far as the widest number cell shown needs (`MenuRowLayout.cellWidth`, measured at
   every open; the numbers carry their units since 2026-11-08). Thin spaces around the `⋅`.
-- **More is a submenu** ("Other Networks" until 2026-10-21; unfolded inline until 2026-11-05):
-  its rows follow the scans while it is open, redrawn only when the list changed; 🔒 = secured. A secured network this Mac does not know asks for its password in
-  the app's own dialog: big type, the password **in clear by default**, a "Hide password" box
-  (Victor, 2026-10-21; handing over to System Settings › Wi-Fi was tried and rejected).
-- **Proof that it is searching** (Victor, 2026-10-21: *"prove me that you're searching"*):
-  before "More…", a spinner alone while a CoreWLAN scan is in flight, then in the same spot
-  the number of networks in that submenu ("5 More…"), or ⚠︎ if the scan failed; nothing on the
-  right but the chevron (Victor, 2026-11-06). Scans run only while the menu is open,
-  back to back (a new one once the last is over, at most every 2 s from its start), submenu
-  open or not — never in the background (a scan takes ~5 s and briefly stalls the link).
-  `GET /test/state` → `network.scan`; `GET /test/more-row` draws the row in both states.
-
-- **Laid out like macOS's own Wi-Fi menu**, which it is meant to replace for daily use: the
-  known/measured networks in range with their numbers, *More* (all in range,
-  strongest first, a password asked only for a secured network this Mac does not know), and
-  the Wi-Fi switch (`networksetup -setairportpower`, no admin). Captive portals and hidden
-  networks stay with *Wi-Fi Settings…*.
-- **Narrow table**: numbers only, the unit in the header (`↓ MB/s`), "seen" for the last time.
+- **The only scan left** is for the hotspot's name, so the button knows Start from Stop: while
+  the menu is open and this Mac is not on the hotspot, at most every 5 s (a scan takes ~5 s and
+  briefly stalls the link). `PreferredWifi` scans for home on its own clock. `GET /test/state` →
+  `network.scan`; `GET /test/menu/render` draws the button's states and the rows to a PNG.
 - **Roaming is one group**, Pause Claude included. Native ticks now (the check column is there
   anyway for the network ✓).
 - **The speed test is a line near the bottom**, out of the way.
@@ -118,26 +105,13 @@ Quit                                                ← no ⌘Q: its column wide
   (≥ −90 → 4, ≥ −100 → 3, ≥ −110 → 2, ≥ −120 → 1). At −102 dBm the S24 showed 2/4 while
   Android's `SignalStrength.level` said 3 (AOSP's LTE thresholds are −98/−108/−118).
 
-- **Ethernet first, a separator under it** (Victor, 2026-11-09): when there is a cable row, it heads the
-  list and a line sets it apart from the Wi-Fis.
-- **No Wired / Wi-Fi / Phone status rows** (Victor: the icon and the ✓ already say it).
-- **One row per network, clickable** (`networkRows`, order in `NetworkBookPolicy.listed`): the
-  one in use, then **every network this Mac was on today**, latest first (Victor, 2026-11-06),
-  then every Wi-Fi **in range** (the last scan, `cachedScanResults`; a fresh scan starts in the
-  background each time the menu opens) that this Mac knows (*Known networks*) or has measured.
-  ✓ = the one in use; a click on another **joins it** (`networksetup -setairportnetwork`,
-  password from the keychain). Today's out of range, Ethernet unplugged included, stays greyed
-  and not clickable; older ones go off the list, but their numbers stay in the book and return
-  with them. Rows, not a grid view, because a grid row cannot be clicked.
+- **Other networks are not listed** (2026-11-12). The book (`~/.victor-net/networks.json`) still
+  files every network's best numbers as before; only the one in use is shown.
 - **The cable glyph** is `< ‐ ‐ >` — open angle brackets and two dashes (after filled, then
-  hollow triangles were turned down) — the same in the menu bar and, tinted green / yellow /
-  grey, on the Ethernet row.
+  hollow triangles were turned down), on the Ethernet row.
 
-- **One table, every network, in the main menu** (Victor, 2026-10-20: *"not a submenu, right
-  in the main screen"*) — the current one in bold, its row fresh from the live window. No
-  "avg over 5s" column and no ⚡ column any more: a row is a network's **best 5 s average**
-  of the day (a sustained rate, not one spike), its latency and when it was **last seen**
-  (`now`, `35 min`).
+- **A row's numbers** are a network's (or a SIM's) **best 5 s average** of the last hour (a
+  sustained rate, not one spike), its latency and when it was **last seen** (`now`, `35 min`).
 - **↓ / ↑** Sampled all the time, once a second, from the
   `en*` interfaces' kernel counters (`getifaddrs` — what `netstat -ib` prints): it costs
   nothing measurable, and it is why the window is full when the menu opens. `utun*` is
@@ -150,9 +124,9 @@ Quit                                                ← no ⌘Q: its column wide
 - **All numbers in MB/s, two decimals** in every table — a column mixing KB/s and MB/s
   cannot be read across (Victor, 2026-10-20). The current network's name heads the first
   column of the main table.
-- **🗂️ Compare networks** — every network's best of the day, last speed test, median latency
-  and when it was last seen (`~/.victor-net/networks.json`), current one in bold. Keyed by
-  SSID; an unnamed Wi-Fi (no Location grant) is not filed.
+- **The book** (`~/.victor-net/networks.json`) keeps every network's best, last speed test and
+  median latency, keyed by SSID; an unnamed Wi-Fi (no Location grant) is not filed. Only the
+  network in use and the SIMs are shown from it.
 - **No busiest-apps section for now** (Victor, 2026-10-20). `TrafficPolicy` still holds the
   `nettop -d` parsing (no `-P`: its pipe output is block-buffered and the per-process summary
   alone never filled the 4 KB buffer), ready for when it comes back.
@@ -187,7 +161,7 @@ its hotspot. **The items sit in the main menu**, not a submenu:
 ## Settings and permissions
 
 `~/.victor-net/config.env` (see `Config.swift`). Without a phone address the phone rows and
-features stay off; the icon, Wi-Fi/wired rows and traffic work on any Mac.
+features stay off; the *this network* row and the traffic numbers work on any Mac.
 
 macOS asks once for **Bluetooth** (the phone's beacon) and **Location** — CoreWLAN returns the
 SSID only to apps holding Location, and without the SSID the hotspot cannot be told from any
@@ -205,21 +179,18 @@ Twice that evening `airportd` stopped answering for minutes (`networksetup -geta
 hung too, `airportd` at 0% CPU), and Victor Net froze: the main thread sat in
 `CWFInterface.SSID` (XPC to `airportd`) from `RoamingDataWatch.tick`, so the menu and the icon
 were dead. Every CoreWLAN read now runs on `NetworkState`'s `readQueue` into a `WifiSnapshot`
-(ssid, rssi, power, last scan, known networks); the main thread reads only the snapshot, and a
+(ssid, rssi, last scan); the main thread reads only the snapshot, and a
 read still hanging is skipped, not queued. `GET /test/state` → `network.wifi_read_age_s` says
 how stale it is. If `airportd` itself is wedged: `sudo killall airportd` (launchd restarts it).
 It started while the menu scanned back to back; not proven to be the cause.
 
-After a join with a password the app stores it 3 s later with
-`networksetup -addpreferredwirelessnetworkatindex … WPA2` (logged as `🛜 remember`), so it
-auto-joins later, app or no app.
-
 A known network can still fail with `-3900 tmpErr`: macOS's own Wi-Fi menu can join it, but
 `airportd` gives `networksetup` no password (`Missing password for upper auth 8`,
 `hasPassword=0`), drops the current network, and auto-join returns to the top of the list. Seen
-2026-11-06 going from the hotspot back to the home Wi-Fi. Storing it in the known networks does
-not help. A click on such a row asks for the password once (`JoinFailure`), and every later join
-passes it from `~/.victor-net/wifi-passwords.json` (`WifiPasswords`, owner-only).
+2026-11-06 going from the hotspot back to the home Wi-Fi. That move is now only `PreferredWifi`'s,
+which passes the password from `~/.victor-net/wifi-passwords.json` (`WifiPasswords`, owner-only:
+`{"<ssid>": "<password>"}`). The menu's password dialog that filled it is gone with the list
+(2026-11-12): a new entry is added by hand.
 
 ## 🎵 The phone's music pauses while Walkie Talkie dictates (2026-10-29)
 

@@ -4,45 +4,34 @@ import XCTest
 /// The menu bar icon's decision, and the readouts around it.
 final class NetworkLookTests: XCTestCase {
 
-    func testCableWinsOverWifi() {
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .connected(ip: "10.0.0.2"), ssid: "Hotel", rssi: -50,
-                                              hotspotSSID: "phone", phoneLevel: nil), .wired)
+    private func signal(_ level: Int, ago: TimeInterval = 0) -> PhoneSignal {
+        PhoneSignal(level: level, dbm: nil, network: "LTE", operatorName: nil, readAt: Date() - ago)
     }
 
-    func testCableWithoutAddressIsNotTheRoute() {
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .noAddress, ssid: "Hotel", rssi: -50,
-                                              hotspotSSID: "phone", phoneLevel: nil), .wifi(strength: 1))
+    func testOnTheHotspotTheBarsAreThePhonesLiveOnes() {
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: true, live: signal(3), away: signal(1), now: Date()),
+                       .hotspot(level: 3))
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: true, live: nil, away: signal(1), now: Date()),
+                       .hotspot(level: nil), "no fresh word from the phone: faint bars, not an old answer")
     }
 
-    /// The phone is usually beside the laptop: its Wi-Fi only shows when weak.
-    func testHotspotShowsPhoneBarsAndWifiOnlyWhenWeak() {
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .disconnected, ssid: "phone", rssi: -45,
-                                              hotspotSSID: "phone", phoneLevel: 3), .hotspot(level: 3, weakWifi: nil))
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .disconnected, ssid: "phone", rssi: -78,
-                                              hotspotSSID: "phone", phoneLevel: 2),
-                       .hotspot(level: 2, weakWifi: NetworkLookPolicy.strength(rssi: -78)))
+    /// The icon is the phone's whatever this Mac is on: off the hotspot, its latest answer, faded.
+    func testOffTheHotspotTheBarsAreThePhonesLatestAnswer() {
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: signal(4, ago: 600), away: signal(2, ago: 60), now: Date()),
+                       .away(level: 2))
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: signal(4, ago: 30), away: signal(2, ago: 60), now: Date()),
+                       .away(level: 4), "just left the hotspot: its last reading is the newest")
     }
 
-    func testNoAssociationIsOffline() {
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .disconnected, ssid: nil, rssi: nil,
-                                              hotspotSSID: "phone", phoneLevel: nil), .offline)
-    }
-
-    /// No Location permission: associated, but no name — still Wi-Fi, never the hotspot.
-    func testUnnamedWifiIsPlainWifi() {
-        XCTAssertEqual(NetworkLookPolicy.look(wired: .disconnected, ssid: nil, rssi: -60,
-                                              hotspotSSID: "phone", phoneLevel: 4), .wifi(strength: 0.75))
+    func testOffTheHotspotAnAnswerOver15MinOldSaysNothing() {
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: signal(2, ago: 1000), now: Date()),
+                       .away(level: nil))
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: nil, now: Date()), .away(level: nil))
     }
 
     func testStrengthClamps() {
         XCTAssertEqual(NetworkLookPolicy.strength(rssi: -30), 1)
         XCTAssertEqual(NetworkLookPolicy.strength(rssi: -95), 0)
-    }
-
-    func testPhoneRow() {
-        let s = PhoneSignal(level: 3, dbm: -97, network: "LTE", operatorName: "Vodafone RO", readAt: Date())
-        XCTAssertEqual(NetworkLookPolicy.phoneRow(s, onHotspot: true), "📱 Phone: LTE · 3/4 · -97 dBm · Vodafone RO")
-        XCTAssertEqual(NetworkLookPolicy.phoneRow(s, onHotspot: false), "📱 Phone: not on its hotspot")
     }
 
     func testPhoneStatusParsesSignalAndRoaming() {
@@ -106,29 +95,6 @@ final class RateHistoryTests: XCTestCase {
                               latencyMs: 38.2, speedDown: 21_000_000, speedAt: now, lastSeen: now - 7200)
         XCTAssertEqual(NetworkBookPolicy.line(r, now: now),
                        "📱 phone — ↓ max 8.4 MB/s · ↑ max 1.1 MB/s · ⚡ 21.0 MB/s · 38 ms · 2 h ago")
-    }
-
-    func testTheListIsCurrentThenTodayLatestFirstThenTheRestInRange() {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 6, hour: 12))!
-        func record(_ ago: TimeInterval, down: Double = 0) -> NetworkRecord {
-            NetworkRecord(name: "", kind: "wifi", maxDown: down, lastSeen: now - ago)
-        }
-        let records = [
-            "wifi:current": record(0),
-            "wifi:today-earlier": record(4 * 3600),
-            "wifi:today-later": record(3600),
-            "wired": record(2 * 3600),
-            "wifi:old-slow-in-range": record(3 * 86_400, down: 1),
-            "wifi:old-fast-in-range": record(3 * 86_400, down: 9),
-            "wifi:yesterday-away": record(13 * 3600),
-        ]
-        let keys = NetworkBookPolicy.listed(records, current: "wifi:current",
-                                            reachable: ["old-slow-in-range", "old-fast-in-range"],
-                                            now: now, calendar: cal).map(\.key)
-        XCTAssertEqual(keys, ["wifi:current", "wifi:today-later", "wired", "wifi:today-earlier",
-                              "wifi:old-fast-in-range", "wifi:old-slow-in-range"])
     }
 }
 
