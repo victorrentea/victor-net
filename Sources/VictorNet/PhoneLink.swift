@@ -104,12 +104,6 @@ enum SimSignalPolicy {
         return n.count <= 3 ? n : nil
     }
 
-    /// The signal's age at the bars' bottom-right: `1s`…`59s`, then `3m`.
-    static func age(_ readAt: Date, now: Date) -> String {
-        let s = max(0, Int(now.timeIntervalSince(readAt)))
-        return s < 60 ? "\(s)s" : "\(s / 60)m"
-    }
-
     /// The data SIM first, then the others by name.
     static func ordered(_ sims: [SimSignal]) -> [SimSignal] {
         sims.sorted { a, b in a.isData != b.isData ? a.isData : a.name < b.name }

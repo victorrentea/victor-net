@@ -43,12 +43,6 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(sims.map(SimSignalPolicy.label), ["Vodafone RO", "Orange", "Maya"])
     }
 
-    func testSignalAge() {
-        let t = Date(timeIntervalSince1970: 1000)
-        XCTAssertEqual(SimSignalPolicy.age(t, now: t.addingTimeInterval(4.9)), "4s")
-        XCTAssertEqual(SimSignalPolicy.age(t, now: t.addingTimeInterval(185)), "3m")
-    }
-
     func testNetworkTypeAsThePhoneShowsIt() {
         XCTAssertEqual(SimSignalPolicy.generation("LTE"), "4G")
         XCTAssertEqual(SimSignalPolicy.generation("5G"), "5G")

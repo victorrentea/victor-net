@@ -136,7 +136,7 @@ final class MenuRowView: NSView {
                 add(l, x: MenuRowLayout.iconX - 4, width: 26)
             } else {
                 l.alignment = .right
-                add(l, x: frame.width - MenuRowLayout.statusRightInset - 150, width: 150)
+                add(l, x: frame.width - MenuRowLayout.statusRightInset - 220, width: 220)   // room for "🔋 100% ⚡ · 12 min ago · Internet"
             }
             statusLabel = l
             let s = NSProgressIndicator()

@@ -70,14 +70,14 @@ the menu is open — the hotspot comes up, say — the network rows are redrawn 
 │                                                       ticking and how it came: Hotspot (PhoneLink, 5 s), Wi-Fi (PhoneLan), BT (roaming poll), Internet (Railway)
 │     ⚠️ 1.2GB (9%) left at 20:30                  │  ← under each SIM, its roaming allowance on two lines (2026-11-12): what is left and when counted
 │        resets to 13.4GB on Dec 2               ↺ │     (the date too when not today), then the plan and its reset; a click on the second asks again
-│   ✓ ⁴ᴳ▂▄▆₃ₛ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
+│   ✓ ⁴ᴳ▂▄▆ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
 ╰     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
    (off the hotspot, on any Wi-Fi or the cable: both SIMs always, numbers in grey — only what was measured here
     before (`SimLog`, by GPS place), else none; bars only from a real reading ≤ 15 min old — the phone's
     `/status` off the hotspot — else no icon. Each opening asks for it (at most once in 30 s): over the home
-    Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars and their age then update in the open menu)
-   the SIM bars like the phone's (Victor, 2026-11-11): its type (5G / 4G) over the short bars, the reading's age
-    ("3s") at their bottom-right, after them; the name moves right by that much (`Icons.cellularWithAgeWidth`)
+    Wi-Fi (~0.3 s), else over Bluetooth (~3 s); the bars then update in the open menu)
+   the SIM bars like the phone's (Victor, 2026-11-11): its type (5G / 4G) over the short bars. The reading's age
+    stood at their bottom-right until 2026-11-12: the hotspot's row says how old the phone's word is, next to the battery
    ⚡ before a SIM's numbers (not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
 ──────────
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config

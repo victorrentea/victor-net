@@ -34,12 +34,11 @@ enum Icons {
 
     /// Four rising bars, `level` of them solid, the rest faint. No level = all faint.
     /// Like the phone's status bar (Victor, 2026-11-11): `network` ("5G", "4G") sits small in the empty
-    /// corner above the short bars, and `age` ("3s") at the bars' bottom-right, in a slot after them
-    /// (`ageSlot`, also kept empty so the SIM rows line up while no reading has come).
+    /// corner above the short bars. No age after them (Victor, 2026-11-12: the hotspot's row says it,
+    /// next to the battery; beside every SIM it distracted).
     /// `switchHint` draws a slanted ⇄ in the top corner instead: the other SIM has more bars (`SimSwitchHint`).
-    static func cellular(level: Int?, network: String? = nil, age: String? = nil, switchHint: Bool = false,
-                         ageSlot: Bool = false) -> NSImage {
-        let width = ageSlot || age != nil ? cellularWithAgeWidth : 17
+    static func cellular(level: Int?, network: String? = nil, switchHint: Bool = false) -> NSImage {
+        let width: CGFloat = 17
         let image = NSImage(size: NSSize(width: width, height: barHeight), flipped: false) { rect in
             let small: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 6.5, weight: .semibold),
@@ -59,10 +58,6 @@ enum Icons {
                 }
                 text.draw(at: NSPoint(x: 0, y: rect.height - NSAttributedString(string: base, attributes: small).size().height + 1.5))
             }
-            if let age {
-                let text = NSAttributedString(string: age, attributes: small)
-                text.draw(at: NSPoint(x: 17.5, y: 0.5))
-            }
             for i in 0..<4 {
                 let h = 4 + CGFloat(i) * 3
                 let bar = NSBezierPath(roundedRect: NSRect(x: 1 + CGFloat(i) * 4, y: 2, width: 3, height: h),
@@ -75,9 +70,6 @@ enum Icons {
         image.isTemplate = true
         return image
     }
-
-    /// The bars plus the age after them: room for "59s" / "12m".
-    static let cellularWithAgeWidth: CGFloat = 29
 
     /// ⇄ drawn as two thin arrows, slanted like italics, in `r` (the corner above the short bars).
     private static func switchArrows(in r: NSRect) {

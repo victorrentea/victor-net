@@ -427,12 +427,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let readAt = net.phoneSignal?.readAt ?? now
         simAgeRows = []
         return entries.map { e in
-            let icon = e.signal.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network, shown: $0.shown),
-                                                     age: SimSignalPolicy.age(readAt, now: now)) }
-                ?? e.bars.map { Icons.cellular(level: $0.level, network: $0.network,
-                                               age: SimSignalPolicy.age($0.readAt, now: now)) }
+            let icon = e.signal.map { Icons.cellular(level: $0.level, network: SimSignalPolicy.generation($0.network, shown: $0.shown)) }
+                ?? e.bars.map { Icons.cellular(level: $0.level, network: $0.network) }
                 // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
-                ?? NSImage(size: NSSize(width: Icons.cellularWithAgeWidth, height: Icons.barHeight))
+                ?? NSImage(size: NSSize(width: 17, height: Icons.barHeight))
             let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
                                   icon: icon, checked: e.isData, enabled: false, indent: MenuRowLayout.simIndent, staleNumbers: !e.isData)
             simAgeRows.append((row, e.name))
@@ -469,8 +467,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 .filter({ r in now.timeIntervalSince(r.readAt) < 900 && r.sims.contains { $0.name == name } })
                 .max(by: { $0.readAt < $1.readAt }) else { continue }
             let sim = s.sims.first { $0.name == name }
-            row.setIcon(Icons.cellular(level: sim?.level, network: SimSignalPolicy.generation(sim?.network, shown: sim?.shown),
-                                       age: SimSignalPolicy.age(s.readAt, now: now)))
+            row.setIcon(Icons.cellular(level: sim?.level, network: SimSignalPolicy.generation(sim?.network, shown: sim?.shown)))
         }
     }
 
@@ -796,7 +793,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             out.append(off)
             for (name, cellText) in [("Orange", "2.1↓MB/s\u{2009}⋅\u{2009}0.9↑MB/s\u{2009}⋅\u{2009}36↕︎ms\u{2009}⋅\u{2009}3 days"),
                                      ("Vodafone", "1.3↓MB/s\u{2009}⋅\u{2009}0.4↑MB/s\u{2009}⋅\u{2009}53↕︎ms\u{2009}⋅\u{2009}3 days")] {
-                out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil, ageSlot: true), enabled: false,
+                out.append(MenuRowView(name: name, columns: [cellText], icon: Icons.cellular(level: nil), enabled: false,
                                        indent: MenuRowLayout.simIndent, staleNumbers: true))
             }
             frame(off, Array(out.suffix(2)).compactMap { $0 as? MenuRowView })
