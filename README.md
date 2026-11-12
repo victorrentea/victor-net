@@ -3,8 +3,8 @@
 A macOS menu bar app for **the Android phone this Mac tethers to**. Picking a Wi-Fi stays with
 macOS's own menu.
 
-- the icon is **the phone's own cellular signal**: full while the Mac is on its hotspot, faded
-  from its last answer otherwise;
+- the icon is **the phone's own cellular signal**: live on its hotspot, from its last answer
+  (Bluetooth or the home Wi-Fi) otherwise;
 - the menu shows the network in use — best download/upload (5-second average), latency (a TCP
   handshake every 5 s), an on-demand speed test — next to the same figures for each of the
   phone's SIMs, so the hotel Wi-Fi and the hotspot can be held side by side.

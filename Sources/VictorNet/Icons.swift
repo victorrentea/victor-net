@@ -157,7 +157,7 @@ enum Icons {
         return image
     }
 
-    /// The hotspot glyph struck through — "✈️ Roaming: Auto-Stop Hotspot".
+    /// The hotspot glyph struck through: Stop Hotspot.
     static func hotspotOff() -> NSImage? {
         guard let base = hotspot() else { return nil }
         let image = NSImage(size: base.size, flipped: false) { r in
@@ -194,9 +194,6 @@ enum Icons {
         return image
     }
 
-    /// How strong the bars are drawn off the hotspot.
-    static let awayAlpha: CGFloat = 0.45
-
     /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
     static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
         switch look {
@@ -206,8 +203,9 @@ enum Icons {
                                  switchHint: switchHint && alert == nil)
             return alert.map { badged(image, $0) } ?? image
         case .away(let level, let alert):
-            // Only the bars fade: the warning stays as loud as on the hotspot.
-            let image = faded(cellular(level: level), awayAlpha)
+            // As solid as on the hotspot (Victor, 2026-11-12: the phone also answers over Bluetooth
+            // and the home Wi-Fi); with no answer, `cellular` draws all four bars faint.
+            let image = cellular(level: level)
             return alert.map { badged(image, $0) } ?? image
         }
     }

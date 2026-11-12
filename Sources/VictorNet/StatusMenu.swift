@@ -104,7 +104,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// **The phone's bars, always** (Victor, 2026-11-12: the Wi-Fi is macOS's own icon again, this
-    /// one is the phone): full on its hotspot, faded off it, from its last answer (≤ 15 min).
+    /// one is the phone): live on its hotspot, from its last answer (≤ 25 min) off it.
     func refreshIcon() {
         guard let button = statusItem.button else { return }
         var look = net.look
@@ -117,7 +117,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
         guard case .hotspot = look else {
             button.image = Icons.image(for: look)
-            button.toolTip = [alertReason, "Not on the phone's hotspot"].compactMap { $0 }.joined(separator: "\n")
+            if case .away(nil, _) = look {
+                button.toolTip = [alertReason, "The phone has not answered in the last 25 min"].compactMap { $0 }.joined(separator: "\n")
+            } else {
+                button.toolTip = alertReason
+            }
             return
         }
         // On the hotspot with nothing behind it must not look connected (Victor, 2026-11-06).
@@ -144,7 +148,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.updateHotspotRow()
-            if let item = self.batteryItem, let b = self.phoneBattery?() { item.title = b.menuTitle(now: Date()) }
+            self.updateBattery()
             self.updateSimBars()
             self.refreshNetworksIfChanged()
             if Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= Self.scanEvery { self.scanForHotspot() }
@@ -179,6 +183,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         networkItems = networkSection()
         if Config.hasPhone, !Config.hotspotSSID.isEmpty {
             menu.addItem(hotspotButtonItem())
+            // Right under Start, which it automates (Victor, 2026-11-12).
+            // A drawn row like the button, so their icons line up: a native item sits 4 pt to the left.
+            let auto = MenuRowView(name: "Auto-Start on no Internet", icon: Icons.hotspot(),
+                                   checked: HotspotFallbackSettings.isEnabled)
+            auto.onClick = { [weak self] in self?.toggleHotspot() }
+            menu.addItem(NSMenuItem(view: auto))
             menu.addItem(.separator())
         }
         networkItems.forEach(menu.addItem)
@@ -196,18 +206,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        if Config.hasPhone, let battery = phoneBattery?() {
-            let item = info(battery.menuTitle(now: Date()))
-            batteryItem = item
-            menu.addItem(item)
-        }
         menu.addItem(info("Built \(BuildInfo.time)"))
         // No ⌘Q shown: its column made the whole menu wider for nothing.
         menu.addItem(action("Quit", #selector(quitAction)))
     }
 
-    /// The phone's battery row, its age ticking while the menu is open.
-    private weak var batteryItem: NSMenuItem?
+    /// The phone's battery on the hotspot's row (Victor, 2026-11-12: at the bottom, greyed, it was
+    /// almost invisible), its age ticking while the menu is open.
+    private weak var batteryRow: MenuRowView?
+
+    private func updateBattery() {
+        guard let row = batteryRow, let b = phoneBattery?() else { return }
+        row.setStatus(b.rowText(now: Date()), spinning: false)
+    }
 
     private func speedTitle() -> String {
         if traffic.speedTestRunning { return "Testing speed…" }
@@ -304,7 +315,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, texts.map(MenuRowView.cellWidth).max() ?? 0)
         // The roaming rows under the SIMs whole, not cut ("… - resets Dec 2"): the menu widens for them.
         // Their name starts at nameX + simIndent and leaves 30 for the ↺ on the right.
-        let roamingNeed = simEntries.compactMap { simRoamingRow($0.name)?.nameWidth }.max() ?? 0
+        let roamingNeed = simEntries.flatMap { simRoamingRows($0.name).map(\.nameWidth) }.max() ?? 0
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth,
                                       roamingNeed + MenuRowLayout.simIndent + 30 - (MenuRowLayout.nameMin + 4 + 12))
 
@@ -324,10 +335,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // SIM's roaming allowance right under it, in the same frame (Victor, 2026-11-12). Not
         // clickable: Start / Stop is the button at the top, joining it is macOS's Wi-Fi menu.
         let sims = zip(simEntries, simRowViews(simEntries, cell: cell)).flatMap { e, row in
-            [NSMenuItem(view: row)] + (simRoamingRow(e.name).map { [NSMenuItem(view: $0)] } ?? [])
+            [NSMenuItem(view: row)] + simRoamingRows(e.name).map { NSMenuItem(view: $0) }
         }
         let head = MenuRowView(name: Config.hotspotSSID, icon: Icons.hotspot(), checked: hotspotJoined, enabled: false)
         frame(head, sims.compactMap { $0.view as? MenuRowView })
+        batteryRow = head
+        updateBattery()
         items.append(NSMenuItem(view: head))
         return items + sims
     }
@@ -624,15 +637,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         allow.state = RoamingDataSettings.suspendClaude ? .off : .on
         menu.addItem(allow)
         if let r = roaming.reading {
-            let stop = action("✈️ Roaming: Auto-Stop Hotspot < \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
-            stop.image = Icons.hotspotOff()
+            // No glyph before the plane, and short (Victor, 2026-11-12).
+            let stop = action("✈️ Roaming: Stop under \(String(format: "%.0f", Double(r.reserve) / 1e9)) GB", #selector(toggleGuard))
             stop.toolTip = "Only while the phone is roaming: on the home network the hotspot is never stopped"
             stop.state = r.guardOff ? .off : .on
             menu.addItem(stop)
         }
     }
 
-    /// The two rows that move this Mac on or off the phone's hotspot by themselves, roaming or not.
+    /// Home over the hotspot, when both are in range. (Auto-Start sits under the Start button.)
     private func addAutoJoinRows() {
         if let home = Config.values["PREFERRED_SSID"], !home.isEmpty {
             let prefer = action("Prefer \(home) over \(Config.hotspotSSID)", #selector(togglePreferred))
@@ -640,10 +653,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             prefer.state = PreferredWifiSettings.isEnabled ? .on : .off
             menu.addItem(prefer)
         }
-        let start = action("Auto-Start Hotspot on no Internet", #selector(toggleHotspot))
-        start.image = Icons.hotspot()
-        start.state = HotspotFallbackSettings.isEnabled ? .on : .off
-        menu.addItem(start)
     }
 
     private func roamingRow(_ title: String) {
@@ -672,18 +681,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// A SIM's roaming allowance as a row under it (Victor, 2026-11-12): "✈️ 6.7/13.4 GB left · 2 Dec".
     /// Vodafone's click asks `*123#`; any other SIM's asks the phone for a new count. Nil without a
     /// per-SIM reading for it (an older phone app), and then the roaming group shows it as before.
-    private func simRoamingRow(_ name: String) -> MenuRowView? {
-        guard let r = roaming.reading, r.sims.count > 1, let sim = r.sims.first(where: { $0.simName == name }) else { return nil }
+    private func simRoamingRows(_ name: String) -> [MenuRowView] {
+        guard let r = roaming.reading, r.sims.count > 1, let sim = r.sims.first(where: { $0.simName == name }) else { return [] }
         roamingPlaced.insert(name)
         let gb: (Int64) -> String = { String(format: "%.1f", Double($0) / 1e9) }
         let day = DateFormatter()
         day.dateFormat = "d MMM"
         // Only the data SIM's moves with this Mac's traffic between the phone's answers.
         let left = sim.isData ? (roamingLeft ?? sim.remaining) : sim.remaining
-        // Victor's wording, 2026-11-12: "6.6/13GB (50%) left at <date/time> - resets Dec 2".
+        // Victor's wording, 2026-11-12, on two lines: "1.2GB (9%) left at 20:30" (no "/13.4", the % says
+        // it), then "resets to 13.4GB on Dec 2" with the ↺ — a click there asks again.
         let at = DateFormatter()
         at.locale = Locale(identifier: "en_US_POSIX")   // 24 h whatever the system clock says
-        at.dateFormat = "MMM d HH:mm"
+        // The date only when the count is from another day (Victor, 2026-11-12).
+        at.dateFormat = Calendar.current.isDateInToday(sim.readAt) ? "HH:mm" : "MMM d HH:mm"
         let pct = sim.limit > 0 ? Int((Double(left) / Double(sim.limit) * 100).rounded()) : 0
         let vodafone = sim.simKey == "22601"
         let asking = vodafone && (askedVodafoneAt.map { Date().timeIntervalSince($0) < 180 } ?? false)
@@ -693,20 +704,23 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         resets.dateFormat = "MMM d"
         // The menu bar's ⚠ / ✕ belongs to the data SIM: its row says so too, in place of ✈️.
         let alert = sim.isData ? roamingAlert : nil
-        let title = "\(alert.map(RoamingAlertPolicy.emoji) ?? "✈️") \(gb(left))/\(gb(left + sim.cycleTotal))GB (\(pct)%) left at \(at.string(from: sim.readAt)) - resets \(resets.string(from: sim.nextReset + 12 * 3600))"
-            + (asking ? " · asking…" : "")
-        let row = MenuRowView(name: title, enabled: !asking,
+        let left1 = MenuRowView(name: "\(alert.map(RoamingAlertPolicy.emoji) ?? "✈️") \(gb(left))GB (\(pct)%) left at \(at.string(from: sim.readAt))",
+                                enabled: false, indent: MenuRowLayout.simIndent)
+        // Under the text of the line above, past its emoji.
+        let row = MenuRowView(name: "resets to \(gb(sim.limit))GB on \(resets.string(from: sim.nextReset + 12 * 3600))" + (asking ? " · asking…" : ""),
+                              enabled: !asking,
                               trailing: NSImage(systemSymbolName: vodafone ? "arrow.counterclockwise" : "arrow.clockwise",
                                                 accessibilityDescription: vodafone ? "Ask Vodafone" : "Ask the phone"),
-                              indent: MenuRowLayout.simIndent)
+                              indent: MenuRowLayout.simIndent + 22)
         let live = sim.isData && roamingLeft != nil
             ? " The GB move on with what this Mac pulled through the hotspot since then." : ""
         row.toolTip = (alert.map { RoamingAlertPolicy.reason($0, left: left, sim: name) + ".\n" } ?? "")
             + "Counted by the phone at \(at.string(from: sim.readAt)).\(live) "
             + (vodafone ? "Click: ask Vodafone (*123#, through the phone)"
                : "Against its \(String(format: "%.2f", Double(sim.planMb ?? 0) / 1000)) GB plan, while \(name) carried the data (no balance code for it). Click: ask the phone again")
+        left1.toolTip = row.toolTip
         row.onClick = { [weak self] in vodafone ? self?.askVodafone() : self?.pollRoaming() }
-        return row
+        return [left1, row]
     }
 
     // MARK: - Rows
@@ -774,7 +788,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                                cell: { r, seen, unused in (unused && r.speedDown != nil ? "⚡\u{2009}" : "")
                                    + "\(TrafficPolicy.rate(unused ? r.speedDown ?? r.maxDown : r.maxDown))↓\u{2009}⋅\u{2009}\(TrafficPolicy.rate(r.maxUp))↑\u{2009}⋅\u{2009}\(Int(r.latencyMs ?? 0))↕︎ms\u{2009}⋅\u{2009}\(seen)" })
             // Each SIM's roaming allowance under it, from the phone's real reading.
-            let framed = zip(sims, simRows).flatMap { s, row in [row] + (simRoamingRow(s.0.name).map { [$0] } ?? []) }
+            let framed = zip(sims, simRows).flatMap { s, row in [row] + simRoamingRows(s.0.name) }
             out += framed
             frame(head, framed)
             // Off: what each SIM gave here before, in grey.

@@ -1,7 +1,7 @@
 # Victor Net
 
-Menu bar app: **the phone's icon** (its cellular bars: full on its hotspot, faded from its last
-answer otherwise), the traffic and latency of the network in use next to the phone's SIMs, and
+Menu bar app: **the phone's icon** (its cellular bars: live on its hotspot, from its last answer
+over Bluetooth or the home Wi-Fi otherwise), the traffic and latency of the network in use next to the phone's SIMs, and
 everything this Mac does with Victor's Android phone (`victor-phone-addons`): asking it for its
 hotspot over Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123#),
 ⏸ Claude on roaming data. **Not the Wi-Fi menu** (2026-11-12): listing and joining networks is

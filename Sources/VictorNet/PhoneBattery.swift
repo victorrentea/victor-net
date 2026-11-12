@@ -34,6 +34,11 @@ struct PhoneBattery: Equatable {
         "🔋 Phone: \(pct)%\(charging ? " ⚡" : "") · \(Self.age(readAt, now: now))\(via.map { " · \($0.rawValue)" } ?? "")"
     }
 
+    /// On the hotspot's row in the menu: "🔋 63% ⚡ · 12s ago · BT".
+    func rowText(now: Date) -> String {
+        "🔋 \(pct)%\(charging ? " ⚡" : "") · \(Self.age(readAt, now: now))\(via.map { " · \($0.rawValue)" } ?? "")"
+    }
+
     /// Seconds while it is fresh — the hotspot answers every 5 s — then minutes, hours, days.
     static func age(_ date: Date, now: Date) -> String {
         let s = max(0, Int(now.timeIntervalSince(date)))

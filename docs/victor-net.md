@@ -18,7 +18,7 @@ deploys would restart the other.
 |-----------------------|------|
 | the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s, with the data SIM's type small over the short bars like on the phone (`5G`, `4G` — the phone's `LTE` shown as Samsung does, `3G`, `2G`; Victor, 2026-11-11) |
 | the hotspot, with no internet behind it | the bars empty, a red **!** in their corner |
-| anything else, or nothing | the bars of the phone's **last answer, faded** (45 %): `/status` over the home Wi-Fi or Bluetooth, at most 15 min old (`NetworkLookPolicy.awayFreshFor`); without one, four faint bars |
+| anything else, or nothing | the bars of the phone's **last answer**, as solid as on the hotspot: `/status` over the home Wi-Fi or Bluetooth, at most 25 min old (`NetworkLookPolicy.awayFreshFor`, one Bluetooth poll and a bit); without one, four faint bars |
 
 On both, while the phone roams: a small yellow ⚠ in the bars' top-left corner under 5 GB left, a
 red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot). The route
@@ -59,12 +59,17 @@ the menu is open — the hotspot comes up, say — the network rows are redrawn 
 (`refreshNetworksIfChanged`, checked every second), so the ✓ and the new row show up.
 
 ```
-((o)) Start Hotspot                     retrying in 23s  ← the hotspot button, alone at the top (2026-11-11), see below
+((o)) Start Hotspot                     retrying in 23s  ← the hotspot button, at the top (2026-11-11), see below
+✓ ((o)) Auto-Start on no Internet                   ← right under the button it automates (2026-11-12)
 ──────────
 ✓ wifi Hotel-G…   3.1↓MB/s ⋅ 0.4↑MB/s ⋅ 38↕︎ms ⋅ now │  ← **this network, now**: the one row left of the list, to hold against the SIMs;
                                                         Ethernet with the cable glyph; not there on the hotspot (its numbers are the data SIM's);
                                                         "Offline 4 min" in its place when offline; never clickable
-╭ ✓ ((o)) victor                                 │  ← the hotspot, framed with its SIMs (2026-11-08); ✓ while this Mac is on it; not clickable
+╭ ✓ ((o)) victor              🔋 63% ⚡ · 12s ago · BT │  ← the hotspot, framed with its SIMs (2026-11-08); ✓ while this Mac is on it; not clickable;
+│                                                       the phone's battery on its right (2026-11-12; a greyed row at the bottom before), its age
+│                                                       ticking and how it came: Hotspot (PhoneLink, 5 s), Wi-Fi (PhoneLan), BT (roaming poll), Internet (Railway)
+│     ⚠️ 1.2GB (9%) left at 20:30                  │  ← under each SIM, its roaming allowance on two lines (2026-11-12): what is left and when counted
+│        resets to 13.4GB on Dec 2               ↺ │     (the date too when not today), then the plan and its reset; a click on the second asks again
 │   ✓ ⁴ᴳ▂▄▆₃ₛ Orange 7.3↓MB/s ⋅ 1.2↑MB/s ⋅ 87↕︎ms ⋅ now │  ← each SIM by operator: phone's bars for it now, ✓ = data SIM, its own numbers (`sim:<name>`)
 ╰     ▂▄▆ Vodafone 3.1↓ ⋅ 0.4↑ ⋅ 38↕︎ms ⋅ 2 h (grey) │  ← the SIM not carrying data: its old numbers in grey
    (off the hotspot, on any Wi-Fi or the cable: both SIMs always, numbers in grey — only what was measured here
@@ -76,15 +81,12 @@ the menu is open — the hotspot comes up, say — the network rows are redrawn 
    ⚡ before a SIM's numbers (not in use): its ↓ is the last speed test there (Victor, 2026-11-09)
 ──────────
 ✓ wifi Prefer home over hotspot                     ← only with PREFERRED_SSID in the config
-✓ ((o)) Auto-Start Hotspot on no Internet           ← Victor's hotspot glyph, drawn
 ⚡ Run speed test (25MB)                             ← 10MB on the hotspot
 ──────────
 ↺ ✈️ Roaming: 22.6/60.9 GB left until 2 Nov        ← click = ask Vodafone (*123#, via the phone)
 ✓ ✈️ Roaming: Allow Claude
-✓ 🔒 ✈️ Roaming: Auto-Stop Hotspot < 1 GB             ← only while roaming: the phone decides, see roaming-warning.md
+✓ ✈️ Roaming: Stop under 1 GB             ← only while roaming: the phone decides, see roaming-warning.md
 ──────────
-🔋 Phone: 63% ⚡ · 12s ago · Wi-Fi                  ← greyed; ⚡ = charging; always its age (ticking while open) and how it came:
-                                                       Hotspot (PhoneLink, 5 s), Wi-Fi (PhoneLan), BT (roaming poll), Internet (Railway)
 Built Nov 5, 20:50
 Quit                                                ← no ⌘Q: its column widened the menu
 ```

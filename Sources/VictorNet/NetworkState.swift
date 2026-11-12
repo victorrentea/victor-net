@@ -6,8 +6,8 @@ import Foundation
 enum NetworkLook: Equatable {
     /// On the phone's hotspot: the data SIM's bars, 0…4, read every 5 s; nil = no fresh word from it.
     case hotspot(level: Int?, alert: RoamingAlert? = nil)
-    /// On anything else, or on nothing: the bars of the phone's last answer, drawn faded;
-    /// nil = none in the last 15 minutes.
+    /// On anything else, or on nothing: the bars of the phone's last answer (Bluetooth, the home Wi-Fi);
+    /// nil = none in the last 25 minutes.
     case away(level: Int?, alert: RoamingAlert? = nil)
 }
 
@@ -49,8 +49,9 @@ enum RoamingAlertPolicy {
 }
 
 enum NetworkLookPolicy {
-    /// Off the hotspot the phone is asked every 10 min over the home Wi-Fi, every 20 over Bluetooth.
-    static let awayFreshFor: TimeInterval = 900
+    /// Off the hotspot the phone is asked every 10 min over the home Wi-Fi, every 20 over
+    /// Bluetooth: one missed poll must not empty the bars.
+    static let awayFreshFor: TimeInterval = 1500
 
     static func look(onHotspot: Bool, live: PhoneSignal?, away: PhoneSignal?, now: Date) -> NetworkLook {
         if onHotspot { return .hotspot(level: live?.level) }

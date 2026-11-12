@@ -15,7 +15,7 @@ final class NetworkLookTests: XCTestCase {
                        .hotspot(level: nil), "no fresh word from the phone: faint bars, not an old answer")
     }
 
-    /// The icon is the phone's whatever this Mac is on: off the hotspot, its latest answer, faded.
+    /// The icon is the phone's whatever this Mac is on: off the hotspot, its latest answer.
     func testOffTheHotspotTheBarsAreThePhonesLatestAnswer() {
         XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: signal(4, ago: 600), away: signal(2, ago: 60), now: Date()),
                        .away(level: 2))
@@ -23,8 +23,8 @@ final class NetworkLookTests: XCTestCase {
                        .away(level: 4), "just left the hotspot: its last reading is the newest")
     }
 
-    func testOffTheHotspotAnAnswerOver15MinOldSaysNothing() {
-        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: signal(2, ago: 1000), now: Date()),
+    func testOffTheHotspotAnAnswerOver25MinOldSaysNothing() {
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: signal(2, ago: 1600), now: Date()),
                        .away(level: nil))
         XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: nil, now: Date()), .away(level: nil))
     }
