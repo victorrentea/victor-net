@@ -39,3 +39,29 @@ final class PhoneSocketTests: XCTestCase {
         XCTAssertEqual(PhoneRoamingMonitor.shortPath("/status"), "/status")
     }
 }
+
+final class HttpServerBrowserGuardTests: XCTestCase {
+    private func req(_ headers: String) -> String { "GET /test/hotspot/start HTTP/1.1\r\n\(headers)\r\n\r\n" }
+
+    func testCurlAndTheSiblingAppsGetThrough() {
+        XCTAssertFalse(HttpServer.fromBrowserOrForeignHost(req("Host: 127.0.0.1:55126\r\nUser-Agent: curl/8.7.1\r\nAccept: */*")))
+        XCTAssertFalse(HttpServer.fromBrowserOrForeignHost(req("Host: localhost:55126")))
+    }
+
+    func testABrowserNavigationOrImageIsRefused() {
+        XCTAssertTrue(HttpServer.fromBrowserOrForeignHost(req("Host: 127.0.0.1:55126\r\nSec-Fetch-Site: cross-site\r\nSec-Fetch-Mode: navigate")))
+        XCTAssertTrue(HttpServer.fromBrowserOrForeignHost(req("Host: 127.0.0.1:55126\r\nOrigin: https://evil.example")))
+        XCTAssertTrue(HttpServer.fromBrowserOrForeignHost(req("Host: 127.0.0.1:55126\r\nReferer: https://evil.example/")))
+    }
+
+    func testAHeadTooLongToReadWholeIsRefused() {
+        XCTAssertTrue(HttpServer.completeHead(req("Host: 127.0.0.1:55126")))
+        let long = "GET /test/hotspot/start?pad=\(String(repeating: "A", count: 70_000)) HTTP/1.1\r\nSec-Fetch-Site: cross-site\r\n"
+        XCTAssertFalse(HttpServer.completeHead(long), "headers cut off by the read")
+        XCTAssertFalse(HttpServer.completeHead(long + "\r\n"), "over 16 KB")
+    }
+
+    func testDnsRebindingIsRefused() {
+        XCTAssertTrue(HttpServer.fromBrowserOrForeignHost(req("Host: attacker.example:55126")))
+    }
+}

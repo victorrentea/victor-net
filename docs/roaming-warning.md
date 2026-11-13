@@ -152,7 +152,7 @@ the UK data), and UK roaming isn't part of the SEE allowance anyway.
 
 ## Everything over Bluetooth too, from anywhere in range (21 Oct 2026)
 
-"Ask Vodafone" from home on tzutze answered `only while this Mac is on the phone's hotspot` and
+"Ask Vodafone" from the home Wi-Fi answered `only while this Mac is on the phone's hotspot` and
 nothing else happened: `/ussd` and `/config` were HTTP-only, and the Bluetooth poll's bare `R`
 never carried the Vodafone SMS, so the 20 Oct balance sat on the phone unused (menu: 0.0 GB left).
 

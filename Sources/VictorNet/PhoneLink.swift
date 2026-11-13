@@ -236,7 +236,7 @@ final class PhoneLink {
             onSignal?(nil)
         }
         guard onHotspot(), !inFlight, let gw = Self.gateway(),
-              let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)/status") else { return }
+              let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(PhoneAuth.statusPath)") else { return }
         inFlight = true
         session.dataTask(with: url) { [weak self] data, _, error in
             RunLoop.main.perform(inModes: [.common]) {
@@ -267,7 +267,10 @@ final class PhoneLink {
     /// counts and refuses the hotspot (`/config` in `StatusServer.kt`); only on
     /// its hotspot. Main thread: the fresh reading, or why not.
     func configure(_ params: [String: String], done: @escaping (RoamingWarningPolicy.Reading?, String?) -> Void) {
-        let q = params.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        // Encoded: a value carrying "&guardOff=1" must stay one value (security review, 13 Nov 2026).
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let q = params.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")" }
+            .joined(separator: "&")
         get("/config?\(q)", timeout: 4) { [weak self] data, error in
             guard let data else { return done(nil, error) }
             let (_, reading) = PhoneStatusPolicy.parse(data, now: Date())

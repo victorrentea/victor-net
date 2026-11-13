@@ -5,7 +5,7 @@ import Foundation
 ///
 /// It exists so the hotspot fallback stands down in the one place where a better
 /// network is always available and the phone's data plan should not be spent.
-/// At home the rule is manual: `tzutze` is preferred and nothing should reach for
+/// At home the rule is manual: the home Wi-Fi is preferred and nothing should reach for
 /// the phone on its own.
 ///
 /// **A Mac has no GPS** — no model ever has. CoreLocation positions it by the
@@ -113,11 +113,16 @@ final class HomeGeofence: NSObject, CLLocationManagerDelegate {
     /// Logged so the coordinates can be read once and written into the secrets
     /// file; there is no UI for setting home, and inventing one for a value that
     /// changes when you move house would be the wrong trade.
+    /// Only until home is set: after that the distance is all the log needs, and every fix
+    /// with coordinates made the log a location history (security review, 13 Nov 2026).
     private func note(_ l: CLLocation) {
-        let dist = home.map { String(format: "%.0fm from home", l.distance(from: $0)) } ?? "home not set"
-        netInfo(String(format: "🏠 Location fix: HOME_LAT=%.6f HOME_LON=%.6f (±%.0fm, %@, measured %.0fs ago)",
-                           l.coordinate.latitude, l.coordinate.longitude, l.horizontalAccuracy, dist,
-                           Date().timeIntervalSince(l.timestamp)))
+        if let home {
+            netInfo(String(format: "🏠 Location fix: %.0f km from home (±%.0fm, measured %.0fs ago)",
+                           l.distance(from: home) / 1000, l.horizontalAccuracy, Date().timeIntervalSince(l.timestamp)))
+        } else {
+            netInfo(String(format: "🏠 Location fix: HOME_LAT=%.6f HOME_LON=%.6f (±%.0fm, home not set)",
+                           l.coordinate.latitude, l.coordinate.longitude, l.horizontalAccuracy))
+        }
     }
 
     func locationManager(_ m: CLLocationManager, didUpdateLocations locs: [CLLocation]) {

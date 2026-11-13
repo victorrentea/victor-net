@@ -313,7 +313,7 @@ final class HotspotFallback {
         heartbeatTimer = ticker
 
         geofence.start()
-        netInfo("📶 Hotspot fallback armed (phone \(Self.phoneBluetoothAddress), grace \(Int(Self.grace))s)")
+        netInfo("📶 Hotspot fallback armed (grace \(Int(Self.grace))s)")   // no address in the log
     }
 
     /// `GET /test/hotspot` — run the phone half of the chain *now*, whatever the
@@ -897,9 +897,9 @@ final class HotspotFallback {
             closeChannel()
         }
         if result == nil {
-            let said = chanLock.withLock { String(decoding: phoneBytes, as: UTF8.self) }
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            netInfo("📶 the phone's verdict: \(said.isEmpty ? "(silence — an older app, taken as a go)" : said)")
+            // The verdict, not the peer's raw bytes: whatever wrote them, they stay out of the log.
+            let silent = chanLock.withLock { phoneBytes.isEmpty }
+            netInfo("📶 the phone's verdict: \(silent ? "(silence — an older app, taken as a go)" : "\(lastVerdict)")")
         }
         // Then held open until a question needs the socket or the next attempt reopens it.
         PhoneSocket.shared.done(holding: result == nil ? { [weak self] in self?.closeChannel() } : nil)

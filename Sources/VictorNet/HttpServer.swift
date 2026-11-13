@@ -9,7 +9,13 @@ import Network
 ///   GET /ping                          → {"ok":true,"app":"victor-net","built":…}
 ///   GET /phone/battery                 → {"pct":63,"charging":false,"age_s":120} ({"pct":-1} = unknown); read by Victor Addons
 ///   GET /test/state                    → network, icon (+ its tooltip), traffic, phone link
-///   GET /test/clip/toast?text=…&png=/tmp/t.png → the toast a clip from the phone shows ("Open in Browser" for a link), drawn to png
+///   GET /test/clip/toast?text=…&png=1 → the toast a clip from the phone shows ("Open in Browser" for a link), drawn to a PNG in the temp folder
+///
+/// **Not for browsers** (security review, 13 Nov 2026): every hook is a GET with side effects
+/// (start/stop the hotspot, dial *123#, a fake link toast), so a page could fire one with a
+/// single navigation or `<img>`. A request carrying `Origin`, `Referer` or `Sec-Fetch-*` — which
+/// curl and the sibling apps never send and browsers always do — or a `Host` other than this
+/// address (DNS rebinding) gets 403 before any route runs.
 ///   GET /test/hotspot                  → open the phone's beacon channel now (see HotspotFallback)
 ///   GET /test/hotspot/start            → the menu's "Start Hotspot"; progress in /test/state → hotspot
 ///   GET /test/hotspot/offline?s=80     → the fallback believes there is no internet for s seconds, and evaluates
@@ -59,12 +65,42 @@ final class HttpServer {
             guard let self else { conn.cancel(); return }
             let raw = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let (path, query) = Self.target(of: raw)
-            let (status, body) = self.route(path, query)
-            let reason = status == 200 ? "OK" : "Not Found"
+            // The whole head in this one read, or nothing runs: a 70 KB URL pushed the headers past
+            // the read and the browser check failed open (re-review, 13 Nov 2026).
+            let (status, body) = !Self.completeHead(raw)
+                ? (400, "{\"error\":\"request head too long or incomplete\"}")
+                : Self.fromBrowserOrForeignHost(raw)
+                ? (403, "{\"error\":\"not for browsers\"}")
+                : self.route(path, query)
+            let reason = status == 200 ? "OK" : status == 403 ? "Forbidden" : status == 400 ? "Bad Request" : "Not Found"
             var out = Data("HTTP/1.1 \(status) \(reason)\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n".utf8)
             out.append(Data(body.utf8))
             conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
         }
+    }
+
+    /// The head ends within the first 16 KB: what the checks below read is all there is.
+    static func completeHead(_ request: String) -> Bool {
+        guard let end = request.range(of: "\r\n\r\n") else { return false }
+        return request.utf8.distance(from: request.utf8.startIndex, to: end.lowerBound.samePosition(in: request.utf8) ?? request.utf8.endIndex) <= 16_384
+    }
+
+    /// True for a browser's request (it always sends one of these) or a foreign `Host`.
+    static func fromBrowserOrForeignHost(_ request: String) -> Bool {
+        let headers = request.components(separatedBy: "\r\n").dropFirst()
+            .prefix { !$0.isEmpty }
+            .compactMap { line -> (String, String)? in
+                guard let colon = line.firstIndex(of: ":") else { return nil }
+                return (line[..<colon].lowercased().trimmingCharacters(in: .whitespaces),
+                        line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces))
+            }
+        for (name, value) in headers {
+            if name == "origin" || name == "referer" || name.hasPrefix("sec-fetch-") { return true }
+            if name == "host", !["127.0.0.1:\(port)", "localhost:\(port)", "127.0.0.1", "localhost"].contains(value.lowercased()) {
+                return true
+            }
+        }
+        return false
     }
 
     /// `GET /a/b?x=1 HTTP/1.1` → (`/a/b`, ["x": "1"]).

@@ -9,8 +9,17 @@ func redirectLogsIfNeeded() {
     var st = stat()
     let isRegular = fstat(fileno(stderr), &st) == 0 && (st.st_mode & S_IFMT) == S_IFREG
     if isRegular { return }
-    let fd = open("/tmp/victor-net.log", O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    // This user only (security review, 13 Nov 2026: 0644 put two weeks of places in reach
+    // of every account), and rolled over at 5 MB so history does not pile up for ever.
+    let path = "/tmp/victor-net.log"
+    var info = stat()
+    if stat(path, &info) == 0, info.st_size > 5_000_000 {
+        rename(path, path + ".1")
+        chmod(path + ".1", 0o600)
+    }
+    let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o600)
     if fd < 0 { return }
+    fchmod(fd, 0o600)   // a file created before this rule keeps its old mode otherwise
     setvbuf(stdout, nil, _IOLBF, 0)
     setvbuf(stderr, nil, _IONBF, 0)
     dup2(fd, fileno(stdout))
@@ -201,9 +210,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var png: Data?
             onMain {
                 self.clipSync.toast.show(text)
-                if let out = query["png"] { png = self.clipSync.toast.png(); try? png?.write(to: URL(fileURLWithPath: out)) }
+                if query["png"] != nil { png = self.clipSync.toast.png() }
             }
-            return (200, HttpServer.json(["ok": true, "png_bytes": png?.count ?? 0]))
+            // Never a caller's path: `png=~/.ssh/id_ed25519` overwrote any file this user owns
+            // (security review, 13 Nov 2026). Always the same file in the temp folder.
+            var out: String?
+            if let png {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("victor-net-toast.png")
+                if (try? png.write(to: url)) != nil { out = url.path }
+            }
+            return (200, HttpServer.json(["ok": true, "png_bytes": png?.count ?? 0, "png": orNull(out)]))
         case "/test/files/ignore":
             let secs = min(max(Double(query["s"] ?? "") ?? 60, 0), 900)
             onMain { self.clipSync.inbox.ignore(onlyDirect: query["direct"] == "1", for: secs) }

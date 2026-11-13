@@ -36,7 +36,7 @@ final class PhoneRoamingMonitor {
     /// the `R`; a channel that stays silent is a hotspot request, so this must never
     /// be late. The path is one of `StatusServer.kt`'s routes — the same answers the
     /// phone gives over HTTP on its hotspot, here reachable from anywhere in range
-    /// (21 Oct 2026: "Ask Vodafone" from home on tzutze went nowhere).
+    /// (21 Oct 2026: "Ask Vodafone" from the home Wi-Fi went nowhere).
     static func query(_ path: String) -> Data { Data("R \(path)\n".utf8) }
     static let pollInterval: TimeInterval = 20 * 60
     /// Page + SDP + open + the phone's reading. The opener gives up on its own
@@ -201,7 +201,7 @@ final class PhoneRoamingMonitor {
         pollInFlight = true
         defer { pollInFlight = false }
 
-        let (line, why) = exchange("/status", budget: Self.pollBudget)
+        let (line, why) = exchange(PhoneAuth.statusPath, budget: Self.pollBudget)
         var error = why
         // `/status` = {"signal":…,"roaming":{…},"vodafone":{…}}; a phone older than
         // 21 Oct 2026 ignores the path and answers the bare reading.

@@ -370,7 +370,7 @@ first). Now 15 s.
 
 ## Home geofence
 
-At home the rule is manual: `tzutze` is preferred and nothing should reach for
+At home the rule is manual: the home Wi-Fi is preferred and nothing should reach for
 the phone. `HomeGeofence` suppresses the fallback within `HOME_RADIUS_M` (200 m)
 of `HOME_LAT`/`HOME_LON`, read from `~/.victor-net/config.env` (or the file its `INCLUDE=` names) — this
 repo is public, and where somebody lives is not a build constant.

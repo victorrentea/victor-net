@@ -98,7 +98,7 @@ final class PhoneLan {
     /// the 10-min tick's job). False = not asked, so the caller can try Bluetooth.
     func askNow(onMiss: @escaping () -> Void) -> Bool {
         guard !busy, ssid() == Config.preferredSSID, !onHotspot(), let ip else {
-            netInfo("📶 SIMs' signal: not over the Wi-Fi (busy=\(busy), ssid=\(ssid() ?? "-"), ip=\(ip ?? "-"))")
+            netInfo("📶 SIMs' signal: not over the Wi-Fi (busy=\(busy), ssid=\(ssid() == nil ? "-" : "known"), ip=\(ip == nil ? "-" : "known"))")
             return false
         }
         busy = true
@@ -117,7 +117,7 @@ final class PhoneLan {
         ask(hosts) { [weak self] found in
             guard let self else { return }
             self.busy = false
-            if let found, found != self.ip { netInfo("🔋 phone found on the Wi-Fi at \(found)") }
+            if let found, found != self.ip { netInfo("🔋 phone found on the Wi-Fi") }
             self.ip = found
         }
     }
@@ -127,8 +127,12 @@ final class PhoneLan {
         var left = hosts.count
         var answered = false
         var tasks: [URLSessionDataTask] = []
+        // The sweep goes to the whole /24: unsigned there, since a signature is good for 120 s and
+        // any host listening on the port could replay it (re-review, 13 Nov 2026). The public answer
+        // carries the battery, enough to find the phone; only the phone itself is asked signed.
+        let path = hosts.count == 1 ? PhoneAuth.statusPath : "/status"
         for host in hosts {
-            guard let url = URL(string: "http://\(host):\(Config.phoneStatusPort)/status") else {
+            guard let url = URL(string: "http://\(host):\(Config.phoneStatusPort)\(path)") else {
                 left -= 1
                 continue
             }

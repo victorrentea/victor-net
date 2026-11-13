@@ -10,15 +10,22 @@
 - **Sealed end to end**: AES-256-GCM with `CLIP_KEY` (64 hex digits) from `config.env`; the phone
   gets it from `tools/push-clip-key.sh`. The mailbox (`/api/clip/{mac,phone}` in
   `training-assistant`) holds ciphertext for five minutes and cannot read it. The `X-Bridge-Token`
-  only keeps strangers out of the box. Clips are never logged, on any of the three.
+  only keeps strangers out of the box. Clips are never logged in clear, on any of the three; until
+  13 Nov 2026 the Mac's log kept the sealed `/clip?c=…` of a Bluetooth try, now only its route.
+  The log is this user's only (0600) and rolls over at 5 MB.
 - **The tile is there because of Android**: a background app may write the clipboard but not read
   it, and only a focused window can. The tile opens an invisible window for an instant.
 - **The automatic way is `CopyWatch`**, an accessibility service that sees a tap on Copy or a
   "Copied" toast and opens the same invisible window. It is a guess: a copy with neither stays for
   the tile. KDE Connect's `logcat` trick was tried first and dropped: Android asks for each process,
   only with the app in front, so any restart turned it off silently.
-- **Each clip carries an id and a time**, so the two ways of delivery cannot apply it twice and an
-  old ciphertext cannot be replayed.
+- **Each clip carries an id and a time**, so the two ways of delivery cannot apply it twice and a
+  ciphertext older than 10 min is refused. The ids seen are kept in memory only: within those 10
+  min, a restart of either end would take the same ciphertext once more.
+- **The toast hides secrets**: a card number (any spacing, with expiry/CVV), an IBAN, or a
+  one-word password / one-time code show as dots or the last four (security review, 13 Nov 2026).
+- **A file from the phone is quarantined** in `~/Downloads` like a browser download, and its name
+  loses control and right-to-left characters.
 - **The clipboard itself is text only**; files have their own way, below. **No Bluetooth phone →
   Mac**: this Mac publishes no RFCOMM service, and the phone's own second service never worked (see
   `victor-phone-addons/CLAUDE.md`).

@@ -51,6 +51,7 @@ final class FileInboxTests: XCTestCase {
         XCTAssertEqual(FileInboxPolicy.safeName("../../.ssh/authorized_keys"), "authorized_keys")
         XCTAssertEqual(FileInboxPolicy.safeName("..\\..\\x.pdf"), "x.pdf")
         XCTAssertEqual(FileInboxPolicy.safeName(".hidden"), "hidden")
+        XCTAssertEqual(FileInboxPolicy.safeName("photo\u{202E}gpj.command"), "photogpj.command")
         XCTAssertEqual(FileInboxPolicy.safeName(".."), "shared-file")
         XCTAssertEqual(FileInboxPolicy.safeName("factură mai.pdf"), "factură mai.pdf")
     }

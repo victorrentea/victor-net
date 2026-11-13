@@ -29,6 +29,10 @@ enum FileFrames {
         while let head = try source.read(upToCount: 4), !head.isEmpty {
             guard head.count == 4 else { throw Failure.truncated }
             let length = head.reduce(0) { $0 << 8 | Int($1) }
+            // A frame is a 1 MB chunk plus nonce and tag: a 4 GB length read into memory is a
+            // sender trying something (security review, 13 Nov 2026).
+            guard length <= (1 << 20) + 64 else { throw Failure.truncated }
+            guard written + Int64(length) <= expectedSize + 64 * Int64(index + 1) else { throw Failure.wrongSize }
             guard let frame = try source.read(upToCount: length), frame.count == length else { throw Failure.truncated }
             let box = try AES.GCM.SealedBox(combined: frame)
             let plain = try AES.GCM.open(box, using: key, authenticating: withUnsafeBytes(of: index.bigEndian) { Data($0) })
@@ -61,7 +65,12 @@ enum FileInboxPolicy {
     /// The name comes from another device: never a path, never hidden.
     static func safeName(_ name: String) -> String {
         let last = name.replacingOccurrences(of: "\\", with: "/").components(separatedBy: "/").last ?? ""
-        let clean = last.filter { !$0.isNewline && $0 != "\0" && $0 != ":" }
+        // No control or bidi-override characters either: "‮fdp.command" reads as "dnammoc.pdf"
+        // (security review, 13 Nov 2026).
+        let clean = String(String.UnicodeScalarView(last.unicodeScalars.filter { s in
+            !CharacterSet.controlCharacters.contains(s) && s != ":" && !(0x202A...0x202E).contains(s.value)
+                && !(0x2066...0x2069).contains(s.value) && s.value != 0x200E && s.value != 0x200F
+        }))
         let visible = String(clean.drop { $0 == "." }).trimmingCharacters(in: .whitespaces)
         return visible.isEmpty ? "shared-file" : visible
     }
@@ -98,6 +107,13 @@ final class FileInbox {
     }()
     private var last: (Date, String)?
     private var lastError: String?
+
+    /// Marked as downloaded, as a browser would: Gatekeeper then asks before anything in it runs
+    /// (security review, 13 Nov 2026: any app on the phone can Share a file here).
+    static func quarantine(_ url: URL) {
+        let value = "0083;\(String(Int(Date().timeIntervalSince1970), radix: 16));Victor Net;\(UUID().uuidString)"
+        _ = value.withCString { setxattr(url.path, "com.apple.quarantine", $0, strlen($0), 0, 0) }
+    }
     /// Fetching or fetched: the direct way, Railway and the 5 s `/status` all offer the same file.
     private var claimed: [String] = []
     private let lock = NSLock()
@@ -206,6 +222,7 @@ final class FileInbox {
             let folder = try fm.url(for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             let target = FileInboxPolicy.destination(for: file.name, in: folder, exists: fm.fileExists(atPath:))
             try fm.moveItem(at: plain, to: target)
+            Self.quarantine(target)
             last = (Date(), target.lastPathComponent)
             lastError = nil
             netInfo("📥 saved in Downloads, \(file.size) bytes")

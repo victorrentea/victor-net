@@ -30,4 +30,20 @@ final class ClipToastPolicyTests: XCTestCase {
         XCTAssertEqual(ClipToastPolicy.preview("4111-1111-1111-1234"), "•••• 1234")
         XCTAssertEqual(ClipToastPolicy.preview("0720 123 456"), "0720 123 456")
     }
+
+    func testNoSpacingTrickShowsAWholeCard() {
+        XCTAssertEqual(ClipToastPolicy.preview("4111 1111 1111 1234\n"), "•••• 1234")
+        XCTAssertEqual(ClipToastPolicy.preview("4111\u{00A0}1111\u{00A0}1111\u{00A0}1234"), "•••• 1234")
+        XCTAssertEqual(ClipToastPolicy.preview("4111111111111234\t12/29 123"), "•••• 1234")
+    }
+
+    func testAnIbanPasswordOrCodeIsHidden() {
+        XCTAssertEqual(ClipToastPolicy.preview("RO49 AAAA 1B31 0075 9384 0000"), "IBAN •••• 0000")
+        XCTAssertEqual(ClipToastPolicy.preview("Tr0ub4dor&3x"), "••••••••")
+        XCTAssertEqual(ClipToastPolicy.preview("482913"), "••••••••")
+        // Ordinary clips stay readable.
+        XCTAssertEqual(ClipToastPolicy.preview("victor@example.com"), "victor@example.com")
+        XCTAssertEqual(ClipToastPolicy.preview("Bucharest"), "Bucharest")
+        XCTAssertEqual(ClipToastPolicy.preview("2026"), "••••••••")
+    }
 }
