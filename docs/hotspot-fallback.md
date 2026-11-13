@@ -31,8 +31,8 @@ most of the rest is the page.
 Mac has no internet
   → HotspotFallback opens an RFCOMM channel to the phone
   → victor-phone-addons accepts it and starts the manual routine "Mac Hotspot On"
-    through Modes and Routines' shortcut trampoline (since 2026-11-06, no screen
-    jumps forward; "App opened" below is how it worked before)
+    through Modes and Routines' shortcut trampoline (since 2026-11-06: no screen
+    jumps forward, and opening the phone app no longer turns the hotspot on)
   → Mobile Hotspot on
   → the Mac is told explicitly to join 'victor'
 ```
@@ -194,7 +194,7 @@ issuing the commands is sitting on the very link the test cuts. It needs the
 phone **unlocked**, because with no API left (see above) turning the hotspot off
 and back on is UI automation.
 
-## Why "App opened", and not "Bluetooth device connected"
+## Why a signal to our app, and not "Bluetooth device connected"
 
 The obvious trigger cannot be used. With the RFCOMM channel live and our app
 reporting `connected: Victor Mac`, the Android *system* still reported:
@@ -211,6 +211,9 @@ said "No routines running" for five minutes. macOS, for its part, opens no
 system profile to an Android phone at all since Apple removed Bluetooth PAN in
 Monterey — so **no Mac can ever satisfy that condition**. Bluetooth here is a
 signal, never a transport.
+
+Until 2026-11-06 our app answered the signal by coming to the front, and the routine's trigger
+was "App opened"; now it starts a manual routine directly (`victor-phone-addons/CLAUDE.md`).
 
 Two traps cost a full afternoon and are worth naming:
 
@@ -536,8 +539,8 @@ toggle. Those exist to keep the automatic path polite; a click is not the
 automatic path.
 
 The row exists because the manual repair it replaces is the same signal done by
-hand: unlocking the phone and opening the app *is* what the RFCOMM channel makes
-the phone do (see "Why 'App opened'"). Reaching for the phone to fix the Mac's
+hand: unlocking the phone and opening the app *was* what the RFCOMM channel made
+the phone do (the "App opened" routine, gone since 2026-11-06). Reaching for the phone to fix the Mac's
 network was never the last resort it looked like — it was the mechanism, entered
 manually.
 
@@ -555,10 +558,10 @@ tests looked like failures purely because they checked at 35 s.
 So in the first minute or two after restarting the phone, the fallback has
 nothing to connect to and the Mac will log
 `the phone is not publishing the SPP channel`. Opening the phone app by hand
-short-circuits the wait.
+starts its service at once (it does not turn the hotspot on by itself).
 
 ## The other half
 
-The phone side is a separate repo, `victor-phone-addons` — a foreground service
-holding an RFCOMM server socket, and nothing else. Its README carries the same
-reasoning from the phone's side.
+The phone side is a separate repo, `victor-phone-addons`: a foreground service holding the RFCOMM
+server socket (and, since, the roaming counter, the clipboard and the rest). Its `CLAUDE.md`
+carries the same reasoning from the phone's side.

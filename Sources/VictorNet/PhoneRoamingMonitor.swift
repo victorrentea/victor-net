@@ -5,14 +5,9 @@ import IOBluetooth
 /// Asks the phone, over Bluetooth, how much of the roaming allowance is left.
 ///
 /// The phone (`victor-phone-addons`) already counts roaming traffic for its
-/// ROAMING DATA card; it publishes a second RFCOMM service beside the hotspot
-/// beacon, `RoamingStatusChannel`, which answers every connection with one
-/// line of JSON and waits for us to hang up.
-///
-/// **Why a service of its own.** On the beacon's SPP channel the *connection*
-/// is the signal: accepting it brings the phone's activity to the front, and
-/// the Samsung routine turns the hotspot on at "App opened". Asking about
-/// roaming on that channel would switch the hotspot on every 20 minutes.
+/// ROAMING DATA card. We ask on the beacon's own SPP channel: an `R <path>`
+/// written within 1.5 s of connecting is a question and gets one line of JSON;
+/// silence is what asks for the hotspot, so a question never turns it on.
 ///
 /// **Why Bluetooth and not HTTP.** The phone is only reachable over IP while
 /// the Mac is on its hotspot — and a roaming day on hotel Wi-Fi still eats the

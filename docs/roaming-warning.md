@@ -34,25 +34,21 @@ The Mac only decides *whether to show it now* (`RoamingWarningPolicy`, unit-test
 MB are decimal (10^6), like the card. If the operator counts MiB, the real
 ceiling is ~5% higher, so any error makes the warning come early, not late.
 
-## Transport: a second RFCOMM service, not the beacon's
+## Transport: a question on the beacon's own channel
 
-`PhoneRoamingMonitor` opens an RFCOMM channel to the phone every **20 min**
-(and 30 s after wake) on the service
-`7a1f3c52-9b4e-4d1a-8c6f-2e5b9d0a4f17` (`RoamingStatusChannel.kt`). The phone
-answers with one line of JSON and waits for the Mac to hang up.
+`PhoneRoamingMonitor` opens the beacon's SPP channel every **20 min** (and 30 s after wake) and
+writes `R /status` at once; the phone answers one line of JSON. Silence for 1.5 s on the same
+channel is what asks for the hotspot, so a question never turns it on (see "One socket, not two"
+and "Everything over Bluetooth too" below). On the hotspot or a shared Wi-Fi the same answer comes
+over HTTP from `:55126`.
 
-- **Not the SPP beacon.** There the *connection* is the signal: the phone
-  brings its activity to the front and the Samsung routine turns the hotspot
-  on. Asking about roaming on it would switch the hotspot on every poll.
-- **Not HTTP.** The phone is on IP only while the Mac sits on its hotspot, and
+- **Bluetooth, not only HTTP**: the phone is on IP only while the Mac shares a network with it, and
   a roaming day on hotel Wi-Fi eats the same allowance.
-- **The phone keeps its listening socket** between connections, unlike the
-  beacon, so its RFCOMM channel number stays stable. That is the trap in
-  `hotspot-fallback.md`. The Mac still goes through `PhoneChannelOpener`
-  (extracted from `HotspotFallback` for this), so a moved channel is re-queried
-  anyway.
-- Cost: a Bluetooth page per poll, ~4 s cold. Hence 20 min, not less. Against a
-  13.7 GB ceiling nothing that matters moves faster.
+- The channel number moves after each connection; `PhoneChannelOpener` re-queries it (the trap in
+  `hotspot-fallback.md`).
+- Cost: a Bluetooth page per poll, ~4 s cold. Hence 20 min, not less.
+- Until 14 Oct 2026 the phone published a second RFCOMM service for this
+  (`RoamingStatusChannel.kt`, UUID `7a1f3c52-…`); this Mac never once saw it, and it is gone.
 
 A phone without Usage access answers `{"error": …}`, which is **not** a
 reading. It never reads as "nothing used".

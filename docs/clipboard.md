@@ -1,11 +1,11 @@
 # 📋 Clipboard, shared with the phone
 
-`ClipSync.swift` here, `ClipSync.kt` and the `:clipboard` module in `victor-phone-addons`.
+`ClipSync.swift` here; `ClipSync.kt`, `CopyWatch` and `Grab` in `victor-phone-addons`.
 
 | direction | how | gesture |
 |---|---|---|
 | Mac → phone | straight to `:55126/clip` on the hotspot, plus the Railway mailbox; Bluetooth (`R /clip?c=…`) only if the mailbox failed and the clip is short | none |
-| phone → Mac | Railway mailbox, long-polled here | none when `CopyWatch` notices the copy; otherwise the "Clip to Mac" Quick Settings tile |
+| phone → Mac | Railway mailbox, long-polled here | none when `CopyWatch` notices the copy; a copy it misses does not travel |
 
 - **Sealed end to end**: AES-256-GCM with `CLIP_KEY` (64 hex digits) from `config.env`; the phone
   gets it from `tools/push-clip-key.sh`. The mailbox (`/api/clip/{mac,phone}` in
@@ -13,11 +13,11 @@
   only keeps strangers out of the box. Clips are never logged in clear, on any of the three; until
   13 Nov 2026 the Mac's log kept the sealed `/clip?c=…` of a Bluetooth try, now only its route.
   The log is this user's only (0600) and rolls over at 5 MB.
-- **The tile is there because of Android**: a background app may write the clipboard but not read
-  it, and only a focused window can. The tile opens an invisible window for an instant.
-- **The automatic way is `CopyWatch`**, an accessibility service that sees a tap on Copy or a
-  "Copied" toast and opens the same invisible window. It is a guess: a copy with neither stays for
-  the tile. KDE Connect's `logcat` trick was tried first and dropped: Android asks for each process,
+- **An invisible window, because of Android**: a background app may write the clipboard but not
+  read it; only a focused window can. `Grab` is that window, open for an instant.
+- **`CopyWatch` opens it**: an accessibility service that sees a tap on Copy or a "Copied" toast.
+  It is a guess: a copy with neither is not sent (the "Clip to Mac" Quick Settings tile that
+  covered those was removed on 2026-11-07). KDE Connect's `logcat` trick was tried first and dropped: Android asks for each process,
   only with the app in front, so any restart turned it off silently.
 - **Each clip carries an id and a time**, so the two ways of delivery cannot apply it twice and a
   ciphertext older than 10 min is refused. The ids seen are kept in memory only: within those 10
@@ -27,6 +27,8 @@
   link still shows its host.
 - **A password copied on the Mac stays on the Mac**: a copy marked
   `org.nspasteboard.ConcealedType` (password managers) is not sent (13 Nov 2026; it was before).
+  The phone does the same with a clip its source marked sensitive. Every clip from the Mac is
+  written on the phone as sensitive, so Gboard's clipboard shows it as dots.
 - **A file from the phone is asked about first** ("Save a file from the phone?", `FileInbox.ask`),
   since any app on the phone can Share one; `FILES_FROM_PHONE=auto` in the config takes them
   unasked. A screenshot for the clipboard is not asked about. Saved files are quarantined in
