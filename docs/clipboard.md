@@ -27,8 +27,9 @@
   link still shows its host.
 - **A password copied on the Mac stays on the Mac**: a copy marked
   `org.nspasteboard.ConcealedType` (password managers) is not sent (13 Nov 2026; it was before).
-  The phone does the same with a clip its source marked sensitive. Every clip from the Mac is
-  written on the phone as sensitive, so Gboard's clipboard shows it as dots.
+  The phone does the same with a clip its source marked sensitive. A clip from the Mac
+  is written on the phone as sensitive only when it holds a 16-digit number (a card), so Gboard's
+  clipboard shows that one as dots and the rest in clear.
 - **A file from the phone is asked about first** ("Save a file from the phone?", `FileInbox.ask`),
   since any app on the phone can Share one; `FILES_FROM_PHONE=auto` in the config takes them
   unasked. A screenshot for the clipboard is not asked about. Saved files are quarantined in
