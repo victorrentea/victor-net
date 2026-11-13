@@ -133,11 +133,36 @@ final class FileInbox {
         ignoreUntil = Date() + seconds
     }
 
+    /// 🙋 A file for Downloads is asked about first (Victor, 13 Nov 2026): any app on the
+    /// phone can Share one here, so nothing lands on this disk unseen. A screenshot for the
+    /// clipboard stays automatic, like a text clip. `FILES_FROM_PHONE=auto` in the config
+    /// takes them unasked (the evals, which have nobody to click).
+    static func needsAsking(_ file: FileOffer, setting: String?) -> Bool {
+        file.clipboard != true && setting?.lowercased() != "auto"
+    }
+
+    /// Main thread. Replaced in tests.
+    var ask: (FileOffer) -> Bool = { file in
+        let alert = NSAlert()
+        alert.messageText = "Save a file from the phone?"
+        let size = ByteCountFormatter.string(fromByteCount: file.size, countStyle: .file)
+        alert.informativeText = "\(FileInboxPolicy.safeName(file.name)) (\(size)) → Downloads"
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     /// Main thread.
     func accept(_ files: [FileOffer], ips: [String], relay: Bool) {
         if Date() < ignoreUntil, !ignoreOnlyDirect || !relay { return }
         for file in files where claim(file.id) {
             netInfo("📥 \(file.size) bytes offered by the phone\(relay ? ", on Railway" : "")")
+            if Self.needsAsking(file, setting: Config.filesFromPhone), !ask(file) {
+                // Stays claimed: the same offer, repeated every 5 s, does not ask again.
+                netInfo("📥 declined")
+                continue
+            }
             if relay { fromRelay(file) } else { download(file, from: ips) }
         }
     }

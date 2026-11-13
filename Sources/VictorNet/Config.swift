@@ -29,6 +29,8 @@ enum Config {
     /// Where the phone parks its battery, and the token to read it; empty = never asked.
     static var relayURL: String { values["RELAY_URL"] ?? "" }
     static var relayToken: String { values["RELAY_TOKEN"] ?? "" }
+    /// `auto` saves files shared from the phone without asking (`FileInbox.needsAsking`).
+    static var filesFromPhone: String? { values["FILES_FROM_PHONE"] }
     /// 64 hex digits, shared with the phone: seals the clipboard (`ClipSync`); empty = off.
     static var clipKey: String { values["CLIP_KEY"] ?? "" }
     static var hasPhone: Bool { !phoneBluetoothAddress.isEmpty }

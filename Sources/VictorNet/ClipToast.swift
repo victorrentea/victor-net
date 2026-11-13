@@ -18,44 +18,13 @@ enum ClipToastPolicy {
         return url
     }
 
-    /// One line, short, and nothing secret: the screen may be shared. A card number (with
-    /// its expiry and CVV, any spacing) or an IBAN shows only its last four; a one-word clip
-    /// that looks like a password or a one-time code shows only dots (security review,
-    /// 13 Nov 2026: a trailing newline or a non-breaking space showed a whole card).
+    /// **Never the content** (Victor, 13 Nov 2026): the screen may be shared, and no rule
+    /// tells a password, a card or a one-time code from harmless text every time — the
+    /// heuristics that tried missed "Your code is 482913" and hid years and prices. Only how
+    /// much arrived. A lone link is the exception, and `show` names its host.
     static func preview(_ text: String) -> String {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let compact = t.filter { !$0.isWhitespace && !"-/".contains($0) }
-        let digits = compact.filter(\.isNumber)
-        if digits.count >= 12, digits.count * 10 >= compact.count * 9 {
-            // The card number's own last four, not the CVV's: the digit groups from the start
-            // until the number is long enough to be one (15 Amex, 16 the rest).
-            var card = ""
-            for group in t.split(whereSeparator: { $0.isWhitespace || $0 == "-" }) {
-                guard card.count < 15, group.allSatisfy(\.isNumber) else { break }
-                card += group
-            }
-            return "•••• " + (card.count >= 12 ? card : digits).suffix(4)
-        }
-        if compact.count >= 15, compact.count <= 34, compact.prefix(2).allSatisfy(\.isLetter),
-           compact.dropFirst(2).prefix(2).allSatisfy(\.isNumber), compact.allSatisfy({ $0.isLetter || $0.isNumber }) {
-            return "IBAN •••• " + compact.suffix(4)
-        }
-        if looksSecret(t) { return "••••••••" }
-        let line = t.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-        let flat = line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return flat.count > maxPreview ? String(flat.prefix(maxPreview - 1)) + "…" : flat
-    }
-
-    /// One word, no link, and either a short all-digit code or a mix of letters with digits
-    /// or symbols: a password or a one-time code, not a word anybody minds being seen.
-    static func looksSecret(_ t: String) -> Bool {
-        guard !t.isEmpty, t.rangeOfCharacter(from: .whitespacesAndNewlines) == nil, link(in: t) == nil,
-              !t.contains("@") else { return false }
-        if t.allSatisfy(\.isNumber) { return (4...8).contains(t.count) }
-        let letters = t.contains(where: \.isLetter)
-        let digits = t.contains(where: \.isNumber)
-        let symbols = t.contains { !$0.isLetter && !$0.isNumber }
-        return t.count >= 8 && letters && (digits || symbols) && !t.contains(".")
+        let n = text.trimmingCharacters(in: .whitespacesAndNewlines).count
+        return n == 1 ? "1 character" : "\(n) characters"
     }
 }
 

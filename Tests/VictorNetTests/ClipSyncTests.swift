@@ -34,14 +34,17 @@ final class ClipSyncTests: XCTestCase {
     func testOnlyNewRealTextIsSent() {
         XCTAssertTrue(ClipPolicy.shouldSend(text: "new", types: ["public.utf8-plain-text"], lastSynced: "old"))
         XCTAssertFalse(ClipPolicy.shouldSend(text: "same", types: [], lastSynced: "same"))
+        // a password manager marks its copy: it stays on this Mac
+        XCTAssertFalse(ClipPolicy.shouldSend(text: "hunter2", types: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"], lastSynced: nil))
         XCTAssertFalse(ClipPolicy.shouldSend(text: "", types: [], lastSynced: nil))
         XCTAssertFalse(ClipPolicy.shouldSend(text: nil, types: [], lastSynced: nil))
         XCTAssertFalse(ClipPolicy.shouldSend(text: String(repeating: "x", count: ClipPolicy.maxText + 1), types: [], lastSynced: nil))
     }
 
-    func testAThrowawayCopyIsNotSentButAConcealedOneIs() {
+    func testNeitherAThrowawayNorAConcealedCopyIsSent() {
         XCTAssertFalse(ClipPolicy.shouldSend(text: "t", types: ["org.nspasteboard.TransientType"], lastSynced: nil))
-        XCTAssertTrue(ClipPolicy.shouldSend(text: "t", types: ["org.nspasteboard.ConcealedType"], lastSynced: nil))
+        // Sent until 2026-11-13; Victor: a password copied on the Mac stays on the Mac.
+        XCTAssertFalse(ClipPolicy.shouldSend(text: "t", types: ["org.nspasteboard.ConcealedType"], lastSynced: nil))
     }
 
     func testAReplayOrAnEchoIsRefused() {
@@ -49,5 +52,13 @@ final class ClipSyncTests: XCTestCase {
         XCTAssertFalse(ClipPolicy.believable(clip(), now: t0, seen: ["x"]))
         XCTAssertFalse(ClipPolicy.believable(clip(from: "mac"), now: t0, seen: []))
         XCTAssertFalse(ClipPolicy.believable(clip(at: t0.addingTimeInterval(-601)), now: t0, seen: []))
+    }
+
+    func testAFileForDownloadsIsAskedAboutAScreenshotForTheClipboardIsNot() {
+        let file = FileOffer(id: "a", name: "Invoice.terminal", size: 10, key: "00")
+        var shot = file; shot.clipboard = true
+        XCTAssertTrue(FileInbox.needsAsking(file, setting: nil))
+        XCTAssertFalse(FileInbox.needsAsking(shot, setting: nil))
+        XCTAssertFalse(FileInbox.needsAsking(file, setting: "auto"))
     }
 }
