@@ -202,6 +202,27 @@ enum Icons {
         return image
     }
 
+    /// `beside`, inside one rounded frame: a faint fill and a thin outline in the bar's colour,
+    /// so the phone's battery and its bars read as one thing, the phone (Victor, 2026-11-17).
+    static func united(_ a: NSImage, _ b: NSImage) -> NSImage {
+        let inner = beside(a, b)
+        let padX: CGFloat = 4, height: CGFloat = 20
+        let size = NSSize(width: inner.size.width + 2 * padX, height: max(height, inner.size.height))
+        let image = NSImage(size: size, flipped: false) { rect in
+            let pill = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 5, yRadius: 5)
+            NSColor.labelColor.withAlphaComponent(0.10).setFill()
+            pill.fill()
+            NSColor.labelColor.withAlphaComponent(0.45).setStroke()
+            pill.lineWidth = 1
+            pill.stroke()
+            inner.draw(in: NSRect(x: padX, y: (size.height - inner.size.height) / 2,
+                                  width: inner.size.width, height: inner.size.height))
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
     /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
     static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
         switch look {

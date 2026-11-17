@@ -21,8 +21,10 @@ deploys would restart the other.
 | anything else, or nothing | the bars of the phone's **last answer**, as solid as on the hotspot: `/status` over the home Wi-Fi or Bluetooth, at most 25 min old (`NetworkLookPolicy.awayFreshFor`, one Bluetooth poll and a bit); without one, four faint bars |
 
 **The phone's battery, while low** (≤ 30 %, not charging): a small red battery blinking **in the same item,
-left of the bars** (2026-11-12; an item of its own before, which macOS placed where it liked).
-`GET /test/phone-battery/simulate/<pct>`.
+left of the bars** (2026-11-12; an item of its own before, which macOS placed where it liked),
+the two **inside one rounded frame** (`Icons.united`, 2026-11-17: they are both the phone). The menu
+then opens with a row saying why: the same red battery, blinking with it, "Phone battery low: 18%",
+the reading's age and channel on its right. `GET /test/phone-battery/simulate/<pct>`.
 
 On both, while the phone roams: a small yellow ⚠ in the bars' top-left corner under 5 GB left, a
 red disc with a white ✕ there once nothing is left (or the phone refuses the hotspot). The route

@@ -155,12 +155,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// The phone's battery while it runs low (`PhoneLowBattery`), blinking red, **in this same
     /// item, left of the bars** (Victor, 2026-11-12: "fix lângă semnal") — an item of its own
-    /// landed wherever macOS put it.
+    /// landed wherever macOS put it. Both in one rounded frame (Victor, 2026-11-17: they are the phone).
     var lowBattery: (() -> Int?)?
 
     private func addLowBattery(to button: NSStatusBarButton) {
         guard let pct = lowBattery?(), let bars = button.image else { return }
-        button.image = Icons.beside(Icons.lowPhoneBattery(pct: pct, bright: blinkBright), bars)
+        button.image = Icons.united(Icons.lowPhoneBattery(pct: pct, bright: blinkBright), bars)
         button.toolTip = ["Phone battery: \(pct)%", button.toolTip].compactMap { $0 }.joined(separator: "\n")
     }
 
@@ -173,6 +173,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             guard let self else { return }
             self.updateHotspotRow()
             self.updateBattery()
+            self.updateLowBatteryRow()
             self.updateSimBars()
             self.refreshNetworksIfChanged()
             if Date().timeIntervalSince(self.net.lastScanStarted ?? .distantPast) >= Self.scanEvery { self.scanForHotspot() }
@@ -205,6 +206,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // theirs. Picking a Wi-Fi is macOS's own menu (Victor, 2026-11-12).
         MenuRowLayout.cellWidth = 0
         networkItems = networkSection()
+        addLowBatteryRow(to: menu)
         if Config.hasPhone, !Config.hotspotSSID.isEmpty {
             menu.addItem(hotspotButtonItem())
             // Right under Start, which it automates (Victor, 2026-11-12).
@@ -250,6 +252,34 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private func updateBattery() {
         guard let row = batteryRow, let b = phoneBattery?() else { return }
         row.setStatus(b.rowText(now: Date()), spinning: false)
+    }
+
+    /// **Why the menu bar blinks red**, at the very top (Victor, 2026-11-17): the same red battery,
+    /// blinking with it, and the percentage in words — there only while the bar shows it.
+    private weak var lowBatteryRow: MenuRowView?
+
+    private func addLowBatteryRow(to menu: NSMenu) {
+        lowBatteryRow = nil
+        guard let row = makeLowBatteryRow() else { return }
+        lowBatteryRow = row
+        updateLowBatteryRow()
+        menu.addItem(NSMenuItem(view: row))
+        menu.addItem(.separator())
+    }
+
+    private func makeLowBatteryRow() -> MenuRowView? {
+        guard let pct = lowBattery?() else { return nil }
+        let row = MenuRowView(name: "Phone battery low: \(pct)%",
+                              icon: Icons.lowPhoneBattery(pct: pct, bright: true), enabled: false)
+        row.toolTip = "Blinks in the menu bar while the phone is at \(PhoneLowBattery.threshold)% or less and not charging"
+        return row
+    }
+
+    private func updateLowBatteryRow() {
+        guard let row = lowBatteryRow, let pct = lowBattery?() else { return }
+        row.setIcon(Icons.lowPhoneBattery(pct: pct, bright: blinkBright))
+        let b = phoneBattery?()
+        row.setStatus(b.map { "\(PhoneBattery.age($0.readAt, now: Date()))\($0.via.map { " · \($0.rawValue)" } ?? "")" } ?? "", spinning: false)
     }
 
     private func speedTitle() -> String {
@@ -823,7 +853,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         MenuRowLayout.cellWidth = max(MenuRowLayout.cellWidth, samples.map(MenuRowView.cellWidth).max() ?? 0)
         func views() -> [NSView] {
             // The hotspot button at the top, in each of its states.
-            var out: [NSView] = HotspotButton.allStates.map { b in
+            // The low battery's row first, as at the top of the menu, while it shows.
+            var out: [NSView] = makeLowBatteryRow().map { [$0] } ?? []
+            out += HotspotButton.allStates.map { b in
                 let row = MenuRowView(name: b.title, icon: Self.hotspotIcon(b))
                 row.setStatus(b == .asking ? "18s" : b == .starting ? "41s" : b == .airplane ? "retrying in 12s" : "", spinning: !b.clickable)
                 return row
