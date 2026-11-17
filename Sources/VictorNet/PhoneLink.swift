@@ -94,6 +94,23 @@ enum SimSignalPolicy {
         return name.prefix(1).uppercased() + name.dropFirst()
     }
 
+    /// Which SIM it is, ahead of the network it is on (Victor, 2026-11-18: "vdf:" / "yoxo:"), as
+    /// abroad both show foreign networks: by its home network (MCC+MNC from the roaming reading),
+    /// else the name the phone gives it, lowercased.
+    static func tag(sim: String, key: String?) -> String {
+        switch key {
+        case "22601": return "vdf"
+        case "22610": return "yoxo"
+        default: return sim.lowercased()
+        }
+    }
+
+    /// `label` behind the SIM's tag; a SIM without service (its label is its own name) = the tag alone.
+    static func tagged(_ label: String, sim: String, key: String?) -> String {
+        let t = tag(sim: sim, key: key)
+        return label == sim || label.lowercased() == t ? t : "\(t): \(label)"
+    }
+
     /// The network type as the phone's status bar shows it over the bars: its own word when it sends
     /// one (`shown`, from `TelephonyDisplayInfo`: "5G" on NSA, "4G+"), else from the raw type, where
     /// Samsung says "4G" for LTE. Unknown or empty = nothing drawn.

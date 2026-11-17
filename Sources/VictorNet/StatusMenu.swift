@@ -488,6 +488,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return (r, true)
     }
 
+    /// The SIM's home network (MCC+MNC), from the phone's roaming reading (kept on disk).
+    private func simKey(_ sim: String) -> String? {
+        guard let r = roaming.reading else { return nil }
+        return (r.sims + [r]).first { $0.simName == sim }?.simKey
+    }
+
     /// Each SIM with the same numbers as a network — best ↓ ↑ (⚡ = a speed test's ↓), latency
     /// and when last used — and, while on the hotspot, the bars the phone sees for it now.
     private func simRowViews(_ entries: [SimEntry], cell: (NetworkRecord, String, Bool) -> String) -> [MenuRowView] {
@@ -499,7 +505,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 ?? e.bars.map { Icons.cellular(level: $0.level, network: $0.network) }
                 // No reading yet: an empty slot the bars fill once the phone answers (asked at the opening).
                 ?? NSImage(size: NSSize(width: 17, height: Icons.barHeight))
-            let row = MenuRowView(name: e.label, columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
+            let row = MenuRowView(name: SimSignalPolicy.tagged(e.label, sim: e.name, key: simKey(e.name)), columns: e.record.map { [cell($0, e.seen, !e.isData)] } ?? [],
                                   icon: icon, checked: e.isData, enabled: false, indent: MenuRowLayout.simIndent, staleNumbers: !e.isData)
             simAgeRows.append((row, e.name))
             let test = !e.isData && e.record?.speedDown != nil

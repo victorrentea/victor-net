@@ -61,4 +61,13 @@ final class SimLogTests: XCTestCase {
         XCTAssertEqual(SimSignalPolicy.label(kpn), "NL KPN")
         XCTAssertEqual(SimSignalPolicy.label(voda), "Vodafone NL")
     }
+
+    func testEachSimIsTaggedAheadOfTheNetworkItIsOn() {
+        XCTAssertEqual(SimSignalPolicy.tagged("Tele2 SE", sim: "Vic", key: "22601"), "vdf: Tele2 SE")
+        XCTAssertEqual(SimSignalPolicy.tagged("Telenor SE", sim: "yoxo", key: "22610"), "yoxo: Telenor SE")
+        // No roaming reading yet: the phone's own name for it.
+        XCTAssertEqual(SimSignalPolicy.tagged("Telenor SE", sim: "yoxo", key: nil), "yoxo: Telenor SE")
+        // No service: the label is the SIM's name, so the tag alone.
+        XCTAssertEqual(SimSignalPolicy.tagged("Vic", sim: "Vic", key: "22601"), "vdf")
+    }
 }
