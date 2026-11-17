@@ -29,6 +29,35 @@ final class NetworkLookTests: XCTestCase {
         XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: nil, now: Date()), .away(level: nil))
     }
 
+    /// Victor, 2026-11-17: an airplane instead of bars (no climbing ones) while the phone says so.
+    func testOffTheHotspotAPhoneInAirplaneModeShowsTheAirplane() {
+        let now = Date()
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: signal(2, ago: 60),
+                                              airplane: PhoneAirplane(on: true, at: now - 30), now: now), .airplane)
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: signal(2, ago: 60),
+                                              airplane: PhoneAirplane(on: false, at: now - 30), now: now), .away(level: 2))
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: false, live: nil, away: nil,
+                                              airplane: PhoneAirplane(on: true, at: now - 1600), now: now), .away(level: nil),
+                       "a 25-min-old word on airplane mode says nothing any more")
+        XCTAssertEqual(NetworkLookPolicy.look(onHotspot: true, live: signal(3), away: nil,
+                                              airplane: PhoneAirplane(on: true, at: now - 30), now: now), .hotspot(level: 3),
+                       "on its hotspot the phone has left airplane mode")
+    }
+
+    func testAnOlderAirplaneWordNeverOverwritesANewerOne() {
+        let net = NetworkState()
+        let now = Date()
+        net.phoneAirplane = PhoneAirplane(on: false, at: now)
+        net.phoneAirplane = PhoneAirplane(on: true, at: now - 60)
+        XCTAssertEqual(net.phoneAirplane?.on, false)
+    }
+
+    func testPhoneStatusSaysAirplaneOnlyWhenThePhoneAppDoes() {
+        XCTAssertEqual(PhoneStatusPolicy.airplane(Data(#"{"airplane":true}"#.utf8), now: Date())?.on, true)
+        XCTAssertEqual(PhoneStatusPolicy.airplane(Data(#"{"airplane":false,"signal":{"level":3}}"#.utf8), now: Date())?.on, false)
+        XCTAssertNil(PhoneStatusPolicy.airplane(Data(#"{"signal":{"level":3}}"#.utf8), now: Date()), "older phone app")
+    }
+
     func testStrengthClamps() {
         XCTAssertEqual(NetworkLookPolicy.strength(rssi: -30), 1)
         XCTAssertEqual(NetworkLookPolicy.strength(rssi: -95), 0)

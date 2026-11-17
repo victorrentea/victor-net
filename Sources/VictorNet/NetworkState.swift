@@ -9,6 +9,16 @@ enum NetworkLook: Equatable {
     /// On anything else, or on nothing: the bars of the phone's last answer (Bluetooth, the home Wi-Fi);
     /// nil = none in the last 25 minutes.
     case away(level: Int?, alert: RoamingAlert? = nil)
+    /// Off the hotspot, the phone says it is in airplane mode: an airplane instead of bars, and
+    /// nothing animated (Victor, 2026-11-17). No brackets: there is no backup to fall back on.
+    case airplane
+}
+
+/// The phone's airplane mode, as its latest word said it: `#airplane` / `#go` to a hotspot
+/// request, or `"airplane"` in its `/status` (phone app from 17 Nov 2026).
+struct PhoneAirplane: Equatable {
+    let on: Bool
+    let at: Date
 }
 
 /// The badge next to the phone's bars (Victor, 2026-10-20): the GB stay in the
@@ -53,8 +63,10 @@ enum NetworkLookPolicy {
     /// Bluetooth: one missed poll must not empty the bars.
     static let awayFreshFor: TimeInterval = 1500
 
-    static func look(onHotspot: Bool, live: PhoneSignal?, away: PhoneSignal?, now: Date) -> NetworkLook {
+    static func look(onHotspot: Bool, live: PhoneSignal?, away: PhoneSignal?, airplane: PhoneAirplane? = nil,
+                     now: Date) -> NetworkLook {
         if onHotspot { return .hotspot(level: live?.level) }
+        if let airplane, airplane.on, now.timeIntervalSince(airplane.at) < awayFreshFor { return .airplane }
         let last = [live, away].compactMap { $0 }
             .filter { now.timeIntervalSince($0.readAt) < awayFreshFor }
             .max { $0.readAt < $1.readAt }
@@ -77,6 +89,10 @@ final class NetworkState {
     var phoneSignal: PhoneSignal?
     /// The phone's `/status` off the hotspot: over the home Wi-Fi (`PhoneLan`) or Bluetooth.
     var offHotspotSignal: PhoneSignal?
+    /// The newest word on the phone's airplane mode; an older one never overwrites it.
+    var phoneAirplane: PhoneAirplane? {
+        didSet { if let old = oldValue, let new = phoneAirplane, new.at < old.at { phoneAirplane = old } }
+    }
 
     /// Everything read from CoreWLAN, as of the last background read.
     ///
@@ -144,7 +160,8 @@ final class NetworkState {
     }
 
     var look: NetworkLook {
-        NetworkLookPolicy.look(onHotspot: onHotspot, live: phoneSignal, away: offHotspotSignal, now: Date())
+        NetworkLookPolicy.look(onHotspot: onHotspot, live: phoneSignal, away: offHotspotSignal,
+                               airplane: phoneAirplane, now: Date())
     }
 
     /// For `TrafficMonitor` and the book: the wire wins, as it does for routing.
@@ -256,6 +273,7 @@ final class NetworkState {
         case .hotspot(let l, let a):
             lookName = "hotspot(level:\(l.map(String.init) ?? "?"),alert:\(a.map { "\($0)" } ?? "none"))"
         case .away(let l, _): lookName = "away(level:\(l.map(String.init) ?? "?"))"
+        case .airplane: lookName = "airplane"
         }
         return ["look": lookName, "ssid": orNull(ssid), "rssi": orNull(rssi),
                 "wired": WiredLinkPolicy.title(wired), "on_hotspot": onHotspot, "scan": scanJSON,

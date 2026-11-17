@@ -73,6 +73,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// văd semnalul GSM repede"*): over the home Wi-Fi when the phone is there (milliseconds), else over
     /// Bluetooth (~4 s, the bars update in the open menu). At most once in 30 s. On the hotspot,
     /// `PhoneLink` already reads it every 5 s.
+    /// On the main thread: the phone's newest word on airplane mode, then the icon.
+    private func phoneAirplane(_ a: PhoneAirplane) {
+        net.phoneAirplane = a
+        menu?.refreshIcon()
+    }
+
     private func askPhoneSignal() {
         guard Config.hasPhone, !net.onHotspot,
               Date().timeIntervalSince(lastSignalAsk ?? .distantPast) > 30 else { return }
@@ -117,8 +123,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.onStatus = { [weak self] data in
             // On the poll's queue: the signal goes to the menu on the main thread.
-            if let s = PhoneStatusPolicy.parse(data, now: Date()).0 {
-                RunLoop.main.perform(inModes: [.common]) { self?.menu?.offHotspotSignal = s }
+            let s = PhoneStatusPolicy.parse(data, now: Date()).0, a = PhoneStatusPolicy.airplane(data, now: Date())
+            if s != nil || a != nil {
+                RunLoop.main.perform(inModes: [.common]) {
+                    if let a { self?.phoneAirplane(a) }
+                    if let s { self?.menu?.offHotspotSignal = s }
+                }
                 CFRunLoopWakeUp(CFRunLoopGetMain())
             }
             self?.phoneBattery.accept(data, via: .bluetooth)
@@ -128,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in
+            if let a = PhoneStatusPolicy.airplane(data, now: Date()) { self?.phoneAirplane(a) }
             if let s = PhoneStatusPolicy.parse(data, now: Date()).0 { self?.menu?.offHotspotSignal = s }
             self?.phoneBattery.accept(data, via: .wifi)
             self?.clipSync.status(data)
@@ -150,7 +161,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         clipSync.start()
         hotspot.onProgress = { [weak self] p in self?.menu?.hotspotProgressChanged(p) }
-        hotspot.onPhoneAnswered = { [weak self] in
+        hotspot.onPhoneAnswered = { [weak self] airplane in
+            let word = PhoneAirplane(on: airplane, at: Date())
+            RunLoop.main.perform(inModes: [.common]) { self?.phoneAirplane(word) }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
             self?.roaming.pollIfOlder(than: 5 * 60, reason: "the phone answered the hotspot request")
         }
         hotspot.start()
@@ -247,6 +261,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let pct = Int(p.dropFirst("/test/phone-battery/simulate/".count))
             onMain { self.phoneBatteryBar.simulate(pct); self.menu?.refreshIcon() }
             return (200, HttpServer.json(["simulated": orNull(pct)]))
+        case let p where p.hasPrefix("/test/airplane/simulate/"):
+            let on = p.hasSuffix("/on")
+            onMain { self.phoneAirplane(PhoneAirplane(on: on, at: Date())) }
+            return (200, HttpServer.json(["airplane": on]))
         case let p where p.hasPrefix("/test/sim-hint/simulate/"):
             let on = p.hasSuffix("/on")
             onMain { self.menu?.simulateSwitchHint = on; self.menu?.refreshIcon() }
@@ -267,7 +285,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "/test/icon":
             // The current icon, 8× on a light and a dark bar, to look at.
             var path = ""
-            onMain { path = self.menu?.renderIconForTest() ?? "" }
+            onMain { path = self.menu?.renderIconForTest(look: query["look"]) ?? "" }
             return (200, HttpServer.json(["png": path]))
         case "/test/menu/rows":
             var rows: [String] = []

@@ -18,7 +18,8 @@ deploys would restart the other.
 |-----------------------|------|
 | the phone's hotspot   | **the phone's own cellular bars**, 0–4, reported by the phone every 5 s, with the data SIM's type small over the short bars like on the phone (`5G`, `4G` — the phone's `LTE` shown as Samsung does, `3G`, `2G`; Victor, 2026-11-11) |
 | the hotspot, with no internet behind it | the bars empty, a red **!** in their corner |
-| anything else, or nothing | the bars of the phone's **last answer**, as solid as on the hotspot: `/status` over the home Wi-Fi or Bluetooth, at most 25 min old (`NetworkLookPolicy.awayFreshFor`, one Bluetooth poll and a bit); without one, four faint bars |
+| anything else, or nothing | the bars of the phone's **last answer**, as solid as on the hotspot: `/status` over the home Wi-Fi or Bluetooth, at most 25 min old (`NetworkLookPolicy.awayFreshFor`, one Bluetooth poll and a bit); without one, four faint bars. **Between thin `[ ]`** (Victor, 2026-11-17): the phone is only the backup there (`Icons.bracketed`) |
+| anything but the hotspot, the phone in **airplane mode** | an **airplane** (SF Symbols), still, no brackets: nothing to fall back on (Victor, 2026-11-17: no more bars climbing while it was asked again and again). Its word on it: `#airplane` / `#go` to a hotspot request, or `"airplane"` in `/status` (phone app ≥ 17 Nov 2026, so the Bluetooth poll says it on a plane's Wi-Fi too); 25 min old at most, the newest wins (`PhoneAirplane`). `GET /test/airplane/simulate/on\|off` |
 
 **The phone's battery, while low** (≤ 30 %, not charging): a small red battery blinking **in the same item,
 left of the bars** (2026-11-12; an item of its own before, which macOS placed where it liked),

@@ -263,8 +263,8 @@ final class HotspotFallback {
     /// hotspot comes up, menu open or not (Victor, 2026-11-12).
     var onProgress: ((HotspotProgress) -> Void)?
     /// The phone answered a hotspot request (`#go` / `#airplane`), on `queue`: it is right there,
-    /// so a stale battery / signal reading can be refreshed over Bluetooth.
-    var onPhoneAnswered: (() -> Void)?
+    /// so a stale battery / signal reading can be refreshed over Bluetooth. `true` = in airplane mode.
+    var onPhoneAnswered: ((Bool) -> Void)?
 
     private func publish(_ change: (inout HotspotProgress) -> Void) {
         let (before, after) = progressLock.withLock { () -> (HotspotProgress, HotspotProgress) in
@@ -494,7 +494,7 @@ final class HotspotFallback {
         switch lastVerdict {
         case .airplane:
             closeChannel()   // it starts nothing, and a question may want the socket
-            onPhoneAnswered?()
+            onPhoneAnswered?(true)
             // Only promised when something will ask again: a click from another network, or
             // with Auto-Start off, just says why in the tooltip.
             let willRetry = lastKnownOnline == false && HotspotFallbackSettings.isEnabled && !geofence.isAtHome()
@@ -512,7 +512,7 @@ final class HotspotFallback {
         case .hungUp:   // openChannel already reported it as a failure
             return attemptFailed("the phone hung up before answering")
         case .goAhead:
-            onPhoneAnswered?()
+            onPhoneAnswered?(false)
             publish { $0.phoneInAirplane = false }
         }
         publish { $0.phase = .joining(deadline: Date() + TimeInterval(Self.waitAfterPlainConnect)) }

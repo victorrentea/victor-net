@@ -121,6 +121,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         switch look {
         case .hotspot(let level, _): look = .hotspot(level: level, alert: alert)
         case .away(let level, _): look = .away(level: level, alert: alert)
+        case .airplane:
+            // A still airplane, never the climbing bars (Victor, 2026-11-17).
+            button.image = Icons.image(for: look)
+            button.toolTip = "✈️ The phone is in airplane mode"
+                + (hotspot.progress.phoneInAirplane ? ": its hotspot starts once that is off" : "")
+            return
         }
         guard case .hotspot = look else {
             button.image = Icons.image(for: look)
@@ -930,8 +936,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.
-    func renderIconForTest() -> String? {
-        guard let icon = statusItem.button?.image else { return nil }
+    /// `look`: draw that look instead of the current icon — `away<0-4>`, `away-low`, `airplane`.
+    func renderIconForTest(look: String? = nil) -> String? {
+        let drawn: NSImage?
+        switch look {
+        case "airplane": drawn = Icons.image(for: .airplane)
+        case "away-low": drawn = Icons.image(for: .away(level: 2, alert: .low))
+        case let l? where l.hasPrefix("away"): drawn = Icons.image(for: .away(level: Int(l.dropFirst(4))))
+        default: drawn = statusItem.button?.image
+        }
+        guard let icon = drawn else { return nil }
         let scale: CGFloat = 8, pad: CGFloat = 4
         let cell = NSSize(width: (icon.size.width + 2 * pad) * scale, height: (icon.size.height + 2 * pad) * scale)
         let out = NSImage(size: NSSize(width: cell.width * 2, height: cell.height))
@@ -949,7 +963,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         out.unlockFocus()
         guard let tiff = out.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
         else { return nil }
-        let url = Config.directory.appendingPathComponent("icon-test.png")
+        let url = Config.directory.appendingPathComponent("icon-test\(look.map { "-\($0)" } ?? "").png")
         try? png.write(to: url)
         return url.path
     }

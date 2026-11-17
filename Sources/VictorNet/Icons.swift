@@ -233,10 +233,50 @@ enum Icons {
             return alert.map { badged(image, $0) } ?? image
         case .away(let level, let alert):
             // As solid as on the hotspot (Victor, 2026-11-12: the phone also answers over Bluetooth
-            // and the home Wi-Fi); with no answer, `cellular` draws all four bars faint.
+            // and the home Wi-Fi); with no answer, `cellular` draws all four bars faint. In thin
+            // [ ] (Victor, 2026-11-17): the phone is only the backup while the Mac is on another network.
             let image = cellular(level: level)
-            return alert.map { badged(image, $0) } ?? image
+            return bracketed(alert.map { badged(image, $0) } ?? image)
+        case .airplane:
+            return airplane()
         }
+    }
+
+    /// The phone in airplane mode: SF Symbols' airplane, the bars' height.
+    static func airplane() -> NSImage? {
+        let image = NSImage(systemSymbolName: "airplane", accessibilityDescription: "Phone in airplane mode")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        image?.isTemplate = true
+        return image
+    }
+
+    /// `image` between two thin square brackets, `[ ▂▄▆█ ]`: the phone as a backup, not the route.
+    /// Stays a template when `image` is one (the roaming badge makes it two-toned, then the
+    /// brackets take the bar's text colour like `badged` does).
+    static func bracketed(_ image: NSImage) -> NSImage {
+        let pad: CGFloat = 4, serif: CGFloat = 2, line: CGFloat = 0.9
+        let size = NSSize(width: image.size.width + 2 * pad, height: max(image.size.height, barHeight))
+        let template = image.isTemplate
+        let out = NSImage(size: size, flipped: false) { r in
+            image.draw(in: NSRect(x: pad, y: (size.height - image.size.height) / 2,
+                                  width: image.size.width, height: image.size.height))
+            (template ? NSColor.black.withAlphaComponent(0.6) : NSColor.labelColor.withAlphaComponent(0.6)).setStroke()
+            let top = r.maxY - 1, bottom = r.minY + 1
+            for (x, dir) in [(CGFloat(0.8), CGFloat(1)), (r.maxX - 0.8, CGFloat(-1))] {
+                let b = NSBezierPath()
+                b.move(to: NSPoint(x: x + serif * dir, y: top))
+                b.line(to: NSPoint(x: x, y: top))
+                b.line(to: NSPoint(x: x, y: bottom))
+                b.line(to: NSPoint(x: x + serif * dir, y: bottom))
+                b.lineWidth = line
+                b.lineCapStyle = .butt
+                b.lineJoinStyle = .miter
+                b.stroke()
+            }
+            return true
+        }
+        out.isTemplate = template
+        return out
     }
 
     /// A small ⚠ (yellow) or red disc with a white ✕ **in the top-left corner,

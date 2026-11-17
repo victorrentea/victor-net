@@ -154,6 +154,13 @@ enum PhoneStatusPolicy {
         return (signal, reading)
     }
 
+    /// `{"airplane":true,…}`: nil from a phone app older than 17 Nov 2026, which does not say.
+    static func airplane(_ data: Data, now: Date) -> PhoneAirplane? {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let on = o["airplane"] as? Bool else { return nil }
+        return PhoneAirplane(on: on, at: now)
+    }
+
     /// Vodafone's last balance SMS, as the phone caught it (`VodafoneSms.kt`).
     static func vodafone(_ data: Data) -> VodafoneBalance? {
         guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
