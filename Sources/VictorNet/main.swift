@@ -284,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onMain {
                 guard let r = self.roaming.reading else { return }
                 texts = RoamingGbNoticePolicy.perSim(r).map { RoamingGbNoticePolicy.text($0, now: Date()) }
-                if query["send"] != "0" { texts.forEach(AddonsBanner.show) }
+                if query["send"] != "0" { AddonsBanner.show(texts.joined(separator: "   ")) }
             }
             return (200, HttpServer.json(["texts": texts]))
         case "/test/vodafone/ask":

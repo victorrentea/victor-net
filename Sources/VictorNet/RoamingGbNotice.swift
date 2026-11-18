@@ -74,6 +74,9 @@ final class RoamingGbNotice {
 
     /// Main thread, on every real reading (never a simulated one).
     func accept(_ reading: RoamingWarningPolicy.Reading, now: Date = Date()) {
+        // One pill for all: Addons' banner is latest-wins, a second would replace the first.
+        var texts: [String] = []
+        defer { if !texts.isEmpty { show(texts.joined(separator: "   ")) } }
         for r in RoamingGbNoticePolicy.perSim(reading) {
             let key = "roaming.gbNotice.\(r.simKey ?? "data")"
             let (mark, announce) = RoamingGbNoticePolicy.check(
@@ -82,7 +85,7 @@ final class RoamingGbNotice {
             guard announce else { continue }
             let text = RoamingGbNoticePolicy.text(r, now: now)
             netInfo("✈️ another roaming GB gone (\(mark.gb) GB used): \(text)")
-            show(text)
+            texts.append(text)
         }
     }
 }
