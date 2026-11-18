@@ -213,3 +213,20 @@ older phone app with a single reading). The phone had a bug the first night: wit
 the data from the start, its SIM timeline stayed empty and **every** SIM was charged all the
 traffic (yoxo showed 6.6 of 7.37 GB used and its hotspot blocked); fixed in `victor-phone-addons`
 `d53d0e6`. Consumption before that APK (12 Nov, 00:33) is all Vodafone's.
+
+## ✈️ A pill for every GB gone (18 Nov 2026)
+
+Asked for: *"display a transient notification via macos addons when another GB of ROAMING data
+is consumed, also displaying the amount left (GB, %, days left, SIM)"*. `RoamingGbNotice` +
+`RoamingGbNoticePolicy` (unit-tested) watch each SIM's `cycleTotal` on every **real** reading
+(never a `/simulate` one) and, when it crosses into the next whole GB, send
+`✈️ vdf: 8.4 GB left · 62% · 14 days` to Victor Addons' `GET 127.0.0.1:55123/banner?text=&hold=8`
+(local only there; the bottom-left `StatusBanner`, presence-gated, so it waits for him).
+
+- **The phone's count, not the meter's estimate**: the estimate is corrected by each reading,
+  and a pill must not announce a GB the phone takes back.
+- One mark per SIM (`roaming.gbNotice.<simKey>` in `UserDefaults`, `<nextReset s>:<gb>`), so a
+  restart does not repeat a GB. The first reading ever and the first of a new cycle only take
+  a baseline; a count that went *down* (a `*123#` correction) lowers the mark silently.
+- Addons not running = the notice is only in the log (`✈️ another roaming GB gone`).
+- `GET /test/roaming/gb-notice` sends each SIM's pill now (`?send=0` only answers the texts).
