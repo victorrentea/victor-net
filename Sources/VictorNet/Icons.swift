@@ -260,7 +260,8 @@ enum Icons {
         let out = NSImage(size: size, flipped: false) { r in
             image.draw(in: NSRect(x: pad, y: (size.height - image.size.height) / 2,
                                   width: image.size.width, height: image.size.height))
-            (template ? NSColor.black.withAlphaComponent(0.6) : NSColor.labelColor.withAlphaComponent(0.6)).setStroke()
+            // Full text colour, not dimmed: plain white on the dark bar (Victor, 2026-11-18).
+            (template ? NSColor.black : NSColor.labelColor).setStroke()
             let top = r.maxY - 1, bottom = r.minY + 1
             for (x, dir) in [(CGFloat(0.8), CGFloat(1)), (r.maxX - 0.8, CGFloat(-1))] {
                 let b = NSBezierPath()
