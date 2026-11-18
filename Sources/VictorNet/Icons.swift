@@ -24,7 +24,7 @@ enum Icons {
                 chevron.stroke()
             }
             for x in [CGFloat(6.6), 11.1] {
-                NSBezierPath(roundedRect: NSRect(x: x, y: y - 0.7, width: 2.3, height: 1.4), xRadius: 0.5, yRadius: 0.5).fill()
+                NSBezierPath(roundedRect: NSRect(x: x, y: y - 0.7, width: 2.3, height: 1.4), xRadius: 0.8, yRadius: 0.8).fill()
             }
             return true
         }
@@ -319,7 +319,7 @@ enum Icons {
                 return true
             }.draw(in: g)
             // The four bars run from x = 1 to 16 in `cellular`.
-            let full = NSRect(x: 1, y: 0, width: 15, height: 1.6)
+            let full = NSRect(x: 1, y: 0, width: 15, height: 2.5)
             let color: NSColor
             switch gauge.tone {
             case .plain: color = .labelColor
@@ -330,7 +330,7 @@ enum Icons {
             // Never thinner than a dot, so an empty red gauge still blinks.
             let width = max(1.5, full.width * CGFloat(gauge.fraction))
             NSBezierPath(roundedRect: NSRect(x: full.minX, y: full.minY, width: width, height: full.height),
-                         xRadius: 0.5, yRadius: 0.5).fill()
+                         xRadius: 0.8, yRadius: 0.8).fill()
             return true
         }
         image.isTemplate = false

@@ -237,7 +237,7 @@ Asked for: *"below the GSM scale, display (only when on roaming) a progress bar 
 shrinking to the left, with the amount of data left. No border, just a continuous bar, in white.
 Under 50% yellow, under 1 GB red blinking. Instead of the ⚠️"*. `RoamingGaugePolicy` (unit-tested)
 gives the data SIM's `left / limit` and a tone; `Icons.gauged` makes the icon 2 pt taller and draws a
-1.6 pt strip as wide as the four bars at 100%. Same condition the badge had: the phone roams
+2.5 pt strip as wide as the four bars at 100%. Same condition the badge had: the phone roams
 **now**, on a reading under 30 min old; `left` is the meter's live estimate. The tone is the bar's
 text colour (white on the dark bar), yellow under 50%, red blinking (the 1 s `blinkBright`) under
 1 GB or once the phone keeps its hotspot off. The ⚠ / ✕ badge is gone from the menu bar; the data
