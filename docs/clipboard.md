@@ -4,7 +4,8 @@
 
 | direction | how | gesture |
 |---|---|---|
-| Mac → phone | straight to `:55126/clip` on the hotspot, plus the Railway mailbox; Bluetooth (`R /clip?c=…`) only if the mailbox failed and the clip is short | none |
+| Mac → phone | straight to `:55126/clip` on the hotspot, plus the Railway mailbox; Bluetooth (`R /clip?c=…`) if the mailbox failed, or at once when the phone is in airplane mode (it cannot reach the mailbox), and only for a short clip | none |
+| phone → Mac in airplane mode | **nothing yet**: the mailbox is its only way and the phone has no internet | — |
 | phone → Mac | Railway mailbox, long-polled here | none when `CopyWatch` notices the copy; a copy it misses does not travel |
 
 - **Sealed end to end**: AES-256-GCM with `CLIP_KEY` (64 hex digits) from `config.env`; the phone

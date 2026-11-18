@@ -242,11 +242,23 @@ enum Icons {
         }
     }
 
-    /// The phone in airplane mode: SF Symbols' airplane, the bars' height.
+    /// The phone in airplane mode: SF Symbols' airplane, the bars' height, turned **nose up** like
+    /// the one in Android's status bar (Victor, 2026-11-18; SF Symbols' points right).
     static func airplane() -> NSImage? {
-        let image = NSImage(systemSymbolName: "airplane", accessibilityDescription: "Phone in airplane mode")?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
-        image?.isTemplate = true
+        guard let glyph = NSImage(systemSymbolName: "airplane", accessibilityDescription: "Phone in airplane mode")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .regular)) else { return nil }
+        let size = NSSize(width: glyph.size.height, height: glyph.size.width)
+        let image = NSImage(size: size, flipped: false) { r in
+            let t = NSAffineTransform()
+            t.translateX(by: r.midX, yBy: r.midY)
+            t.rotate(byDegrees: 90)   // counter-clockwise: right → up
+            t.concat()
+            glyph.draw(in: NSRect(x: -glyph.size.width / 2, y: -glyph.size.height / 2,
+                                  width: glyph.size.width, height: glyph.size.height))
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Phone in airplane mode"
         return image
     }
 

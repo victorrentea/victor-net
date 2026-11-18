@@ -112,6 +112,8 @@ final class ClipSync {
     private var lastError: String?
 
     var onHotspot: () -> Bool = { false }
+    /// The phone said it is in airplane mode: it cannot reach the mailbox, so Bluetooth is the way.
+    var phoneInAirplane: () -> Bool = { false }
 
     init(phone: PhoneLink) {
         self.phone = phone
@@ -158,11 +160,15 @@ final class ClipSync {
     }
 
     private func send(_ sealed: String) {
+        // In airplane mode the phone has no internet: the mailbox takes the clip and the phone
+        // never fetches it (Victor, 2026-11-18). So Bluetooth goes at once, not only on a mailbox failure.
+        let airplane = !onHotspot() && phoneInAirplane() && sealed.count <= ClipPolicy.maxBluetoothCiphertext
         if onHotspot() { phone.clip(sealed) { [weak self] _, why in self?.sent("hotspot", why) } }
+        if airplane { phone.clip(sealed) { [weak self] _, why in self?.sent("bluetooth", why) } }
         putInMailbox(sealed) { [weak self] ok in
             guard let self else { return }
             if ok { return self.sent("mailbox", nil) }
-            guard !self.onHotspot(), sealed.count <= ClipPolicy.maxBluetoothCiphertext else {
+            guard !airplane, !self.onHotspot(), sealed.count <= ClipPolicy.maxBluetoothCiphertext else {
                 return self.sent("nothing", "the mailbox did not answer")
             }
             self.phone.clip(sealed) { [weak self] _, why in self?.sent("bluetooth", why) }

@@ -164,6 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         simLog.roaming = { [weak self] in self?.roaming.reading?.roamingNow ?? true }
         traffic.onLatency = { [weak self] ms in self?.simLog.latency(ms) }
         clipSync.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
+        clipSync.phoneInAirplane = { [weak self] in
+            guard let self else { return false }
+            if case .airplane = self.net.look { return true }
+            return self.hotspot.progress.phoneInAirplane
+        }
         clipSync.start()
         hotspot.onProgress = { [weak self] p in self?.menu?.hotspotProgressChanged(p) }
         hotspot.onPhoneAnswered = { [weak self] airplane in
