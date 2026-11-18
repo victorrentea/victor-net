@@ -302,15 +302,15 @@ enum Icons {
         }
     }
 
-    /// The bars lifted 1 pt, and under them a thin bar as wide as the four bars at 100% of the
+    /// The bars on a canvas 2 pt taller, and under them a thin bar as wide as the four bars at 100% of the
     /// roaming plan left, shrinking to the left (Victor, 2026-11-18, in place of the ⚠ badge).
     /// No border: one solid strip in the bar's text colour, yellow under half, red and blinking
     /// under 1 GB. Coloured, so not a template: the bars are filled with `labelColor` at draw time.
     static func gauged(_ glyphs: NSImage, _ gauge: RoamingGauge, bright: Bool) -> NSImage {
-        let size = NSSize(width: glyphs.size.width, height: max(glyphs.size.height, barHeight))
+        let lift: CGFloat = 2
+        let size = NSSize(width: glyphs.size.width, height: max(glyphs.size.height, barHeight) + lift)
         let image = NSImage(size: size, flipped: false) { _ in
-            let g = NSRect(x: 0, y: (size.height - glyphs.size.height) / 2 + 1,
-                           width: glyphs.size.width, height: glyphs.size.height)
+            let g = NSRect(x: 0, y: lift, width: glyphs.size.width, height: glyphs.size.height)
             // A template drawn by hand is just a mask: fill it with the text colour.
             NSImage(size: g.size, flipped: false) { r in
                 glyphs.draw(in: r)
