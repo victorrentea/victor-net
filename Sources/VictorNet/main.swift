@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotspot = HotspotFallback()
     private lazy var preferredWifi = PreferredWifi(net: net, hotspot: hotspot)
     private var roamingData: RoamingDataWatch?
+    private let gbNotice = RoamingGbNotice()
     private var menu: StatusMenu?
     private var http: HttpServer?
 
@@ -119,7 +120,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // No pill on screen for a low allowance (Victor, 2026-10-20: "I don't
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
-        roaming.onReading = { [weak self] _ in self?.menu?.refreshIcon() }
+        roaming.onReading = { [weak self] r in
+            self?.menu?.refreshIcon()
+            // ✈️ another GB of a SIM's roaming allowance gone → a pill in Victor Addons.
+            if let self, let r, !self.roaming.isSimulating { self.gbNotice.accept(r) }
+        }
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
         roaming.onStatus = { [weak self] data in
             // On the poll's queue: the signal goes to the menu on the main thread.
@@ -273,6 +278,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let arg = String(p.dropFirst("/test/roaming/simulate/".count))
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
             return (200, roaming.diagnosticsJSON)
+        case "/test/roaming/gb-notice":
+            // The ✈️ pill each SIM would show now, sent to Victor Addons (marks untouched).
+            var texts: [String] = []
+            onMain {
+                guard let r = self.roaming.reading else { return }
+                texts = RoamingGbNoticePolicy.perSim(r).map { RoamingGbNoticePolicy.text($0, now: Date()) }
+                if query["send"] != "0" { texts.forEach(AddonsBanner.show) }
+            }
+            return (200, HttpServer.json(["texts": texts]))
         case "/test/vodafone/ask":
             // The menu's "Ask Vodafone for What Is Left", as a click would; read the
             // outcome in the log (`📶 *123# →`, then `📶 Vodafone says`).

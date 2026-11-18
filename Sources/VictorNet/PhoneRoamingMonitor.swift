@@ -72,6 +72,9 @@ final class PhoneRoamingMonitor {
         return _simulated ?? _reading
     }
 
+    /// A `/test/roaming/simulate` reading is shadowing the phone's (`RoamingGbNotice` skips it).
+    var isSimulating: Bool { lock.withLock { _simulated != nil } }
+
     /// The last reading, kept on disk (Victor, 2026-10-21: "should be cached on the
     /// Mac even if the phone is unavailable"): after a restart the menu shows it at
     /// once instead of "the phone has not answered yet", with its age.
