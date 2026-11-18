@@ -223,20 +223,20 @@ enum Icons {
         return image
     }
 
-    /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ or the roaming badge holds that corner.
-    static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil) -> NSImage? {
+    /// `network`: the data SIM's "5G" / "4G" over the bars, unless ⇄ holds that corner.
+    /// `bright`: the lit half of the red gauge's blink.
+    static func image(for look: NetworkLook, switchHint: Bool = false, network: String? = nil,
+                      bright: Bool = true) -> NSImage? {
         switch look {
-        case .hotspot(let level, let alert):
-            // The roaming badge takes the same corner, and says more.
-            let image = cellular(level: level, network: alert == nil ? network : nil,
-                                 switchHint: switchHint && alert == nil)
-            return alert.map { badged(image, $0) } ?? image
-        case .away(let level, let alert):
+        case .hotspot(let level, let gauge):
+            let image = cellular(level: level, network: network, switchHint: switchHint)
+            return gauge.map { gauged(image, $0, bright: bright) } ?? image
+        case .away(let level, let gauge):
             // As solid as on the hotspot (Victor, 2026-11-12: the phone also answers over Bluetooth
             // and the home Wi-Fi); with no answer, `cellular` draws all four bars faint. In thin
             // [ ] (Victor, 2026-11-17): the phone is only the backup while the Mac is on another network.
             let image = cellular(level: level)
-            return bracketed(alert.map { badged(image, $0) } ?? image)
+            return bracketed(gauge.map { gauged(image, $0, bright: bright) } ?? image)
         case .airplane:
             return airplane()
         }
@@ -263,8 +263,8 @@ enum Icons {
     }
 
     /// `image` between two thin square brackets, `[ ▂▄▆█ ]`: the phone as a backup, not the route.
-    /// Stays a template when `image` is one (the roaming badge makes it two-toned, then the
-    /// brackets take the bar's text colour like `badged` does).
+    /// Stays a template when `image` is one (the roaming gauge makes it two-toned, then the
+    /// brackets take the bar's text colour like `gauged` does).
     static func bracketed(_ image: NSImage) -> NSImage {
         let pad: CGFloat = 4, serif: CGFloat = 2, line: CGFloat = 0.9
         let size = NSSize(width: image.size.width + 2 * pad, height: max(image.size.height, barHeight))
@@ -292,10 +292,6 @@ enum Icons {
         return out
     }
 
-    /// A small ⚠ (yellow) or red disc with a white ✕ **in the top-left corner,
-    /// over the bars** (Victor, 2026-10-20) — the corner the rising bars leave
-    /// empty. Coloured, so not a template: the glyphs are filled with
-    /// `labelColor`, resolved at draw time against the menu bar's appearance.
     /// A template filled with one colour (for the test render).
     static func tinted(_ template: NSImage, _ color: NSColor) -> NSImage {
         NSImage(size: template.size, flipped: false) { r in
@@ -306,41 +302,35 @@ enum Icons {
         }
     }
 
-    static func badged(_ glyphs: NSImage, _ alert: RoamingAlert) -> NSImage {
-        let d: CGFloat = 9
+    /// The bars lifted 1 pt, and under them a thin bar as wide as the four bars at 100% of the
+    /// roaming plan left, shrinking to the left (Victor, 2026-11-18, in place of the ⚠ badge).
+    /// No border: one solid strip in the bar's text colour, yellow under half, red and blinking
+    /// under 1 GB. Coloured, so not a template: the bars are filled with `labelColor` at draw time.
+    static func gauged(_ glyphs: NSImage, _ gauge: RoamingGauge, bright: Bool) -> NSImage {
         let size = NSSize(width: glyphs.size.width, height: max(glyphs.size.height, barHeight))
         let image = NSImage(size: size, flipped: false) { _ in
-            let g = NSRect(x: 0, y: (size.height - glyphs.size.height) / 2,
+            let g = NSRect(x: 0, y: (size.height - glyphs.size.height) / 2 + 1,
                            width: glyphs.size.width, height: glyphs.size.height)
             // A template drawn by hand is just a mask: fill it with the text colour.
-            glyphs.draw(in: g)
-            NSColor.labelColor.set()
-            g.fill(using: .sourceAtop)
-            let b = NSRect(x: 0, y: size.height - d, width: d, height: d)
-            switch alert {
-            case .low:
-                let t = NSBezierPath()
-                t.move(to: NSPoint(x: b.midX, y: b.maxY))
-                t.line(to: NSPoint(x: b.maxX, y: b.minY))
-                t.line(to: NSPoint(x: b.minX, y: b.minY))
-                t.close()
-                NSColor.systemYellow.set()
-                t.fill()
-                NSColor.black.set()
-                NSRect(x: b.midX - 0.6, y: b.minY + 3, width: 1.2, height: 3.4).fill()
-                NSRect(x: b.midX - 0.6, y: b.minY + 1.2, width: 1.2, height: 1.1).fill()
-            case .capped:
-                NSColor.systemRed.set()
-                NSBezierPath(ovalIn: b).fill()
-                let x = NSBezierPath()
-                let i = b.insetBy(dx: 2.6, dy: 2.6)
-                x.move(to: NSPoint(x: i.minX, y: i.minY)); x.line(to: NSPoint(x: i.maxX, y: i.maxY))
-                x.move(to: NSPoint(x: i.minX, y: i.maxY)); x.line(to: NSPoint(x: i.maxX, y: i.minY))
-                x.lineWidth = 1.4
-                x.lineCapStyle = .round
-                NSColor.white.set()
-                x.stroke()
+            NSImage(size: g.size, flipped: false) { r in
+                glyphs.draw(in: r)
+                NSColor.labelColor.set()
+                r.fill(using: .sourceAtop)
+                return true
+            }.draw(in: g)
+            // The four bars run from x = 1 to 16 in `cellular`.
+            let full = NSRect(x: 1, y: 0, width: 15, height: 1.6)
+            let color: NSColor
+            switch gauge.tone {
+            case .plain: color = .labelColor
+            case .yellow: color = .systemYellow
+            case .red: color = NSColor.systemRed.withAlphaComponent(bright ? 1 : 0.2)
             }
+            color.setFill()
+            // Never thinner than a dot, so an empty red gauge still blinks.
+            let width = max(1.5, full.width * CGFloat(gauge.fraction))
+            NSBezierPath(roundedRect: NSRect(x: full.minX, y: full.minY, width: width, height: full.height),
+                         xRadius: 0.5, yRadius: 0.5).fill()
             return true
         }
         image.isTemplate = false

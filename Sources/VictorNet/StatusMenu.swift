@@ -94,6 +94,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         RoamingAlertPolicy.alert(roaming.reading, left: roamingLeft ?? 0, now: Date())
     }
 
+    /// The bar under the phone's bars: the data SIM's allowance, while roaming.
+    private var roamingGauge: RoamingGauge? {
+        RoamingGaugePolicy.gauge(roaming.reading, left: roamingLeft ?? 0, now: Date())
+    }
+
+    /// The gauge in words, for the tooltip when no warning says more.
+    private var roamingGaugeText: String? {
+        guard let g = roamingGauge, let r = roaming.reading else { return nil }
+        let on = r.simName.map { " on \($0)" } ?? ""
+        return String(format: "%.1f / %.1f GB of roaming left%@ (%.0f%%)",
+                      Double(roamingLeft ?? r.remaining) / 1e9, Double(r.limit) / 1e9, on, g.fraction * 100)
+    }
+
     /// What hovering the menu bar icon says (`/test/state`).
     var menuBarTooltip: String? { statusItem.button?.toolTip }
 
@@ -109,8 +122,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         defer { addLowBattery(to: button) }
         var look = net.look
-        let alert = roamingAlert
-        let alertReason = roamingAlertReason
+        let gauge = roamingGauge
+        let alertReason = roamingAlertReason ?? roamingGaugeText
         button.title = ""
         if iconClimbTimer != nil {
             let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(iconClimbStarted))
@@ -119,8 +132,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             return
         }
         switch look {
-        case .hotspot(let level, _): look = .hotspot(level: level, alert: alert)
-        case .away(let level, _): look = .away(level: level, alert: alert)
+        case .hotspot(let level, _): look = .hotspot(level: level, gauge: gauge)
+        case .away(let level, _): look = .away(level: level, gauge: gauge)
         case .airplane:
             // A still airplane, never the climbing bars (Victor, 2026-11-17).
             button.image = Icons.image(for: look)
@@ -129,7 +142,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             return
         }
         guard case .hotspot = look else {
-            button.image = Icons.image(for: look)
+            button.image = Icons.image(for: look, bright: blinkBright)
             let airplane = hotspot.progress.phoneInAirplane
                 ? "✈️ The phone is in airplane mode: its hotspot starts once that is off" : nil
             // In airplane mode it did answer, just not with a signal.
@@ -149,12 +162,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             button.toolTip = "On the phone's hotspot, but no internet behind it"
         } else if let hint = switchHint {
             // Blinks (Victor, 2026-11-11): a nudge to switch the data SIM by hand on the phone.
-            let image = Icons.image(for: look, switchHint: true, network: barsNetwork)
+            let image = Icons.image(for: look, switchHint: true, network: barsNetwork, bright: blinkBright)
             button.image = image.map { blinkBright ? $0 : Icons.faded($0, 0.3) }
             let hintText = hint.better.map { SimSwitchHint.tooltip($0, over: hint.sims) } ?? "Simulated ⇄"
             button.toolTip = [alertReason, hintText].compactMap { $0 }.joined(separator: "\n")
         } else {
-            button.image = Icons.image(for: look, network: barsNetwork)
+            button.image = Icons.image(for: look, network: barsNetwork, bright: blinkBright)
             button.toolTip = alertReason
         }
     }
@@ -942,12 +955,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     /// `GET /test/icon` — the icon as it is now, 8×, on a light and a dark bar.
-    /// `look`: draw that look instead of the current icon — `away<0-4>`, `away-low`, `airplane`.
+    /// `look`: draw that look instead of the current icon — `away<0-4>`, `away-low`, `hotspot-gauge`, `hotspot-red`, `airplane`.
     func renderIconForTest(look: String? = nil) -> String? {
         let drawn: NSImage?
         switch look {
         case "airplane": drawn = Icons.image(for: .airplane)
-        case "away-low": drawn = Icons.image(for: .away(level: 2, alert: .low))
+        case "away-low": drawn = Icons.image(for: .away(level: 2, gauge: RoamingGauge(fraction: 0.4, tone: .yellow)))
+        case "hotspot-gauge": drawn = Icons.image(for: .hotspot(level: 3, gauge: RoamingGauge(fraction: 0.8, tone: .plain)), network: "5G")
+        case "hotspot-red": drawn = Icons.image(for: .hotspot(level: 3, gauge: RoamingGauge(fraction: 0.05, tone: .red)), network: "5G")
         case let l? where l.hasPrefix("away"): drawn = Icons.image(for: .away(level: Int(l.dropFirst(4))))
         default: drawn = statusItem.button?.image
         }

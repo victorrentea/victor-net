@@ -5,10 +5,10 @@ import Foundation
 /// is macOS's own icon again; this one says how the phone is doing, on its hotspot or not.
 enum NetworkLook: Equatable {
     /// On the phone's hotspot: the data SIM's bars, 0…4, read every 5 s; nil = no fresh word from it.
-    case hotspot(level: Int?, alert: RoamingAlert? = nil)
+    case hotspot(level: Int?, gauge: RoamingGauge? = nil)
     /// On anything else, or on nothing: the bars of the phone's last answer (Bluetooth, the home Wi-Fi);
     /// nil = none in the last 25 minutes.
-    case away(level: Int?, alert: RoamingAlert? = nil)
+    case away(level: Int?, gauge: RoamingGauge? = nil)
     /// Off the hotspot, the phone says it is in airplane mode: an airplane instead of bars, and
     /// nothing animated (Victor, 2026-11-17). No brackets: there is no backup to fall back on.
     case airplane
@@ -28,6 +28,34 @@ enum RoamingAlert: Equatable {
     case low
     /// Nothing left, or under the phone's reserve so it refuses the hotspot.
     case capped
+}
+
+/// The thin bar under the phone's bars while it roams (Victor, 2026-11-18): the data SIM's
+/// allowance left, full width at 100%, shrinking to the left. It took the place of the ⚠ / ✕ badge.
+struct RoamingGauge: Equatable {
+    enum Tone: Equatable {
+        /// The bar's text colour: white on the dark bar.
+        case plain
+        /// Under half the plan left.
+        case yellow
+        /// Under 1 GB left, or the phone keeps its hotspot off: red, blinking.
+        case red
+    }
+    /// 0…1 of the plan left.
+    let fraction: Double
+    let tone: Tone
+}
+
+enum RoamingGaugePolicy {
+    static let redBytes: Int64 = 1_000_000_000
+
+    /// Only while the phone says it roams *now*, on a reading young enough to trust, like the badge was.
+    static func gauge(_ r: RoamingWarningPolicy.Reading?, left: Int64, now: Date) -> RoamingGauge? {
+        guard let r, r.roamingNow, r.limit > 0, now.timeIntervalSince(r.readAt) < RoamingMeterPolicy.freshFor else { return nil }
+        let fraction = max(0, min(1, Double(left) / Double(r.limit)))
+        let tone: RoamingGauge.Tone = left < redBytes || r.hotspotBlocked ? .red : fraction < 0.5 ? .yellow : .plain
+        return RoamingGauge(fraction: fraction, tone: tone)
+    }
 }
 
 enum RoamingAlertPolicy {
@@ -270,8 +298,8 @@ final class NetworkState {
     var stateJSON: [String: Any] {
         let lookName: String
         switch look {
-        case .hotspot(let l, let a):
-            lookName = "hotspot(level:\(l.map(String.init) ?? "?"),alert:\(a.map { "\($0)" } ?? "none"))"
+        case .hotspot(let l, let g):
+            lookName = "hotspot(level:\(l.map(String.init) ?? "?"),gauge:\(g.map { "\($0)" } ?? "none"))"
         case .away(let l, _): lookName = "away(level:\(l.map(String.init) ?? "?"))"
         case .airplane: lookName = "airplane"
         }

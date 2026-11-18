@@ -159,6 +159,26 @@ final class RoamingAlertTests: XCTestCase {
         XCTAssertNil(RoamingAlertPolicy.alert(reading(roaming: true, ago: 3600), left: 0, now: Date()))
     }
 
+    /// The bar under the bars (2026-11-18): full at 100%, the text colour down to half,
+    /// yellow under half, red under 1 GB or once the phone keeps its hotspot off.
+    func testGaugeShrinksAndChangesColour() {
+        let g = { (left: Int64, blocked: Bool) in
+            RoamingGaugePolicy.gauge(self.reading(roaming: true, blocked: blocked), left: left, now: Date()) }
+        XCTAssertEqual(g(13_380_000_000, false), RoamingGauge(fraction: 1, tone: .plain))
+        XCTAssertEqual(g(7_000_000_000, false)?.tone, .plain)
+        XCTAssertEqual(g(6_000_000_000, false)?.tone, .yellow)
+        XCTAssertEqual(g(1_100_000_000, false)?.tone, .yellow)
+        XCTAssertEqual(g(900_000_000, false)?.tone, .red)
+        XCTAssertEqual(g(3_000_000_000, true)?.tone, .red)
+        XCTAssertEqual(g(-5, false), RoamingGauge(fraction: 0, tone: .red))
+        XCTAssertEqual(g(20_000_000_000, false)?.fraction, 1)
+    }
+
+    func testNoGaugeAtHomeOrOnAStaleReading() {
+        XCTAssertNil(RoamingGaugePolicy.gauge(reading(roaming: false), left: 0, now: Date()))
+        XCTAssertNil(RoamingGaugePolicy.gauge(reading(roaming: true, ago: 3600), left: 0, now: Date()))
+    }
+
     /// Vodafone's 22.86 GB were true at 09:43, when the phone had counted 37.0 GB:
     /// what was used after 09:43 keeps coming off Vodafone's number.
     func testVodafoneFigureIsAnchoredAtItsOwnMoment() {

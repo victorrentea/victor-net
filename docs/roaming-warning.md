@@ -230,3 +230,16 @@ is consumed, also displaying the amount left (GB, %, days left, SIM)"*. `Roaming
   a baseline; a count that went *down* (a `*123#` correction) lowers the mark silently.
 - Addons not running = the notice is only in the log (`✈️ another roaming GB gone`).
 - `GET /test/roaming/gb-notice` sends each SIM's pill now (`?send=0` only answers the texts).
+
+## ▁ The allowance as a bar under the phone's bars (18 Nov 2026)
+
+Asked for: *"below the GSM scale, display (only when on roaming) a progress bar (starting from 100)
+shrinking to the left, with the amount of data left. No border, just a continuous bar, in white.
+Under 50% yellow, under 1 GB red blinking. Instead of the ⚠️"*. `RoamingGaugePolicy` (unit-tested)
+gives the data SIM's `left / limit` and a tone; `Icons.gauged` lifts the bars 1 pt and draws a
+1.6 pt strip as wide as the four bars at 100%. Same condition the badge had: the phone roams
+**now**, on a reading under 30 min old; `left` is the meter's live estimate. The tone is the bar's
+text colour (white on the dark bar), yellow under 50%, red blinking (the 1 s `blinkBright`) under
+1 GB or once the phone keeps its hotspot off. The ⚠ / ✕ badge is gone from the menu bar; the data
+SIM's row in the menu keeps its ⚠️ / ❌ under 5 GB. `GET /test/icon?look=hotspot-gauge|hotspot-red|away-low`
+draws it; `/test/roaming/simulate/<pct>` shows it live.
