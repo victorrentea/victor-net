@@ -1,6 +1,6 @@
 import Foundation
 
-// Log format, the same one Victor Addons, Victor Effects and Victor Insomnia write:
+// Log format, the same one Victor Mac, Victor Effects and Victor Insomnia write:
 //   HH:MM:SS.f  PID  [name      ] info    message
 //   HH:MM:SS.f  PID  [name      ] error   message
 

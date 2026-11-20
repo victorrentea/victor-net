@@ -1,6 +1,6 @@
 import Foundation
 
-/// ✈️ A transient pill, shown by Victor Addons, each time another GB of a SIM's roaming
+/// ✈️ A transient pill, shown by Victor Mac, each time another GB of a SIM's roaming
 /// allowance is gone (Victor, 2026-11-18: "when another GB of ROAMING data is consumed, also
 /// displaying the amount left (GB, %, days left, SIM)"). One counter per SIM, since each has
 /// its own plan: `✈️ vdf: 8.4 GB left · 62% · 14 days`.
@@ -62,7 +62,7 @@ enum RoamingGbNoticePolicy {
 }
 
 /// Keeps one `Mark` per SIM in `UserDefaults` (so a restart does not announce the same GB
-/// twice) and hands each new GB to Victor Addons' bottom-left pill.
+/// twice) and hands each new GB to Victor Mac' bottom-left pill.
 final class RoamingGbNotice {
     private let defaults: UserDefaults
     private let show: (String) -> Void
@@ -90,7 +90,7 @@ final class RoamingGbNotice {
     }
 }
 
-/// The bottom-left pill of Victor Addons (`GET 127.0.0.1:55123/banner`, local only there).
+/// The bottom-left pill of Victor Mac (`GET 127.0.0.1:55123/banner`, local only there).
 /// Fire and forget: with Addons not running the notice is only in the log.
 enum AddonsBanner {
     static func show(_ text: String) {

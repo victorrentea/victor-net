@@ -2,7 +2,7 @@ import Foundation
 
 /// The phone's own charge, as its last `/status` said it — for the tablet's
 /// soundboard, which shows it in its top bar instead of the tablet's own
-/// (Victor, 2026-10-29). Victor Addons reads it from `GET /phone/battery` and
+/// (Victor, 2026-10-29). Victor Mac reads it from `GET /phone/battery` and
 /// passes it on in the `/ping` the tablet already polls.
 ///
 /// No traffic of its own: it rides on the answers this app already gets — every

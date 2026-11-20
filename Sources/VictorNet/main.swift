@@ -122,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // need that"): the ⚠ / ✕ beside the bars is the whole warning.
         roaming.onReading = { [weak self] r in
             self?.menu?.refreshIcon()
-            // ✈️ another GB of a SIM's roaming allowance gone → a pill in Victor Addons.
+            // ✈️ another GB of a SIM's roaming allowance gone → a pill in Victor Mac.
             if let self, let r, !self.roaming.isSimulating { self.gbNotice.accept(r) }
         }
         roaming.onVodafone = { [weak self] v in self?.menu?.vodafoneArrived(v) }
@@ -201,7 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "/ping":
             return (200, HttpServer.json(["ok": true, "app": "victor-net", "built": BuildInfo.time]))
         case "/phone/battery":
-            // Read by Victor Addons for the tablet's top bar (`PhoneBattery`).
+            // Read by Victor Mac for the tablet's top bar (`PhoneBattery`).
             return (200, HttpServer.json(phoneBattery.json))
         case "/test/state":
             var o: [String: Any] = [:]
@@ -284,7 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onMain { self.roaming.simulate(remainingPct: Int(arg) ?? -1) }
             return (200, roaming.diagnosticsJSON)
         case "/test/roaming/gb-notice":
-            // The ✈️ pill each SIM would show now, sent to Victor Addons (marks untouched).
+            // The ✈️ pill each SIM would show now, sent to Victor Mac (marks untouched).
             var texts: [String] = []
             onMain {
                 guard let r = self.roaming.reading else { return }

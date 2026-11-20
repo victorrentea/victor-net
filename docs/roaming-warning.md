@@ -1,6 +1,6 @@
 # 📶 Roaming allowance warning
 
-> **Moved from Victor Addons to Victor Net on 2026-10-20**, with the code. The history below
+> **Moved from Victor Mac to Victor Net on 2026-10-20**, with the code. The history below
 > is kept as it was written: `/test/*` hooks now answer on **55126** (not 55123), the log is
 > `/tmp/victor-net.log`, the settings are in `~/.victor-net/config.env`, and the 📶 meter is no
 > longer its own menu bar item — the GB ride next to the phone's bars in Victor Net's icon.
@@ -220,7 +220,7 @@ Asked for: *"display a transient notification via macos addons when another GB o
 is consumed, also displaying the amount left (GB, %, days left, SIM)"*. `RoamingGbNotice` +
 `RoamingGbNoticePolicy` (unit-tested) watch each SIM's `cycleTotal` on every **real** reading
 (never a `/simulate` one) and, when it crosses into the next whole GB, send
-`✈️ vdf: 8.4 GB left · 62% · 14 days` to Victor Addons' `GET 127.0.0.1:55123/banner?text=&hold=8`
+`✈️ vdf: 8.4 GB left · 62% · 14 days` to Victor Mac' `GET 127.0.0.1:55123/banner?text=&hold=8`
 (local only there; the bottom-left `StatusBanner`, presence-gated, so it waits for him).
 
 - **The phone's count, not the meter's estimate**: the estimate is corrected by each reading,

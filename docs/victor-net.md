@@ -1,6 +1,6 @@
 # Victor Net — the phone's icon in the menu bar
 
-Extracted from Victor Addons on 2026-10-20 (Victor: *"not enough features to deserve its
+Extracted from Victor Mac on 2026-10-20 (Victor: *"not enough features to deserve its
 own project … call it Victor Net"* — and then, about them, that they did).
 
 **Only the phone since 2026-11-12.** For three weeks it also stood in for the system Wi-Fi item
@@ -9,7 +9,7 @@ application with too many responsibilities … the selection of Wi-Fi networks w
 classical menu in Mac, and this application will remain only responsible for the integration with
 the phone."* The system Wi-Fi item is back in the menu bar; what went: the networks of today and in
 range, *More…*, joining with its password dialog, the Wi-Fi switch, *Wi-Fi Settings…*, the cable /
-Wi-Fi / offline icons. It stays its own app, not merged back into Victor Addons: each one's
+Wi-Fi / offline icons. It stays its own app, not merged back into Victor Mac: each one's
 deploys would restart the other.
 
 ## The icon: the phone's bars, always
@@ -32,7 +32,7 @@ red disc with a white ✕ there once nothing is left (or the phone refuses the h
 itself (which Wi-Fi, how strong, the cable) is macOS's icon next to it.
 
 **No GB in the menu bar, and no pill on screen** (Victor, 2026-10-20): the badge says whether
-to worry; the numbers are in the menu. The red bottom-left pill of Victor Addons was dropped.
+to worry; the numbers are in the menu. The red bottom-left pill of Victor Mac was dropped.
 
 A cable without an address (DHCP never answered) is not "wired": the menu's *this network*
 row and the book follow the route the bytes actually take.
@@ -263,7 +263,7 @@ It needs `RELAY_URL` and `RELAY_TOKEN` (the tablet bridge's token) in `config.en
 (Victor: no more often), on arrival at most once a minute. The address is found by asking the
 whole subnet, so it runs **only on `PREFERRED_SSID`, on a /24 or smaller**: on a client's
 network that sweep is a port scan. Between sweeps it asks only the address that answered. `GET /phone/battery` → `{"pct":63,"charging":false,"age_s":120}` (`{"pct":-1}`
-until the phone answers once); Victor Addons reads it and passes it on in its `/ping`.
+until the phone answers once); Victor Mac reads it and passes it on in its `/ping`.
 
 **The SIMs under `victor` on any other Wi-Fi too (12 Nov 2026).** They used to vanish while the hotspot
 was on but the Mac sat on another network (the hotel's), because the frame once ended in a Stop row.

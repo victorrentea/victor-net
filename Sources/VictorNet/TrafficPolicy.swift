@@ -5,7 +5,7 @@ import Foundation
 /// 📈 Traffic — the pure half: reading `nettop`'s CSV, folding helper processes
 /// into their app, and formatting rates. The live half is `TrafficMonitor`.
 ///
-/// Moved from Victor Addons on 2026-10-20 with the rest of the network rows.
+/// Moved from Victor Mac on 2026-10-20 with the rest of the network rows.
 /// Latency from `nettop`'s `rtt_avg` (`latency(of:)`) is kept for the test
 /// hook, but the menu's latency is `LatencyProbe` now: it has to run while the
 /// menu is closed, so two networks can be compared at all.

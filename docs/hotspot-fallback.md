@@ -1,6 +1,6 @@
 # 📶 Hotspot fallback — asking the phone for its hotspot
 
-> **Moved from Victor Addons to Victor Net on 2026-10-20**, with the code. The history below
+> **Moved from Victor Mac to Victor Net on 2026-10-20**, with the code. The history below
 > is kept as it was written: `/test/*` hooks now answer on **55126** (not 55123), the log is
 > `/tmp/victor-net.log`, the settings are in `~/.victor-net/config.env`, and the 📶 meter is no
 > longer its own menu bar item — the GB ride next to the phone's bars in Victor Net's icon.

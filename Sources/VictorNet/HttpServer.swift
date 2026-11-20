@@ -7,7 +7,7 @@ import Network
 /// UI hops to the main run loop.
 ///
 ///   GET /ping                          → {"ok":true,"app":"victor-net","built":…}
-///   GET /phone/battery                 → {"pct":63,"charging":false,"age_s":120} ({"pct":-1} = unknown); read by Victor Addons
+///   GET /phone/battery                 → {"pct":63,"charging":false,"age_s":120} ({"pct":-1} = unknown); read by Victor Mac
 ///   GET /test/state                    → network, icon (+ its tooltip), traffic, phone link
 ///   GET /test/clip/toast?text=…&png=1 → the toast a clip from the phone shows ("Open in Browser" for a link), drawn to a PNG in the temp folder
 ///
@@ -22,7 +22,7 @@ import Network
 ///   GET /test/roaming                  → ask the phone over Bluetooth now; answers the previous state
 ///   GET /test/roaming/stale/<n>        → the same, but open channel <n> first, as a stale SDP cache would
 ///   GET /test/roaming/simulate/<pct>   → pretend <pct>% is left (`off` clears)
-///   GET /test/roaming/gb-notice[?send=0] → the ✈️ "another GB gone" pill of each SIM, sent to Victor Addons
+///   GET /test/roaming/gb-notice[?send=0] → the ✈️ "another GB gone" pill of each SIM, sent to Victor Mac
 ///   GET /test/phone-battery/simulate/<pct> → the menu bar's low phone battery at <pct>% (`off` clears)
 ///   GET /test/airplane/simulate/on     → the phone said it is in airplane mode: ✈ instead of the bars off the hotspot (`off` clears)
 ///   GET /test/sim-hint/simulate/on     → the blinking ⇄ over the bars, as if the other SIM had 2+ bars more (`off` clears; on the hotspot only)
