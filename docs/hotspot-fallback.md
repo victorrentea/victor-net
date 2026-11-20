@@ -426,7 +426,7 @@ nothing at all unless the Mac is already offline and away from home.
 
 ## The night it never asked — and the heartbeat that fixes it
 
-Measured, 27–28 Aug 2026, from `/tmp/victor-macos-addons.log` and the phone's
+Measured, 27–28 Aug 2026, from `/tmp/victor-mac.log` and the phone's
 `dumpsys usagestats`:
 
 ```

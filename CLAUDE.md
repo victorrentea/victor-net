@@ -6,7 +6,7 @@ everything this Mac does with Victor's Android phone (`victor-phone-addons`): as
 hotspot over Bluetooth, its roaming allowance (set from here: plan, reset day, packages, *123#),
 ⏸ Claude on roaming data. **Not the Wi-Fi menu** (2026-11-12): listing and joining networks is
 macOS's own item again. Extracted from
-`victor-macos-addons` on 2026-10-20; public repo `victorrentea/victor-net`, branch `main`.
+`victor-mac` on 2026-10-20; public repo `victorrentea/victor-net`, branch `main`.
 
 **Read the doc of the zone before touching its code** — the details there are load-bearing:
 
