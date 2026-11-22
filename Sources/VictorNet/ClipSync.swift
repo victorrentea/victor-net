@@ -58,6 +58,21 @@ enum ClipPolicy {
     /// A copy has to stay this long: apps that paste by borrowing the clipboard put it back sooner.
     static let settle: TimeInterval = 0.6
     static let maxAge: TimeInterval = 600
+    /// How often the Mac drops a sealed "still here" in the phone's mailbox (Victor, 22 Nov 2026):
+    /// over the internet the phone cannot ask, so without it a Mac far away and copying nothing
+    /// looked gone. The phone's window for this channel is 35 min, a little more than this.
+    static let aliveEvery: TimeInterval = 30 * 60
+    /// The mailbox holds one message for 5 min: a "still here" then would push out a clip
+    /// the phone has not taken yet. That clip already says the Mac is here.
+    static let mailboxTTL: TimeInterval = 300
+    /// `from` of the "still here" message. Not "mac": a phone app older than it would paste its
+    /// empty text over the phone's clipboard, while any other `from` it throws away.
+    static let aliveFrom = "mac-alive"
+
+    static func aliveDue(lastClipInMailbox: Date?, now: Date) -> Bool {
+        guard let last = lastClipInMailbox else { return true }
+        return now.timeIntervalSince(last) >= mailboxTTL
+    }
 
     /// `nspasteboard.org` markers for content the source itself calls throwaway.
     /// **And for what it calls secret** (`ConcealedType`, set by password managers): a
@@ -109,6 +124,9 @@ final class ClipSync {
     private var seen: [String] = []
     private var lastSent: (Date, String)?
     private var lastReceived: Date?
+    private var lastClipInMailbox: Date?
+    private var lastAlive: Date?
+    private var aliveTimer: Timer?
     private var lastError: String?
 
     var onHotspot: () -> Bool = { false }
@@ -126,6 +144,7 @@ final class ClipSync {
          "last_sent_via": orNull(lastSent?.1),
          "last_received_ago_s": orNull(lastReceived.map { Int(Date().timeIntervalSince($0)) }),
          "last_error": orNull(lastError),
+         "alive_ago_s": orNull(lastAlive.map { Int(Date().timeIntervalSince($0)) }),
          "toast_ago_s": orNull(toast.lastShown.map { Int(Date().timeIntervalSince($0.0)) }),
          "toast_link": orNull(toast.lastShown?.1),
          "files": inbox.stateJSON]
@@ -138,7 +157,28 @@ final class ClipSync {
         let t = Timer(timeInterval: Self.tick, repeats: true) { [weak self] _ in self?.watch() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        let alive = Timer(timeInterval: ClipPolicy.aliveEvery, repeats: true) { [weak self] _ in self?.sayAlive() }
+        RunLoop.main.add(alive, forMode: .common)
+        aliveTimer = alive
+        // Opened in a hotel, the Mac should not make the phone wait half an hour to see it.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { self?.sayAlive() }
+        }
+        sayAlive()
         poll()
+    }
+
+    /// The phone's only sign of this Mac over the internet when nothing is copied.
+    private func sayAlive() {
+        guard let key, ClipPolicy.aliveDue(lastClipInMailbox: lastClipInMailbox, now: Date()) else { return }
+        let ping = ClipEnvelope(id: UUID().uuidString, ts: Int64(Date().timeIntervalSince1970 * 1000),
+                                from: ClipPolicy.aliveFrom, text: "")
+        guard let sealed = try? ClipCrypto.seal(ping, key: key) else { return }
+        putInMailbox(sealed) { [weak self] ok in
+            if ok { self?.lastAlive = Date() } else { netInfo("📋 still-here to the mailbox failed") }
+        }
     }
 
     // MARK: - This Mac → the phone
@@ -167,7 +207,7 @@ final class ClipSync {
         if airplane { phone.clip(sealed) { [weak self] _, why in self?.sent("bluetooth", why) } }
         putInMailbox(sealed) { [weak self] ok in
             guard let self else { return }
-            if ok { return self.sent("mailbox", nil) }
+            if ok { self.lastClipInMailbox = Date(); return self.sent("mailbox", nil) }
             guard !airplane, !self.onHotspot(), sealed.count <= ClipPolicy.maxBluetoothCiphertext else {
                 return self.sent("nothing", "the mailbox did not answer")
             }

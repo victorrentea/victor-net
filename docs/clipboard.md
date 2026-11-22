@@ -43,7 +43,12 @@
   (`http(s)://…`, `www.…`) gets "Open in Browser" and 9 s. A panel of our own, not a system
   notification: no permission, never steals the focus. The preview is only the length (above). `GET /test/clip/toast?text=…`
   shows one without touching the clipboard (`&png=<path>` also draws it to a file).
-- `GET /test/state` → `clip`: what went, by which way, and when. Never the text.
+- **A "still here" every 30 min** (Victor, 22 Nov 2026): a sealed envelope with `from: "mac-alive"`
+  and no text goes to the phone's mailbox at start, on wake and every 30 min, so the phone sees
+  the Mac over the internet (`💻 on internet … < 35 min`) even when nothing is copied. It is skipped
+  while a clip may still sit in the box (5 min), since that clip says the same. A phone app older
+  than it refuses any `from` but `"mac"`, so it never pastes it.
+- `GET /test/state` → `clip`: what went, by which way, and when. Never the text. `alive_ago_s` is the last "still here".
 
 ## 📥 Files and screenshots, phone → Mac
 

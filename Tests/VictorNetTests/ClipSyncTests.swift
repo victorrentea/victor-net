@@ -61,4 +61,10 @@ final class ClipSyncTests: XCTestCase {
         XCTAssertFalse(FileInbox.needsAsking(shot, setting: nil))
         XCTAssertFalse(FileInbox.needsAsking(file, setting: "auto"))
     }
+
+    func testStillHereWaitsWhileAClipMayStillBeInTheMailbox() {
+        XCTAssertTrue(ClipPolicy.aliveDue(lastClipInMailbox: nil, now: t0))
+        XCTAssertFalse(ClipPolicy.aliveDue(lastClipInMailbox: t0.addingTimeInterval(-60), now: t0))
+        XCTAssertTrue(ClipPolicy.aliveDue(lastClipInMailbox: t0.addingTimeInterval(-300), now: t0))
+    }
 }
