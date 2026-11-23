@@ -339,29 +339,27 @@ enum Icons {
 }
 
 extension Icons {
-    /// The Mac's own battery, measured off the bar in points: 22.5 × 12, a 1 pt outline in the
-    /// bar's colour at half strength, a 1.5 × 4 nub after a 1 pt gap. No number: only the red
-    /// charge inside blinks, as wide as the charge left.
+    /// A phone standing up, its low battery filling it from the bottom (Victor, 2026-11-24: the
+    /// horizontal Mac-style battery took too much of the menu bar). 9 × 15, a 1 pt outline in the
+    /// bar's colour at half strength, a short earpiece slit at the top; only the red charge
+    /// blinks, as tall as the charge left. No number.
     static func lowPhoneBattery(pct: Int, bright: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 26, height: barHeight), flipped: false) { rect in
+        let image = NSImage(size: NSSize(width: 10, height: barHeight), flipped: false) { rect in
             let shell = NSColor.labelColor.withAlphaComponent(0.45)
             shell.setStroke()
-            let outline = NSBezierPath(roundedRect: NSRect(x: 0.5, y: 2.5, width: 21.5, height: 11), xRadius: 3, yRadius: 3)
+            let body = NSRect(x: 0.5, y: 0.5, width: 9, height: 15)
+            let outline = NSBezierPath(roundedRect: body, xRadius: 2.2, yRadius: 2.2)
             outline.lineWidth = 1
             outline.stroke()
             shell.setFill()
-            let nub = NSBezierPath()
-            nub.move(to: NSPoint(x: 23.5, y: rect.midY - 2))
-            nub.curve(to: NSPoint(x: 23.5, y: rect.midY + 2),
-                      controlPoint1: NSPoint(x: 25.5, y: rect.midY - 1), controlPoint2: NSPoint(x: 25.5, y: rect.midY + 1))
-            nub.close()
-            nub.fill()
+            NSBezierPath(roundedRect: NSRect(x: body.midX - 1.5, y: body.maxY - 2.6, width: 3, height: 0.9),
+                         xRadius: 0.45, yRadius: 0.45).fill()
 
-            let inner = NSRect(x: 1.5, y: 4, width: 19.5, height: 8)
+            let inner = NSRect(x: 2, y: 2, width: 6, height: 10.5)
             let charge = NSRect(x: inner.minX, y: inner.minY,
-                                width: max(2.5, inner.width * CGFloat(pct) / 100), height: inner.height)
+                                width: inner.width, height: max(2, inner.height * CGFloat(pct) / 100))
             NSColor.systemRed.withAlphaComponent(bright ? 1 : 0.2).setFill()
-            NSBezierPath(roundedRect: charge, xRadius: 1.5, yRadius: 1.5).fill()
+            NSBezierPath(roundedRect: charge, xRadius: 1, yRadius: 1).fill()
             return true
         }
         image.isTemplate = false
