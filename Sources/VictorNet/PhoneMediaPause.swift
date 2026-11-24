@@ -2,12 +2,18 @@ import Foundation
 
 /// The phone's music stops while Victor dictates on this Mac (asked 2026-10-29).
 ///
-/// **Where "dictating" comes from.** Walkie Talkie already announces it: its
-/// `MusicBridge` pushes `{"type":"dictation","active":true|false}` on
-/// `ws://127.0.0.1:8920` for the Chrome extension, which pauses audible tabs with
-/// it. This is one more listener on that socket — Walkie is not changed and does
-/// not know Victor Net exists; with Walkie not running, the connect just fails
-/// and is retried.
+/// **Where "dictating" comes from.** Victor Mac's `ChromeBridge` pushes
+/// `{"type":"dictation","active":true|false}` on `ws://127.0.0.1:8766` for the
+/// Victor Addons Chrome extension, which pauses audible tabs with it. Its window
+/// is "Wispr Flow or Walkie Talkie holds the microphone" (`CoreAudioManager`), so
+/// it covers a Walkie dictation through either engine. This is one more client on
+/// that socket; it says `hello` with only `dictation`, so Victor Mac never sends
+/// it a Chrome command. With Victor Mac not running, the connect fails and is
+/// retried.
+///
+/// Until 2026-11-24 this listened on Walkie Talkie's own `MusicBridge`
+/// (`:8920`), deleted on 2026-11-20 with Walkie's Chrome extension: from then on
+/// nobody told the phone, until this moved to Victor Mac's bridge.
 ///
 /// **How the phone is told.** `GET /media?hold=1&ttl=…` / `hold=0`, a
 /// `StatusServer.kt` route on the phone, through `PhoneLink` — over HTTP while on
@@ -15,13 +21,13 @@ import Foundation
 /// few seconds). The phone takes a transient audio focus, so the player pauses
 /// and resumes by itself when it is given back.
 ///
-/// **Why a ttl, refreshed.** A `hold=0` that never arrives (Walkie quit, this
+/// **Why a ttl, refreshed.** A `hold=0` that never arrives (Victor Mac quit, this
 /// Mac asleep, out of Bluetooth range) must not leave the music off for good, so
 /// the phone lets go on its own after `ttl` and the hold is renewed every
 /// `refresh` while the dictation lasts.
 final class PhoneMediaPause {
 
-    static let walkieURL = URL(string: "ws://127.0.0.1:8920")!
+    static let bridgeURL = URL(string: "ws://127.0.0.1:8766")!
     private static let ttl = 90
     private static let refresh: TimeInterval = 30
     private static let reconnectAfter: TimeInterval = 5
@@ -52,17 +58,20 @@ final class PhoneMediaPause {
     }
 
     var stateJSON: [String: Any] {
-        ["walkie_connected": connected, "dictating": dictating,
+        ["bridge_connected": connected, "dictating": dictating,
          "phone_told": sent.map { $0 ? "pause" : "resume" } ?? NSNull(),
          "last_error": lastError ?? NSNull()]
     }
 
-    // MARK: - Walkie's socket
+    // MARK: - Victor Mac's dictation bridge
 
     private func connect() {
-        let t = session.webSocketTask(with: Self.walkieURL)
+        let t = session.webSocketTask(with: Self.bridgeURL)
         task = t
         t.resume()
+        // Listed as a client that handles `dictation` only, so the bridge's
+        // feature-gated commands (focus-or-open, reload) are never meant for us.
+        t.send(.string(#"{"type":"hello","client":"victor-net","features":["dictation"]}"#)) { _ in }
         receive(t)
     }
 
@@ -74,15 +83,15 @@ final class PhoneMediaPause {
                 case .success(let message):
                     if !self.connected {
                         self.connected = true
-                        netInfo("🎵 listening to Walkie Talkie's dictation — the phone's music pauses with it")
+                        netInfo("🎵 listening to Victor Mac's dictation bridge — the phone's music pauses with it")
                     }
                     if case .string(let text) = message { self.handle(text) }
                     self.receive(t)
                 case .failure:
-                    if self.connected { netInfo("🎵 Walkie Talkie's socket closed — retrying every \(Int(Self.reconnectAfter))s") }
+                    if self.connected { netInfo("🎵 Victor Mac's dictation bridge closed — retrying every \(Int(Self.reconnectAfter))s") }
                     self.connected = false
                     self.task = nil
-                    // A socket gone mid-dictation is Walkie gone: let the music go.
+                    // A socket gone mid-dictation is Victor Mac gone: let the music go.
                     self.setDictating(false)
                     DispatchQueue.main.asyncAfter(deadline: .now() + Self.reconnectAfter) { [weak self] in self?.connect() }
                 }

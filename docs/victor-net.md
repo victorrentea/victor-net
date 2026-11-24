@@ -201,15 +201,23 @@ which passes the password from `~/.victor-net/wifi-passwords.json` (`WifiPasswor
 `{"<ssid>": "<password>"}`). The menu's password dialog that filled it is gone with the list
 (2026-11-12): a new entry is added by hand.
 
-## 🎵 The phone's music pauses while Walkie Talkie dictates (2026-10-29)
+## 🎵 The phone's music pauses while Victor dictates (2026-10-29)
 
-`PhoneMediaPause` listens on Walkie Talkie's own `ws://127.0.0.1:8920` (the `MusicBridge`
-that pauses Chrome tabs) — Walkie is not changed and does not know about it. On
+`PhoneMediaPause` is a client of Victor Mac's `ChromeBridge` on `ws://127.0.0.1:8766` (the
+socket the Victor Addons extension pauses Chrome tabs with), and says `hello` with only
+`dictation`. Its window is "Wispr Flow or Walkie Talkie holds the microphone", so a Walkie
+dictation counts through either engine. On
 `{"type":"dictation","active":true}` it sends the phone `GET /media?hold=1&ttl=90`, renewed
 every 30 s, and `hold=0` at the end; through `PhoneLink`, so HTTP on the hotspot and
 `R /media…` over Bluetooth elsewhere (a page: the pause lands a few seconds late there).
 The phone takes a transient audio focus, so the player stops and resumes by itself; the ttl
-lets the music go if the resume never arrives. State: `/test/state` → `media_pause`.
+lets the music go if the resume never arrives. State: `/test/state` → `media_pause`
+(`bridge_connected`, `phone_told`).
+
+**It listened on Walkie Talkie's `:8920` until 2026-11-24.** Walkie's `MusicBridge` was
+deleted on 2026-11-20 with its Chrome extension, on the grounds that Victor Addons already
+pauses Chrome's music. True for Chrome, but this listener lost its only source and nothing
+said so: the connect just kept failing quietly every 5 s. Victor noticed four days later.
 
 **A missing SDP record is re-read before it is believed (2026-11-12).** For 35 minutes every
 pause and roaming poll failed with "not publishing the beacon channel", while the phone's own
