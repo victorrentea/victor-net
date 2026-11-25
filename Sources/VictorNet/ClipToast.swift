@@ -22,16 +22,19 @@ enum ClipToastPolicy {
     /// shared screen. Until then it showed none, only the length (13 Nov 2026).
     static let shownChars = 3
 
-    /// `“abc…” · 42 characters`. The first characters only, newlines and tabs made spaces so
-    /// the toast stays one line; a clip that short is shown whole. A lone link is the
-    /// exception, and `show` names its host.
+    /// `abc…`: the first characters only, on one line (newlines and tabs made spaces);
+    /// a clip that short is shown whole. No length, no quotes (Victor, 25 Nov 2026: the toast is
+    /// one line, `📋 From phone: abc…`). A lone link is the exception, and `show` names its host.
     static func preview(_ text: String) -> String {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let n = t.count
-        let length = n == 1 ? "1 character" : "\(n) characters"
-        guard n > 0 else { return length }
         let head = String(t.prefix(shownChars).map { $0.isWhitespace || $0.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) } ? " " : $0 })
-        return "“\(head)\(n > shownChars ? "…" : "")” · \(length)"
+        return head + (t.count > shownChars ? "…" : "")
+    }
+
+    /// The toast's only line: `📋 From phone: abc…`, or `🔗 From phone: example.com` for a link.
+    static func line(_ text: String) -> (label: String, what: String) {
+        if let url = link(in: text) { return ("🔗 From phone:", url.host ?? url.absoluteString) }
+        return ("📋 From phone:", preview(text))
     }
 }
 
@@ -48,18 +51,14 @@ final class ClipToast {
         lastShown = (Date(), link != nil)
         close()
 
-        let title = NSTextField(labelWithString: link == nil ? "📋 Copied from phone" : "🔗 Link copied from phone")
-        title.font = .boldSystemFont(ofSize: 12)
-        title.textColor = .white
-        let body = NSTextField(labelWithString: link.map { $0.host ?? $0.absoluteString } ?? ClipToastPolicy.preview(text))
-        body.font = .systemFont(ofSize: 11)
-        body.textColor = NSColor.white.withAlphaComponent(0.75)
-        body.lineBreakMode = .byTruncatingTail
-        body.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let texts = NSStackView(views: [title, body])
-        texts.orientation = .vertical
-        texts.alignment = .leading
-        texts.spacing = 2
+        let (label, what) = ClipToastPolicy.line(text)
+        let shown = NSMutableAttributedString(string: label, attributes: [
+            .font: NSFont.boldSystemFont(ofSize: 12), .foregroundColor: NSColor.white])
+        shown.append(NSAttributedString(string: " " + what, attributes: [
+            .font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.white.withAlphaComponent(0.8)]))
+        let texts = NSTextField(labelWithAttributedString: shown)
+        texts.lineBreakMode = .byTruncatingTail
+        texts.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         var row: [NSView] = [texts]
         if let link {
