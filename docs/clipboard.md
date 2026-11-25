@@ -23,9 +23,12 @@
 - **Each clip carries an id and a time**, so the two ways of delivery cannot apply it twice and a
   ciphertext older than 10 min is refused. The ids seen are kept in memory only: within those 10
   min, a restart of either end would take the same ciphertext once more.
-- **The toast never shows the content**, only "N characters" (Victor, 13 Nov 2026): no rule
-  tells a password or a code from harmless text every time, and the screen may be shared. A lone
-  link still shows its host.
+- **The toast shows only the first 3 characters** and the length: `“abc…” · 42 characters`
+  (Victor, 25 Nov 2026; from 13 Nov it showed only the length). Enough to tell which copy arrived,
+  too few to give away a password, a card or a code on a shared screen. A lone link still shows its host.
+- **The Mac logs each clip from the phone** (length and delay, never the text), a refused one
+  (why), and the mailbox going quiet and back (once per outage), since a copy on 25 Nov 2026 at
+  16:30 left no trace to tell whether it was missed on the phone or on the way.
 - **A password copied on the Mac stays on the Mac**: a copy marked
   `org.nspasteboard.ConcealedType` (password managers) is not sent (13 Nov 2026; it was before).
   The phone does the same with a clip its source marked sensitive. A clip from the Mac
@@ -41,7 +44,7 @@
 - **A toast says it arrived** (`ClipToast`, Emma 2026-11-08): top-right of the screen under the
   pointer, 4 s, kept up while hovered, a click dismisses it. A clip that is only a web address
   (`http(s)://…`, `www.…`) gets "Open in Browser" and 9 s. A panel of our own, not a system
-  notification: no permission, never steals the focus. The preview is only the length (above). `GET /test/clip/toast?text=…`
+  notification: no permission, never steals the focus. The preview is 3 characters and the length (above). `GET /test/clip/toast?text=…`
   shows one without touching the clipboard (`&png=<path>` also draws it to a file).
 - **A "still here" every 30 min** (Victor, 22 Nov 2026): a sealed envelope with `from: "mac-alive"`
   and no text goes to the phone's mailbox at start, on wake and every 30 min, so the phone sees

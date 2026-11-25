@@ -2,7 +2,6 @@ import AppKit
 
 /// What the toast says about a clip from the phone. No AppKit, so a test can pin it.
 enum ClipToastPolicy {
-    static let maxPreview = 60
     static let stay: TimeInterval = 4
     /// Longer when there is a button to reach for.
     static let stayWithLink: TimeInterval = 9
@@ -18,13 +17,21 @@ enum ClipToastPolicy {
         return url
     }
 
-    /// **Never the content** (Victor, 13 Nov 2026): the screen may be shared, and no rule
-    /// tells a password, a card or a one-time code from harmless text every time — the
-    /// heuristics that tried missed "Your code is 482913" and hid years and prices. Only how
-    /// much arrived. A lone link is the exception, and `show` names its host.
+    /// How many characters of the clip the toast shows (Victor, 25 Nov 2026): enough to tell
+    /// which copy arrived, too few to give away a password, a card or a one-time code on a
+    /// shared screen. Until then it showed none, only the length (13 Nov 2026).
+    static let shownChars = 3
+
+    /// `“abc…” · 42 characters`. The first characters only, newlines and tabs made spaces so
+    /// the toast stays one line; a clip that short is shown whole. A lone link is the
+    /// exception, and `show` names its host.
     static func preview(_ text: String) -> String {
-        let n = text.trimmingCharacters(in: .whitespacesAndNewlines).count
-        return n == 1 ? "1 character" : "\(n) characters"
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let n = t.count
+        let length = n == 1 ? "1 character" : "\(n) characters"
+        guard n > 0 else { return length }
+        let head = String(t.prefix(shownChars).map { $0.isWhitespace || $0.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) } ? " " : $0 })
+        return "“\(head)\(n > shownChars ? "…" : "")” · \(length)"
     }
 }
 

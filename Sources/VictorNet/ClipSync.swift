@@ -128,6 +128,8 @@ final class ClipSync {
     private var lastAlive: Date?
     private var aliveTimer: Timer?
     private var lastError: String?
+    /// The long poll failed last time: logged once per outage, not every 15 s.
+    private var mailboxDown = false
 
     var onHotspot: () -> Bool = { false }
     /// The phone said it is in airplane mode: it cannot reach the mailbox, so Bluetooth is the way.
@@ -251,10 +253,14 @@ final class ClipSync {
 
     private func polled(_ answer: [String: Any]?) {
         guard let answer else {
+            if !mailboxDown { netInfo("📋 the phone's clips cannot be fetched: the mailbox did not answer, retrying every \(Int(Self.retry))s") }
+            mailboxDown = true
             let t = Timer(timeInterval: Self.retry, repeats: false) { [weak self] _ in self?.poll() }
             RunLoop.main.add(t, forMode: .common)
             return
         }
+        if mailboxDown { netInfo("📋 the mailbox answers again") }
+        mailboxDown = false
         after = answer["seq"] as? Int ?? after
         defer { primed = true }
         if primed, let sealed = answer["ciphertext"] as? String { take(sealed) }
@@ -265,16 +271,27 @@ final class ClipSync {
     func status(_ data: Data) {
         guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let offers = o["files"] as? [String] else { return }
-        offers.forEach(take)
+        offers.forEach { take($0, via: "phone's /status") }
     }
 
-    private func take(_ sealed: String) {
-        guard let key, let clip = ClipCrypto.open(sealed, key: key),
-              ClipPolicy.believable(clip, now: Date(), seen: seen) else { return }
+    private func take(_ sealed: String, via: String = "mailbox") {
+        guard let key else { return }
+        guard let clip = ClipCrypto.open(sealed, key: key) else {
+            return netInfo("📋 a clip from the \(via) did not open: another CLIP_KEY?")
+        }
+        guard ClipPolicy.believable(clip, now: Date(), seen: seen) else {
+            // Never the text: only why it was refused (Victor, 25 Nov 2026: a copy at 16:30 left no trace).
+            if clip.files == nil, clip.from == "phone", !seen.contains(clip.id) {
+                let age = Int(Date().timeIntervalSince1970 - Double(clip.ts) / 1000)
+                netInfo("📋 a clip from the phone refused: \(age)s old (clocks apart?)")
+            }
+            return
+        }
         // A file offer is not marked seen: `/status` repeats it every 5 s, which is the retry
         // after a failed download. `FileInbox` itself skips a file it has or is fetching.
         if let files = clip.files { return inbox.accept(files, ips: clip.ips ?? [], relay: clip.relay ?? false) }
         seen = Array((seen + [clip.id]).suffix(64))
+        netInfo("📋 clip from the phone: \(clip.text.count) characters, \(Int(Date().timeIntervalSince1970 - Double(clip.ts) / 1000))s after the copy")
         write(clip.text)
     }
 

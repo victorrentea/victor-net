@@ -17,13 +17,19 @@ final class ClipToastPolicyTests: XCTestCase {
         XCTAssertNil(ClipToastPolicy.link(in: ""))
     }
 
-    func testThePreviewNeverShowsTheContent() {
+    func testThePreviewShowsOnlyTheFirstThreeCharacters() {
         for secret in ["4111 1111 1111 1234", "RO49 AAAA 1B31 0075 9384 0000", "Tr0ub4dor&3x",
                        "Your code is 482913", "pass@word.1", "correct horse battery staple"] {
             let shown = ClipToastPolicy.preview(secret)
-            XCTAssertEqual(shown, "\(secret.count) characters")
-            XCTAssertFalse(shown.contains("482913") || shown.contains("1234"))
+            XCTAssertEqual(shown, "“\(secret.prefix(3))…” · \(secret.count) characters")
+            XCTAssertFalse(shown.contains("482913") || shown.contains("1234") || shown.contains("ub4"))
         }
-        XCTAssertEqual(ClipToastPolicy.preview(" x\n"), "1 character")
+    }
+
+    func testAShortClipIsShownWholeOnOneLine() {
+        XCTAssertEqual(ClipToastPolicy.preview(" x\n"), "“x” · 1 character")
+        XCTAssertEqual(ClipToastPolicy.preview("abc"), "“abc” · 3 characters")
+        XCTAssertEqual(ClipToastPolicy.preview("a\nbcdef"), "“a b…” · 7 characters")
+        XCTAssertEqual(ClipToastPolicy.preview("  \n"), "0 characters")
     }
 }
