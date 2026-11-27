@@ -335,12 +335,40 @@ final class PhoneLink {
 
     private static let signingKey = ClipCrypto.key(hex: Config.clipKey)
 
+    /// The phone's address on the home Wi-Fi, when known (`PhoneLan.homeAddress`). Main thread.
+    var homeAddress: (() -> String?)?
+
     private func get(_ unsigned: String, timeout: TimeInterval, done: @escaping (Data?, String?) -> Void) {
         let path = PhoneAuth.sign(unsigned, key: Self.signingKey)
         guard onHotspot(), let gw = Self.gateway(),
               let url = URL(string: "http://\(gw):\(Config.phoneStatusPort)\(path)") else {
-            guard let viaBluetooth else { return done(nil, "only while this Mac is on the phone's hotspot") }
-            return viaBluetooth(path, timeout + 20, done)   // + the page, SDP and channel open
+            let bluetooth: () -> Void = { [weak self] in
+                guard let self, let viaBluetooth = self.viaBluetooth else {
+                    return done(nil, "only while this Mac is on the phone's hotspot")
+                }
+                // Signed again: the Wi-Fi try may have spent the first signature.
+                viaBluetooth(PhoneAuth.sign(unsigned, key: Self.signingKey), timeout + 20, done)
+            }
+            // **The home Wi-Fi first** (2026-11-27): where `PhoneLan` has found the phone, a
+            // question is milliseconds there and seconds over a fresh Bluetooth channel.
+            guard let lan = homeAddress?(),
+                  let lanURL = URL(string: "http://\(lan):\(Config.phoneStatusPort)\(path)") else { return bluetooth() }
+            var request = URLRequest(url: lanURL)
+            request.timeoutInterval = timeout
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                let status = (response as? HTTPURLResponse)?.statusCode
+                // Bluetooth only when the question cannot have reached the phone — a timeout may
+                // be one that did (`/ussd` dialled twice, a clip or a squelch delivered twice:
+                // the review of 2026-11-27). `/media` is the exception: a hold with a ttl, safe twice.
+                let unreached = Self.neverReached(error) || unsigned.hasPrefix("/media")
+                RunLoop.main.perform(inModes: [.common]) {
+                    if error == nil, status == 200 { done(data, nil) }
+                    else if error != nil, unreached { bluetooth() }
+                    else { done(data, error?.localizedDescription ?? "the phone answered \(status ?? 0) over the Wi-Fi") }
+                }
+                CFRunLoopWakeUp(CFRunLoopGetMain())
+            }.resume()
+            return
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = timeout
@@ -348,6 +376,12 @@ final class PhoneLink {
             RunLoop.main.perform(inModes: [.common]) { done(data, error?.localizedDescription) }
             CFRunLoopWakeUp(CFRunLoopGetMain())
         }.resume()
+    }
+
+    /// A connect-level failure: the request never left this Mac or found no phone.
+    static func neverReached(_ error: Error?) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        return [.cannotConnectToHost, .cannotFindHost, .notConnectedToInternet, .dnsLookupFailed].contains(code)
     }
 
     /// The IPv4 default router — on the hotspot, the phone itself.

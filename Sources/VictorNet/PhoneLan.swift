@@ -51,6 +51,9 @@ final class PhoneLan {
     private var timer: Timer?
     private var busy = false
     private var ip: String?
+    /// The address that last answered a **signed** `/status` with the signed-only fields: the
+    /// sweep is unsigned, so any host with a battery could be `ip`; commands go only to this one.
+    private var verified: String?
     private var lastAttempt: Date?
     private var lastAnswer: Date?
     private var lastSSID: String?
@@ -92,6 +95,14 @@ final class PhoneLan {
         ask([ip]) { [weak self] found in
             if found != nil { self?.busy = false } else { self?.sweep() }
         }
+    }
+
+    /// The phone's address on the home Wi-Fi, while this Mac is on it and one is known: `PhoneLink`
+    /// sends its questions there first (2026-11-27), milliseconds instead of a Bluetooth channel.
+    /// Main thread.
+    var homeAddress: String? {
+        guard ssid() == Config.preferredSSID, !onHotspot(), let ip, ip == verified else { return nil }
+        return ip
     }
 
     /// One ask now, at the address that answered last, on the home Wi-Fi only (no sweep: that is
@@ -141,6 +152,7 @@ final class PhoneLan {
                     left -= 1
                     guard !answered else { return }
                     if let data, PhoneBattery.parse(data, now: Date()) != nil {
+                        if hosts.count == 1, Self.isSignedAnswer(data) { self?.verified = host }
                         answered = true
                         tasks.forEach { $0.cancel() }
                         self?.lastAnswer = Date()
@@ -156,6 +168,13 @@ final class PhoneLan {
         }
         guard !tasks.isEmpty else { return done(nil) }
         tasks.forEach { $0.resume() }
+    }
+
+    /// The full `/status` (anything beyond the public airplane/signal/battery) is given only to a
+    /// signed request — so only the phone, holding the key, can have answered it.
+    static func isSignedAnswer(_ data: Data) -> Bool {
+        guard let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return false }
+        return !Set(o.keys).subtracting(["airplane", "signal", "battery"]).isEmpty
     }
 
     private static func wifiAddress() -> (ip: String, mask: String)? {

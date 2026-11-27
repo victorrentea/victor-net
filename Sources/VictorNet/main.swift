@@ -140,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.clipSync.status(data)
         }
         roaming.start()
+        phone.homeAddress = { [weak self] in self?.phoneLan.homeAddress }
         phoneLan.onHotspot = { [weak self] in self?.net.onHotspot ?? false }
         phoneLan.ssid = { [weak self] in self?.net.ssid }
         phoneLan.onStatus = { [weak self] data in

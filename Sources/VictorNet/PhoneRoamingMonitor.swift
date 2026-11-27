@@ -51,6 +51,36 @@ final class PhoneRoamingMonitor {
     private var channel: IOBluetoothRFCOMMChannel?
     private var buffer = Data()
 
+    // MARK: The permanent channel (2026-11-27)
+    //
+    // Victor: *"I'm perfectly fine keeping the connection open at all times between the
+    // devices."* The Mac and the phone keep a baseband link up anyway (the phone's log: hours
+    // at a time, in sniff mode 11 s after any traffic, and a 60 s idle RFCOMM hold did not wake
+    // it). What cost the seconds was a **fresh channel per question**: SDP, open, the phone's
+    // 1.5 s query window, and `PhoneSocket.settle` before the next one. So the first question
+    // opens with `R /session`; a phone that knows it answers `{"session":true}` and keeps
+    // reading `R <path>` lines on that channel for as long as it stays open, and every later
+    // question is one line out, one line back. An older phone answers `not found` and hangs
+    // up: then it is one channel per question, as before. The hotspot request keeps its own
+    // channel: its `take` frees this one, and the next question opens it again.
+    static let sessionTag = "question session"
+    /// Touched on `bluetooth` only: the open session's channel and its waiting question.
+    private var sessionOpener: PhoneChannelOpener?
+    private var sessionChannel: IOBluetoothRFCOMMChannel?
+    private var sessionBuffer = Data()
+    private var sessionPending: ((String?, String?) -> Void)?
+    /// Read on `queue`, written on either: whether a session is up, and whether this phone has none.
+    private let sessionLock = NSLock()
+    private var _sessionOpen = false
+    private var sessionUnsupportedUntil = Date.distantPast
+    /// A channel that closed before it answered, or died under a question: the next open drops
+    /// the link first. Measured 2026-11-27 21:50: after Victor Net was restarted with the
+    /// channel up, every open "succeeded" and closed at once, the phone never saw one, until the
+    /// link went down and came back (11.5 s); then the phone accepted the next open at once.
+    private var dropLinkFirst = false
+    /// Longer than a restart, shorter than an evening: an updated phone app is found again soon.
+    private static let unsupportedFor: TimeInterval = 30 * 60
+
     private let lock = NSLock()
     private var _reading: RoamingWarningPolicy.Reading?
     private var _simulated: RoamingWarningPolicy.Reading?
@@ -229,9 +259,219 @@ final class PhoneRoamingMonitor {
         }
     }
 
-    /// One question, one line: open the beacon's channel, write `R <path>`, read up
-    /// to the newline, hang up. On `queue` (blocks it — one exchange at a time).
+    /// One question, one line — over the permanent channel when the phone has one, else on a
+    /// channel of its own. On `queue` (blocks it — one exchange at a time).
     private func exchange(_ path: String, budget: TimeInterval) -> (String?, String?) {
+        guard Date() >= sessionLock.withLock({ sessionUnsupportedUntil }) else {
+            return singleExchange(path, budget: budget)
+        }
+        guard PhoneSocket.shared.take("beacon (\(Self.shortPath(path)))", timeout: max(budget, 45),
+                                      keeping: Self.sessionTag) else {
+            return (nil, "the phone's channel stayed busy")
+        }
+        var reused = sessionLock.withLock { _sessionOpen }
+        for attempt in 0..<2 {
+            if !sessionLock.withLock({ _sessionOpen }) {
+                // A fast `take(keeping:)` may have found the session already dead: the phone needs
+                // its re-listen before the next open (the 28 Aug stale-SDP race).
+                PhoneSocket.shared.settleBeforeOpen()
+                let started = Date()
+                switch openSession(budget: budget) {
+                case .open:
+                    netInfo(String(format: "📶 permanent channel to the phone open in %.1f s", Date().timeIntervalSince(started)))
+                case .unsupported:
+                    sessionLock.withLock { sessionUnsupportedUntil = Date() + Self.unsupportedFor }
+                    netInfo("📶 the phone has no permanent channel (an older app) — one channel per question for \(Int(Self.unsupportedFor / 60)) min")
+                    PhoneSocket.shared.done()
+                    return singleExchange(path, budget: budget)
+                case .failed(let why):
+                    // Closed before it answered: a stale channel, which only a fresh link clears.
+                    // Once more, now, rather than losing this question too.
+                    if attempt == 0, sessionLock.withLock({ dropLinkFirst }) {
+                        netInfo("📵 the permanent channel closed before answering (\(why)) — dropping the link and opening again")
+                        PhoneSocket.shared.noteHangUp()
+                        continue
+                    }
+                    PhoneSocket.shared.done()
+                    return (nil, why)
+                }
+                reused = false
+            }
+            let (line, why, unreached) = ask(path, budget: budget)
+            if let line {
+                PhoneSocket.shared.done(holding: { [weak self] in self?.closeSession() }, by: Self.sessionTag)
+                if line.hasPrefix("#") { return (nil, "the phone took the question for a hotspot request (\(line))") }
+                return (line, nil)
+            }
+            closeSession()
+            PhoneSocket.shared.noteHangUp()   // now, not when the Bluetooth thread gets to it
+            if reused { sessionLock.withLock { dropLinkFirst = true } }
+            // A channel that died without telling us (a sleep, a dropped link, the phone's service
+            // restarted): once more on a fresh one — when the question cannot have reached the
+            // phone, or is safe to repeat (review, 2026-11-27).
+            guard attempt == 0, reused, unreached || Self.repeatable(path) else {
+                PhoneSocket.shared.done()
+                return (nil, why)
+            }
+            netInfo("📶 the permanent channel was dead (\(why ?? "?")) — reopening it")
+        }
+        PhoneSocket.shared.done()
+        return (nil, "the phone never answered")
+    }
+
+    /// Reads and settings: asked twice, they do no harm. Not `/ussd`, `/clip`, `/chime`, `/hotspot/off`.
+    static func repeatable(_ path: String) -> Bool {
+        ["", "/status", "/config", "/media"].contains(shortPath(path))
+    }
+
+    enum SessionOpen: Equatable { case open, unsupported, failed(String) }
+
+    /// Opens the channel and asks `R /session`. On `queue`, inside a `PhoneSocket` turn.
+    private func openSession(budget: TimeInterval) -> SessionOpen {
+        var result = SessionOpen.failed("the phone never answered")
+        let done = DispatchSemaphore(value: 0)
+        var signalled = false
+        let finish: (SessionOpen) -> Void = { r in
+            guard !signalled else { return }
+            signalled = true
+            result = r
+            done.signal()
+        }
+        bluetooth.async { [weak self] in
+            guard let self else { return finish(.failed("shutting down")) }
+            guard let dev = IOBluetoothDevice(addressString: HotspotFallback.phoneBluetoothAddress) else {
+                return finish(.failed("phone not in the Bluetooth pairing list"))
+            }
+            self.sessionBuffer = Data()
+            if self.sessionLock.withLock({ () -> Bool in let d = self.dropLinkFirst; self.dropLinkFirst = false; return d }) {
+                dev.closeConnection()   // the opener pages it back up and reads the SDP record afresh
+            }
+            self.sessionPending = { line, why in
+                guard let line else { return finish(.failed(why ?? "the phone never answered")) }
+                finish(Self.handshake(line))
+            }
+            let opener = PhoneChannelOpener(device: dev, service: IOBluetoothSDPUUID(uuid16: Self.sppUUID),
+                                            serviceName: "beacon (session)") { outcome in
+                switch outcome {
+                case .opened(let ch, _):
+                    self.sessionChannel = ch
+                    // Signed, so no other paired device can hold the phone's only socket with it.
+                    var bytes = [UInt8](Self.query(PhoneAuth.sign("/session", key: PhoneAuth.key)))
+                    let written = ch.writeSync(&bytes, length: UInt16(bytes.count))
+                    if written != kIOReturnSuccess { self.answer(nil, "could not open the session (\(written))") }
+                case .failed(let why):
+                    self.answer(nil, why)
+                }
+            }
+            opener.onData = { [weak self] data in self?.sessionReceived(data) }
+            opener.onClosed = { [weak self] in
+                guard let self else { return }
+                let handshaking = !self.sessionLock.withLock { self._sessionOpen }
+                if handshaking { self.sessionLock.withLock { self.dropLinkFirst = true } }
+                self.sessionLock.withLock { self._sessionOpen = false }
+                self.sessionChannel = nil
+                self.sessionOpener = nil
+                self.answer(nil, "the phone closed the channel")
+                PhoneSocket.shared.hungUp(by: Self.sessionTag)
+            }
+            self.sessionOpener = opener
+            opener.start()
+        }
+        if done.wait(timeout: .now() + budget) == .timedOut { finish(.failed("the phone never answered")) }
+        switch result {
+        case .open:
+            sessionLock.withLock { _sessionOpen = true }
+        case .unsupported, .failed:
+            // An older phone answers `not found` and waits for us to hang up.
+            closeSession()
+        }
+        return result
+    }
+
+    /// The answer to `R /session`: `{"session":true}` = a session; any other JSON (an older phone:
+    /// `{"error":"not found"}` / `"unsigned"`) = none; `#go`… (the `R` came too late and it took
+    /// the channel for a hotspot request) or a cut line = a failed open, tried again next time.
+    static func handshake(_ line: String) -> SessionOpen {
+        if line.contains("\"session\":true") { return .open }
+        if line.hasPrefix("{"), line.hasSuffix("}") { return .unsupported }
+        return .failed("the phone did not open a session (\(line.prefix(20)))")
+    }
+
+    /// One `R <path>` line on the open session, one line back. On `queue`. `unreached`: the
+    /// question was never written (no channel, a failed write), so asking again is safe.
+    private func ask(_ path: String, budget: TimeInterval) -> (String?, String?, Bool) {
+        var line: String?
+        var error: String? = "the phone never answered"
+        var unreached = false
+        let done = DispatchSemaphore(value: 0)
+        var signalled = false
+        let finish: (String?, String?, Bool) -> Void = { l, why, never in
+            guard !signalled else { return }
+            signalled = true
+            line = l
+            error = why
+            unreached = never
+            done.signal()
+        }
+        bluetooth.async { [weak self] in
+            guard let self, let ch = self.sessionChannel, ch.isOpen() else {
+                return finish(nil, "the permanent channel is gone", true)
+            }
+            self.sessionPending = { l, why in finish(l, why, false) }
+            var bytes = [UInt8](Self.query(path))
+            let written = ch.writeSync(&bytes, length: UInt16(bytes.count))
+            if written != kIOReturnSuccess {
+                self.sessionPending = nil
+                finish(nil, "could not ask the phone (\(written))", true)
+            }
+        }
+        // Over an open channel an answer takes a link wake-up (≤ 0.75 s) and the phone's work; a
+        // channel dead without a close callback must not hold the question for the whole budget.
+        // `/ussd` is the exception: Vodafone may take 20 s, and the phone is busy until then.
+        let wait = Self.shortPath(path) == "/ussd" ? budget : min(budget, 12)
+        if done.wait(timeout: .now() + wait) == .timedOut {
+            finish(nil, "no answer on the permanent channel", false)
+        }
+        bluetooth.async { [weak self] in self?.sessionPending = nil }
+        return (line, error, unreached)
+    }
+
+    /// On `bluetooth`: a line completes the waiting question.
+    private func sessionReceived(_ data: Data) {
+        sessionBuffer.append(data)
+        while let nl = sessionBuffer.firstIndex(of: 0x0A) {
+            let line = String(data: sessionBuffer[sessionBuffer.startIndex..<nl], encoding: .utf8)
+            sessionBuffer.removeSubrange(sessionBuffer.startIndex...nl)
+            answer(line, nil)
+        }
+        if sessionBuffer.count > 1 << 20 { sessionBuffer = Data() }
+    }
+
+    /// On `bluetooth`.
+    private func answer(_ line: String?, _ why: String?) {
+        let pending = sessionPending
+        sessionPending = nil
+        pending?(line, why)
+    }
+
+    /// Any thread.
+    private func closeSession() {
+        sessionLock.withLock { _sessionOpen = false }
+        bluetooth.async { [weak self] in
+            guard let self else { return }
+            let had = self.sessionChannel != nil || self.sessionOpener != nil
+            self.sessionOpener?.onClosed = nil
+            self.sessionChannel?.close()
+            self.sessionChannel = nil
+            self.sessionOpener = nil
+            self.answer(nil, "the permanent channel was closed")
+            if had { PhoneSocket.shared.hungUp(by: Self.sessionTag) }
+        }
+    }
+
+    /// One question on a channel of its own: open, write `R <path>`, read up to the newline,
+    /// hang up — the only way before 2026-11-27, and still the way to a phone without sessions.
+    private func singleExchange(_ path: String, budget: TimeInterval) -> (String?, String?) {
         // One socket on the phone, shared with the hotspot request: wait for our turn, which
         // frees the channel that request may be holding and waits out the phone's re-listen
         // (21 Oct 2026: a `/config` sent right after a poll never reached the phone).

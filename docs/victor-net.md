@@ -281,3 +281,31 @@ stay, to compare with the Wi-Fi in use.
 **Only what was measured here (12 Nov 2026).** A SIM not carrying the data shows its numbers from
 this place's `SimLog` spot, or none. Its best anywhere (`sim:<name>`) used to stand in, so in
 Utrecht yoxo showed the ⚡ 3.0 MB/s speed test run in Bucharest as if run here.
+
+## The permanent Bluetooth channel, and the home Wi-Fi first (2026-11-27)
+
+Victor: *"I'm perfectly fine keeping the connection open at all times between the devices."*
+Off the hotspot, every question to the phone (`/media`, `/chime`, `/clip`, `/status`…) used to
+open its own RFCOMM channel: SDP, open, the phone's 1.5 s query window, then `PhoneSocket.settle`
+(5 s) before the next one — Walkie Talkie's squelch reached the phone's headphones ~8 s late.
+
+- **The baseband link is up anyway.** The phone's `dumpsys bluetooth_manager`: the Mac's ACL
+  stays up for hours, drops into sniff 11 s after any traffic (sniff subrating, max latency
+  0.75 s), and a 60 s idle hold never woke it. An open, idle channel costs next to nothing.
+- **So the first question opens a session** — `R /session?auth=…` (signed: no other paired
+  device may hold the phone's only socket); the phone answers `{"session":true}` and keeps
+  reading `R <path>` lines (`RfcommBeaconService.session`). Measured: open 0.7–3 s once, then
+  ~0.2 s a question. An older phone answers `not found`: one channel per question for 30 min.
+- **The hotspot request keeps its own channel.** Its `PhoneSocket.take` frees the session
+  (`take(keeping:)` lets only the session's own questions keep it; `hungUp(by:)` forgets only
+  the holder that closed), and the next question opens it again.
+- **A channel that dies without warning** (a sleep, a restart): a question that never reached
+  the phone, or a read/setting (`repeatable`), is asked once more on a fresh channel; a channel
+  that closes before answering drops the link first — 21:50 that evening, every open
+  "succeeded" and closed at once until the link was dropped (back up in 11.5 s).
+- **`/ussd` waits its full budget**; every other answer on the session waits ≤ 12 s.
+- **On the home Wi-Fi the question goes over HTTP first** (`PhoneLink.homeAddress`), only to an
+  address that answered a *signed* `/status` with the signed-only fields (the sweep is
+  unsigned). Bluetooth is tried only when the Wi-Fi request provably never left (a connect
+  error) — a timeout may have reached the phone, and `/ussd` would dial twice — except `/media`,
+  a hold with a ttl. Adversarial review of the same evening: `docs` above, findings 1–8.

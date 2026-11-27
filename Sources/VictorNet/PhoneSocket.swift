@@ -34,11 +34,14 @@ final class PhoneSocket {
     private var busy = false
     /// Closes the channel the hotspot fallback holds, while it holds one.
     private var held: (() -> Void)?
+    /// Who holds it: `PhoneRoamingMonitor.sessionTag` for the permanent question channel, which
+    /// its own questions keep instead of freeing (2026-11-27).
+    private var heldBy: String?
     private var lastHangUp = Date.distantPast
 
     /// Blocks until it is this caller's turn (false: not within `timeout`), frees a held channel
     /// and waits out the settle. Every `true` must be followed by `done`.
-    func take(_ who: String, timeout: TimeInterval) -> Bool {
+    func take(_ who: String, timeout: TimeInterval, keeping keep: String? = nil) -> Bool {
         cond.lock()
         // Uptime, like the holder's semaphores: a wall-clock deadline expires during sleep and
         // a wake would give up at once on a turn whose holder resumes its own budget.
@@ -53,12 +56,19 @@ final class PhoneSocket {
             _ = cond.wait(until: Date() + min(left, 1))
         }
         busy = true
+        if let keep, heldBy == keep, held != nil {
+            // Our own permanent channel: still open, nothing to free, nothing to settle.
+            cond.unlock()
+            return true
+        }
         let release = held
+        let releasedFrom = heldBy
         held = nil
+        heldBy = nil
         cond.unlock()
 
         if let release {
-            netInfo("📶 \(who): freeing the channel the hotspot request holds")
+            netInfo("📶 \(who): freeing the channel \(releasedFrom.map { "the \($0)" } ?? "the hotspot request") holds")
             release()
             hungUp()
         }
@@ -67,21 +77,37 @@ final class PhoneSocket {
         return true
     }
 
+    /// A channel this side closed just now, whoever held the socket: starts the settle clock.
+    func noteHangUp() { cond.withLock { lastHangUp = Date() } }
+
+    /// Sleeps out what is left of the settle since the last hang-up — for a holder that found
+    /// its own channel dead after a fast `take(keeping:)` and is about to open a new one.
+    func settleBeforeOpen() {
+        let wait = settle - Date().timeIntervalSince(cond.withLock { lastHangUp })
+        if wait > 0 { Thread.sleep(forTimeInterval: min(wait, settle)) }
+    }
+
     /// The turn is over. `holding`: the channel stays open, and this closes it when a question
     /// needs the socket. Nil: it was hung up just now.
-    func done(holding release: (() -> Void)? = nil) {
+    func done(holding release: (() -> Void)? = nil, by holder: String? = nil) {
         cond.lock()
         busy = false
         held = release
+        heldBy = release == nil ? nil : holder
         if release == nil { lastHangUp = Date() }
         cond.broadcast()
         cond.unlock()
     }
 
-    /// The held channel went away by itself (the fallback closed it, or the phone did).
-    func hungUp() {
+    /// The held channel went away by itself (the fallback closed it, or the phone did). `holder`
+    /// is whose channel it was: a late close of the fallback's old channel must not forget the
+    /// permanent one that has taken its place.
+    func hungUp(by holder: String? = nil) {
         cond.withLock {
-            held = nil
+            if heldBy == holder {
+                held = nil
+                heldBy = nil
+            }
             lastHangUp = Date()
         }
     }
