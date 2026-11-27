@@ -308,4 +308,7 @@ open its own RFCOMM channel: SDP, open, the phone's 1.5 s query window, then `Ph
   address that answered a *signed* `/status` with the signed-only fields (the sweep is
   unsigned). Bluetooth is tried only when the Wi-Fi request provably never left (a connect
   error) — a timeout may have reached the phone, and `/ussd` would dial twice — except `/media`,
-  a hold with a ttl. Adversarial review of the same evening: `docs` above, findings 1–8.
+  a hold with a ttl.
+- **Adversarial review, same evening:** all findings fixed but one — the hotspot request could
+  go *through* the session (`R /hotspot/on` answering the `#go` verdict) instead of closing it,
+  saving its 5 s settle; left for later, the hotspot is rare.
