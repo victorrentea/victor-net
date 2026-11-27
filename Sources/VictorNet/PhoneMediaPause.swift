@@ -52,6 +52,7 @@ final class PhoneMediaPause {
     func start() {
         guard Config.hasPhone else { return }
         connect()
+        watchSquelch()
         let t = Timer(timeInterval: Self.refresh, repeats: true) { [weak self] _ in self?.renew() }
         RunLoop.main.add(t, forMode: .common)
         refreshTimer = t
@@ -103,6 +104,32 @@ final class PhoneMediaPause {
         guard let o = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
               o["type"] as? String == "dictation", let active = o["active"] as? Bool else { return }
         setDictating(active)
+    }
+
+    // MARK: - Walkie Talkie's radio squelch, in the phone's headphones
+
+    /// **The squelch plays in the phone's headphones too** (2026-11-27, Victor: *"When you stop
+    /// the audio on the phone, could you pass the radio scratch into the mobile app? So it
+    /// plays on the phone, on the headphones, because that means I'm usually wearing
+    /// them"*). Walkie Talkie posts `ro.victorrentea.walkie.squelch` (`file`: which radio)
+    /// whenever its `Radio Squelch` plays; this forwards it as `/chime?k=plain|bound`. The
+    /// phone decides whether he is wearing them — music playing, or paused by this very
+    /// dictation — and stays silent otherwise. Its own request, not folded into `/media`:
+    /// the two signals come from two apps a few milliseconds apart, in either order. Over
+    /// Bluetooth it lands a few seconds late; Victor chose to hear it anyway.
+    static let squelchNote = Notification.Name("ro.victorrentea.walkie.squelch")
+    private var squelchObserver: NSObjectProtocol?
+
+    private func watchSquelch() {
+        squelchObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Self.squelchNote, object: nil, queue: .main
+        ) { [weak self] note in
+            let bound = (note.userInfo?["file"] as? String) == "chat-voice-on.wav"
+            self?.phone.chime(bound: bound) { data, error in
+                let answer = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                netInfo("📻 squelch → phone (\(bound ? "bound" : "plain")): \(error ?? answer)")
+            }
+        }
     }
 
     // MARK: - The phone

@@ -318,6 +318,11 @@ final class PhoneLink {
         get(hold ? "/media?hold=1&ttl=\(ttl)" : "/media?hold=0", timeout: 2, done: done)
     }
 
+    /// Walkie Talkie's radio squelch in the phone's headphones — `PhoneMediaPause`. Main thread.
+    func chime(bound: Bool, done: @escaping (Data?, String?) -> Void) {
+        get("/chime?k=\(bound ? "bound" : "plain")", timeout: 2, done: done)
+    }
+
     /// Stops the phone's hotspot; on it, the answer may be lost with the link. Main thread.
     func stopHotspot(done: @escaping (Data?, String?) -> Void) {
         get("/hotspot/off", timeout: 3, done: done)
