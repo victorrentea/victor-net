@@ -175,7 +175,7 @@ landing) or `#reserve` (the last roaming GB is kept). A phone app older than thi
 after 4 s that counts as a go. The join clock starts after the verdict: 1.5 s later than before
 with this phone app, 4 s with an older one. Any answer (`#go`, `#airplane`) also refreshes a
 `/status` reading older than 5 min, so the battery row's "· BT" age stays current while offline.
-The menu bar icon climbs with the row whenever it says "Starting Hotspot…", menu open or not
+The menu bar icon fills with the row whenever it says "Starting Hotspot…", menu open or not, still in its `[ ]` (dropped once it is on the hotspot)
 (`HotspotFallback.onProgress`, delivered in the common run loop modes).
 
 ## Testing it without waiting for a real outage
@@ -480,7 +480,7 @@ row at the very top**, where nothing above it changes height:
 |---|---|---|
 | Start Hotspot | off; right corner = the automatic path (`retrying in 23s`, `checking`) | `startNow` |
 | Asking the phone… ◌ 38s | page + SDP + channel open | — |
-| ▂▄▆█ Starting Hotspot… 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins. The icon is the signal bars climbing 0→4 in a loop, 0.3 s a step (`HotspotRowPolicy.climbingBars`, Victor 12 Nov 2026: *„scara de gsm ca progress bar ciclic"*), instead of the wheel | — |
+| ▂▄▆█ Starting Hotspot… 47s | **the phone's app accepted the channel**: its routine is turning it on; the Mac waits and joins. The icon is the signal bars as a loading animation: all four fill together from the foot up, then drain back down, 2.4 s a round trip (`HotspotRowPolicy.fillLevel`, Victor 28 Nov 2026, after 12 Nov's bars lit one by one), instead of the wheel; in the menu bar still inside `[ ]` until it is joined | — |
 | ✈️ Hotspot after Airplane Mode | the phone answered `#airplane`; corner = `retrying in 12s` or `asking ◌` | `startNow` (asks now, when idle) |
 | Stop Hotspot | on it, or it is in a scan | `stopHotspot` |
 | Stopping Hotspot… ◌ | stopped < 60 s ago and still on it | — |

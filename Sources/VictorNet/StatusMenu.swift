@@ -126,8 +126,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let alertReason = roamingAlertReason ?? roamingGaugeText
         button.title = ""
         if iconClimbTimer != nil {
-            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(iconClimbStarted))
-            button.image = Icons.cellular(level: level)
+            // Still in [ ] (Victor, 2026-11-28): not on the phone yet; they go once it is joined.
+            let fill = HotspotRowPolicy.fillLevel(elapsed: Date().timeIntervalSince(iconClimbStarted))
+            button.image = Icons.bracketed(Icons.cellular(level: nil, fill: fill))
             button.toolTip = "Starting the phone's hotspot…"
             return
         }
@@ -687,7 +688,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         refreshIcon()
     }
 
-    /// `HotspotRowPolicy.climbingBars`: its own timer, faster than the menu's 1 s one, in the
+    /// `HotspotRowPolicy.fillLevel`: its own timer, faster than the menu's 1 s one, in the
     /// common modes so it keeps going while the menu tracks the mouse.
     private var climbTimer: Timer?
     private var climbStarted = Date()
@@ -699,8 +700,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             guard let self, let row = self.hotspotRow else { return }
             // One clock with the menu bar icon, so the two climb in step.
             let since = self.iconClimbTimer != nil ? self.iconClimbStarted : self.climbStarted
-            let level = HotspotRowPolicy.climbingBars(elapsed: Date().timeIntervalSince(since))
-            row.setIcon(Icons.cellular(level: level))
+            let fill = HotspotRowPolicy.fillLevel(elapsed: Date().timeIntervalSince(since))
+            row.setIcon(Icons.cellular(level: nil, fill: fill))
         }
         tick()
         let t = Timer(timeInterval: HotspotRowPolicy.climbStep, repeats: true) { _ in tick() }
@@ -960,6 +961,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let drawn: NSImage?
         switch look {
         case "airplane": drawn = Icons.image(for: .airplane)
+        case let l? where l.hasPrefix("filling"): drawn = Icons.bracketed(Icons.cellular(level: nil, fill: Double(l.dropFirst(7)) ?? 0.5))
         case "away-low": drawn = Icons.image(for: .away(level: 2, gauge: RoamingGauge(fraction: 0.4, tone: .yellow)))
         case "hotspot-gauge": drawn = Icons.image(for: .hotspot(level: 3, gauge: RoamingGauge(fraction: 0.8, tone: .plain)), network: "5G")
         case "hotspot-red": drawn = Icons.image(for: .hotspot(level: 3, gauge: RoamingGauge(fraction: 0.05, tone: .red)), network: "5G")

@@ -37,7 +37,9 @@ enum Icons {
     /// corner above the short bars. No age after them (Victor, 2026-11-12: the hotspot's row says it,
     /// next to the battery; beside every SIM it distracted).
     /// `switchHint` draws a slanted ⇄ in the top corner instead: the other SIM has more bars (`SimSwitchHint`).
-    static func cellular(level: Int?, network: String? = nil, switchHint: Bool = false) -> NSImage {
+    /// `fill` (0…1) instead of `level`: the hotspot coming up. All four bars faint, and solid below a
+    /// line that rises from their foot to the top of the tallest one (`HotspotRowPolicy.fillLevel`).
+    static func cellular(level: Int?, network: String? = nil, switchHint: Bool = false, fill: Double? = nil) -> NSImage {
         let width: CGFloat = 17
         let image = NSImage(size: NSSize(width: width, height: barHeight), flipped: false) { rect in
             let small: [NSAttributedString.Key: Any] = [
@@ -64,6 +66,14 @@ enum Icons {
                                        xRadius: 0.8, yRadius: 0.8)
                 NSColor.black.withAlphaComponent(i < (level ?? 0) ? 1 : 0.28).set()
                 bar.fill()
+                if let fill, fill > 0 {
+                    // The tallest bar runs from y = 2 to 15: the line climbs that far.
+                    NSGraphicsContext.saveGraphicsState()
+                    NSRect(x: 0, y: 0, width: width, height: 2 + 13 * CGFloat(min(1, fill))).clip()
+                    NSColor.black.set()
+                    bar.fill()
+                    NSGraphicsContext.restoreGraphicsState()
+                }
             }
             return true
         }

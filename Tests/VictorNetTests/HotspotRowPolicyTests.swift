@@ -112,11 +112,17 @@ final class HotspotRowPolicyTests: XCTestCase {
         XCTAssertFalse(HotspotRowPolicy.takesClick(shown: .starting, now: .starting, shownSince: now - 5, at: now))
     }
 
-    /// Starting: the bars climb left to right, none to four, and over again.
-    func testBarsClimbInALoopWhileStarting() {
-        let step = HotspotRowPolicy.climbStep
-        let frames = (0..<11).map { HotspotRowPolicy.climbingBars(elapsed: Double($0) * step + step / 2) }
-        XCTAssertEqual(frames, [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0])
-        XCTAssertEqual(HotspotRowPolicy.climbingBars(elapsed: -1), 0)
+    /// Starting: the four bars fill from the foot up, then drain back down, and over again.
+    func testBarsFillUpAndDownInALoopWhileStarting() {
+        let T = HotspotRowPolicy.fillPeriod
+        let at = { (t: Double) in HotspotRowPolicy.fillLevel(elapsed: t) }
+        XCTAssertEqual(at(0), 0, accuracy: 1e-9)
+        XCTAssertEqual(at(T / 4), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(at(T / 2), 1, accuracy: 1e-9)
+        XCTAssertEqual(at(3 * T / 4), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(at(T + T / 4), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(at(-1), 0, accuracy: 1e-9)
+        XCTAssertLessThan(at(T / 8), at(T / 4))       // rising
+        XCTAssertGreaterThan(at(5 * T / 8), at(7 * T / 8)) // falling
     }
 }

@@ -110,12 +110,15 @@ extension HotspotRowPolicy {
         return onHotspot || inScan ? .stop : .start
     }
 
-    /// While the hotspot comes up (the phone took the signal, `.starting`) the row's icon is the
-    /// phone's signal bars climbing: none, then one by one up to four, and over again (Victor,
-    /// 2026-11-12: "a cyclic progress bar"). The frame shown `elapsed` seconds into it.
-    static let climbStep: TimeInterval = 0.3
-    static func climbingBars(elapsed: TimeInterval) -> Int {
-        Int(max(0, elapsed) / climbStep) % 5
+    /// While the hotspot comes up (the phone took the signal, `.starting`) the bars are a loading
+    /// animation: all four fill together from their foot to the top, then drain back down, and over
+    /// again (Victor, 2026-11-28, in place of 2026-11-12's bars lit one by one left to right).
+    /// The fill (0…1) `elapsed` seconds into it; `climbStep` is the redraw interval.
+    static let climbStep: TimeInterval = 0.05
+    static let fillPeriod: TimeInterval = 2.4
+    static func fillLevel(elapsed: TimeInterval) -> Double {
+        let phase = (max(0, elapsed).truncatingRemainder(dividingBy: fillPeriod)) / fillPeriod
+        return phase < 0.5 ? phase * 2 : 2 - phase * 2
     }
 
     /// A click does what the button said for at least a second before it: one on a label that

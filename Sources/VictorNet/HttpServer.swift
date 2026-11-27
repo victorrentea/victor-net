@@ -27,7 +27,7 @@ import Network
 ///   GET /test/airplane/simulate/on     → the phone said it is in airplane mode: ✈ instead of the bars off the hotspot (`off` clears)
 ///   GET /test/sim-hint/simulate/on     → the blinking ⇄ over the bars, as if the other SIM had 2+ bars more (`off` clears; on the hotspot only)
 ///   GET /test/vodafone/ask             → the menu's "Ask Vodafone" (*123#, over Bluetooth off the hotspot)
-///   GET /test/icon?look=away3|away-low|hotspot-gauge|hotspot-red|airplane → that menu bar look (or the current one) 8×, light and dark, to a PNG
+///   GET /test/icon?look=away3|away-low|hotspot-gauge|hotspot-red|airplane|filling0.4 → that menu bar look (or the current one) 8×, light and dark, to a PNG
 ///   GET /test/menu/render              → the hotspot button's states and the menu's rows drawn to a PNG
 ///   GET /test/menu/open?close=4        → open the menu as a click would, closing itself
 final class HttpServer {
